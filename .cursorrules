@@ -257,6 +257,28 @@ agent_phase:
         implementation_scope: "承認された SnD が参照するアーティファクト範囲に限定。"
         consent_source: "explicit_phrase"
         output_policy: "『IMPL フェーズに移行しました』等の単独アナウンスは行わず、ツール実行のマイクロ更新のみ許容。"
+    - phrase: "PHASE=IMPL APPROVE: SnD=<path>"
+      next: "IMPL"
+      require:
+        - "SnD.status == Ready"
+        - "SnD.front_matter.quality_refresh_hash_at_created is set"
+        - "SnD.front_matter.quality_refresh_hash_before_impl is set"
+      chat_output:
+        before_phrase:
+          - "要旨（約50文字）: 作成したSnDの作成動機となったユーザーの問い/指示への簡潔な返答を、ユーザーのロケール/設定に基づいた言語で1行で出力する（計画/詳細は含めない）。"
+          - "別チャットでの承認可否: 承認は別チャット（別コンテキスト）でも可能である旨を1行で明示する。"
+          - "承認手順ガイダンス: 承認いただける場合、次のフレーズをチャット欄にコピー&ペーストしてください。"
+        ordering: "gist_line, approval_hint_line, guidance_line, phrase_line"
+        locale_policy: "ユーザー設定>会話言語>OSロケールの順で自動選択。"
+      on_enter:
+        auto_execute: true
+        steps:
+          - "PRE-IMPL を paths.playbooks.pre_impl.path に従い非対話で実行し、失敗時は即停止・報告。"
+          - "PRE-IMPL 成功後、承認された SnD のスコープで即時に実装（コード/テスト）を開始。"
+          - "各編集バッチ後: flow.1shot_impl==true の場合は gate を defer（no-op）、それ以外は quality_gate.auto を実行。"
+        implementation_scope: "承認された SnD が参照するアーティファクト範囲に限定。"
+        consent_source: "explicit_phrase"
+        output_policy: "『IMPL フェーズに移行しました』等の単独アナウンスは行わず、ツール実行のマイクロ更新のみ許容。"
 
 guardrails:
   edits:
@@ -265,6 +287,8 @@ guardrails:
     explicit_permission_phrases:
       - "PHASE=IMPL 承認: SnD=<path>"
       - "MAINT=承認: scope=<短文>"
+      - "PHASE=IMPL APPROVE: SnD=<path>"
+      - "MAINT=APPROVE: scope=<short>"
     exceptions:
       - name: "quality-context-maintenance"
         allow_in_phases: ["SnD-ONLY", "IMPL"]
@@ -345,6 +369,9 @@ chat_output_guards:
       - "PHASE=IMPL 承認: SnD="
       - "MAINT=承認: scope="
       - "OUTPUT=CODE 承認"           # 軽量同意フレーズ（閲覧のみ用途）
+      - "PHASE=IMPL APPROVE: SnD="
+      - "MAINT=APPROVE: scope="
+      - "OUTPUT=CODE APPROVE"
     require_user_intent_any:          # ユーザーが“明示的に”コードを求めたときだけ
       - "コードを出力"
       - "diffを出力"
@@ -388,12 +415,12 @@ artifact_request_contract:
   guarded_artifacts:
     - name: "full_code"
       require_phase: "IMPL"
-      require_consent_phrase_any: ["PHASE=IMPL 承認: SnD=", "OUTPUT=CODE 承認"]
+      require_consent_phrase_any: ["PHASE=IMPL 承認: SnD=", "OUTPUT=CODE 承認", "PHASE=IMPL APPROVE: SnD=", "OUTPUT=CODE APPROVE"]
       require_user_intent_any: ["コードを出力", "show me the code", "diffを出力", "patchを出力"]
       max_lines: 80
     - name: "diff_or_patch"
       require_phase: "IMPL"
-      require_consent_phrase_any: ["PHASE=IMPL 承認: SnD=", "OUTPUT=CODE 承認"]
+      require_consent_phrase_any: ["PHASE=IMPL 承認: SnD=", "OUTPUT=CODE 承認", "PHASE=IMPL APPROVE: SnD=", "OUTPUT=CODE APPROVE"]
       require_user_intent_any: ["diffを出力", "patchを出力", "give me a diff", "unified diff"]
       max_lines: 120
 
