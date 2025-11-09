@@ -540,7 +540,7 @@ Notes:
 - We (framework maintainers) use this prompt internally to validate behavior.
 - Validated LLM models: gpt-5 / gpt-5-high / Sonnet4.5.
 - The “implementation complete” artifact may still contain defects; we fix them through additional conversations.
-- From creating the SnD to finishing implementation and fixes, it typically consumes around 10 million tokens (model-dependent).
+- From creating the SnD to finishing implementation and fixes, it typically consumes around 15 million tokens (model-dependent).
 
 ---
 
