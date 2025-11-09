@@ -1,11 +1,8 @@
 {
-  "name": "SAT-light-TS",
+  "name": "FAQC-light-TS",
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview --strictPort --port 5173",
     "check:pre-common": "tsx vibecoding/scripts/qualities/pre-common-auto-check.ts",
     "typecheck": "tsc --noEmit --incremental --tsBuildInfoFile tmp/tsbuildinfo.json -p qualities/tsconfig/tsconfig.json",
     "lint": "node -e \"console.log('ESLint is running with --max-warnings=0');\" && eslint . --config qualities/eslint/eslint.config.mjs --max-warnings=0 --cache --cache-location node_modules/.cache/eslint",
