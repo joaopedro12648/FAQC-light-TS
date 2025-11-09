@@ -1,0 +1,280 @@
+#!/usr/bin/env node
+/**
+ * @file Context MD ルーブリックチェッカー — vibecoding/var/contexts/qualities 配下の context.md を検証する
+ * 備考: 特記事項なし
+ * - 関数は短く単一責務で構成し入出力と前提を明確に記す
+ * - 値は定数へ集約し意味を付与して可読性と変更容易性を高める
+ * - 型は具体化し段階的絞り込みで安全に扱い曖昧な変換を拒否する
+ * - 分岐は早期リターンで深さを抑え意図を表現し副作用を限定する
+ * - コメントは要旨のみで統一表記とし仕様と実装の差異を残さない
+ * - 例外は握り潰さず失敗経路を明示して呼び出し側で処理可能にする
+ * - 依存の向きを守り層の境界を越えず公開面を最小化して保護する
+ * - 抑止や緩和に頼らず規則へ適合する実装で根本原因から解決する
+ * - 静的検査の警告を残さず品質基準に適合し一貫した設計を維持する
+ * @see vibecoding/docs/PLAYBOOK/PRE-COMMON.md
+ * @see vibecoding/docs/PLAYBOOK/PRE-IMPL.md
+ * @snd vibecoding/var/SPEC-and-DESIGN/SnD-creation.md
+ */
+import fs from 'node:fs';
+import path from 'node:path';
+
+const repoRoot = process.cwd();
+const VAR_BASE = path.join(repoRoot, 'vibecoding', 'var', 'contexts', 'qualities');
+
+// しきい値
+const MIN_CODE_FENCES = 4;
+const MIN_NG_PATTERNS = 5;
+const MIN_LINES = 60; // 下限のみ（上限は初回/更新でLLMが判断）
+
+/**
+ * ディレクトリ配下のファイルを再帰的に列挙する。
+ * @param dir ルートディレクトリ
+ * @returns ファイルの絶対パス配列
+ */
+function listFilesRecursive(dir: string): string[] {
+  const files: string[] = [];
+  const stack: string[] = [dir];
+  while (stack.length) {
+    const cur = stack.pop();
+    if (!cur) break;
+    let entries: fs.Dirent[] | undefined;
+    try {
+      entries = fs.readdirSync(cur, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const e of entries) {
+      const full = path.join(cur, e.name);
+      if (e.isDirectory()) stack.push(full);
+      else if (e.isFile()) files.push(full);
+    }
+  }
+  return files;
+}
+
+/**
+ * 見出しパターンが存在するかを確認する。
+ * @param content Markdown の本文
+ * @param patterns 見出しの正規表現一覧
+ * @returns いずれかに一致した場合は true
+ */
+function hasHeading(content: string, patterns: RegExp[]): boolean {
+  return patterns.some((re) => re.test(content));
+}
+
+/**
+ * 見出しに続くセクション本文を抽出する。
+ * @param content Markdown の本文
+ * @param headingPatterns 見出しの正規表現一覧
+ * @returns セクションの本文（空の場合あり）
+ */
+/**
+ * 見出しレベルを取得
+ * @param line 行文字列
+ * @returns 見出しレベル（1-6）、見出しでない場合は0
+ */
+function getHeadingLevel(line: string): number {
+  const match = line.match(/^\s*(#{1,6})\s+/);
+  return match?.[1]?.length ?? 0;
+}
+
+/**
+ * Markdownセクションを抽出
+ * @param content Markdown全文
+ * @param headingPatterns セクション開始を示す正規表現配列
+ * @returns セクション内容
+ */
+function extractSection(content: string, headingPatterns: RegExp[]): string {
+  const lines = content.split(/\r?\n/);
+  let inSection = false;
+  let sectionLevel = 0;
+  let sectionContent = '';
+  
+  for (const line of lines) {
+    if (headingPatterns.some((re) => re.test(line))) {
+      inSection = true;
+      sectionLevel = getHeadingLevel(line);
+      if (sectionLevel === 0) {
+        sectionLevel = 2;
+      }
+      continue;
+    }
+    
+    if (inSection) {
+      const currentLevel = getHeadingLevel(line);
+      if (currentLevel > 0 && currentLevel <= sectionLevel) {
+        break;
+      }
+      sectionContent += line + '\n';
+    }
+  }
+  
+  return sectionContent;
+}
+
+/**
+ * Why セクションを検証する。
+ * @param text Markdown の本文
+ * @returns エラーメッセージ配列
+ */
+function checkWhySection(text: string): string[] {
+  const errs: string[] = [];
+  const whyPatterns = [/^\s*#{1,6}\s*目的・思想（Why）/m, /^\s*\d+\.\s*目的・思想（Why）/m, /^\s*#{1,6}\s*Why\b/m];
+  if (!hasHeading(text, whyPatterns)) {
+    errs.push('Why: missing heading');
+    return errs;
+  }
+  const whySection = extractSection(text, whyPatterns);
+  const hasQualityImpact = /型安全性|保守性|セキュリティ|type.?safe|maintain|security/i.test(whySection);
+  const hasCostImpact = /トークン|時間|認知負荷|token|time|cognitive|分|秒/i.test(whySection);
+  if (!hasQualityImpact) errs.push('Why: missing quality impact (型安全性・保守性・セキュリティ)');
+  if (!hasCostImpact) errs.push('Why: missing cost impact (トークン・時間・認知負荷)');
+  return errs;
+}
+
+/**
+ * Where セクションを検証する。
+ * @param text Markdown の本文
+ * @returns エラーメッセージ配列
+ */
+function checkWhereSection(text: string): string[] {
+  const errs: string[] = [];
+  const wherePatterns = [/^\s*#{1,6}\s*適用範囲（Where）/m, /^\s*\d+\.\s*適用範囲（Where）/m, /^\s*#{1,6}\s*Where\b/m];
+  if (!hasHeading(text, wherePatterns)) {
+    errs.push('Where: missing heading');
+    return errs;
+  }
+  const whereSection = extractSection(text, wherePatterns);
+  const hasGlobPattern = /\*\*\/\*|\*\.[a-z]+/i.test(whereSection);
+  if (!hasGlobPattern) errs.push('Where: missing glob pattern examples');
+  return errs;
+}
+
+/**
+ * What セクションを検証する。
+ * @param text Markdown の本文
+ * @returns エラーメッセージ配列
+ */
+function checkWhatSection(text: string): string[] {
+  const errs: string[] = [];
+  const whatPatterns = [/^\s*#{1,6}\s*要求基準（What）/m, /^\s*\d+\.\s*要求基準（What）/m, /^\s*#{1,6}\s*What\b/m];
+  if (!hasHeading(text, whatPatterns)) {
+    errs.push('What: missing heading');
+    return errs;
+  }
+  const whatSection = extractSection(text, whatPatterns);
+  const hasTable = /\|.*\|.*\|/.test(whatSection);
+  const hasCommandSetup = /(コマンド|command|設定|config|範囲|coverage)/i.test(whatSection);
+  if (!hasTable && !hasCommandSetup) errs.push('What: missing command/config/coverage mapping');
+  return errs;
+}
+
+/**
+ * 行数チェック（下限のみ、上限なし）
+ * @param text Markdown の本文
+ * @returns エラーメッセージ配列
+ */
+function checkLineCount(text: string): string[] {
+  const errs: string[] = [];
+  const lines = text.split(/\r?\n/).filter((l) => l.trim()).length; // 空行除外
+  
+  // 下限チェックのみ（GPT対策：詳細度不足を防止）
+  if (lines < MIN_LINES) {
+    errs.push(`Line count: ${lines} lines (MUST be ≥${MIN_LINES} for sufficient detail)`);
+  }
+  
+  // 上限チェックは意図的に実装しない（初回/更新の判定と上限管理はLLMがPRE-COMMON.mdから読み取る）
+  
+  return errs;
+}
+
+/**
+ * How セクションを検証する。
+ * @param text Markdown の本文
+ * @returns エラーメッセージ配列
+ */
+function checkHowSection(text: string): string[] {
+  const errs: string[] = [];
+  const howPatterns = [/^\s*#{1,6}\s*適用例（How）/m, /^\s*\d+\.\s*適用例（How）/m, /^\s*#{1,6}\s*How\b/m];
+  if (!hasHeading(text, howPatterns)) {
+    errs.push('How: missing heading');
+    return errs;
+  }
+  const howSection = extractSection(text, howPatterns);
+  const codeFences = (howSection.match(/```/g) || []).length;
+  if (codeFences < MIN_CODE_FENCES) errs.push('How: need >= 2 code blocks (success/failure patterns)');
+  
+  // NG patterns: 「### LLM典型NG」セクション内の番号付きリストをカウント
+  const ngSectionMatch = howSection.match(/###\s*(LLM典型NG|典型.*NG|NG.*パターン)/i);
+  if (ngSectionMatch) {
+    const ngSectionStart = howSection.indexOf(ngSectionMatch[0]);
+    const nextHeadingMatch = howSection.slice(ngSectionStart + ngSectionMatch[0].length).match(/^###\s/m);
+    const ngSectionEnd = nextHeadingMatch 
+      ? ngSectionStart + ngSectionMatch[0].length + nextHeadingMatch.index!
+      : howSection.length;
+    const ngSection = howSection.slice(ngSectionStart, ngSectionEnd);
+    const ngCount = (ngSection.match(/^\s*\d+\.\s+\*\*/gm) || []).length;
+    if (ngCount < MIN_NG_PATTERNS) errs.push(`How: need >= 5 NG patterns (found ${ngCount})`);
+  } else {
+    errs.push('How: missing LLM典型NG section');
+  }
+  
+  const hasChecklist = /^[\s-]*\[\s*\]/m.test(howSection);
+  if (!hasChecklist) errs.push('How: missing checklist (事前チェックリスト)');
+  const hasRemediation = /(修正|対処|方針|remediation|fix)/i.test(howSection);
+  if (!hasRemediation) errs.push('How: missing remediation steps (修正方針)');
+  return errs;
+}
+
+/**
+ * 単一の context.md に対してルーブリック検査を実行する。
+ * @param filePath 絶対パス
+ * @returns エラーメッセージ配列
+ */
+function checkContextMd(filePath: string): string[] {
+  const text = fs.readFileSync(filePath, 'utf8');
+  const errs: string[] = [];
+  errs.push(...checkLineCount(text));
+  errs.push(...checkWhySection(text));
+  errs.push(...checkWhereSection(text));
+  errs.push(...checkWhatSection(text));
+  errs.push(...checkHowSection(text));
+  return errs;
+}
+
+/** エントリポイント: すべての context.md を検証して終了する。 */
+function main(): void {
+  if (!fs.existsSync(VAR_BASE)) {
+    process.stdout.write('context-md-rubric: no var contexts found, skipping\n');
+    process.exit(0);
+  }
+  const files = listFilesRecursive(VAR_BASE).filter((f) => /context\.md$/i.test(f));
+  const allErrors: Array<{ file: string; errs: string[] }> = [];
+  for (const f of files) {
+    const errs = checkContextMd(f);
+    if (errs.length) {
+      allErrors.push({ file: path.relative(repoRoot, f).replace(/\\/g, '/'), errs });
+    }
+  }
+  if (allErrors.length === 0) {
+    process.stdout.write(`context-md-rubric ✅ all ${files.length} file(s) compliant\n`);
+    process.exit(0);
+  }
+  process.stderr.write(`\ncontext-md-rubric ❌ violations:\n`);
+  for (const e of allErrors) {
+    process.stderr.write(`- ${e.file}\n`);
+    for (const msg of e.errs) {
+      process.stderr.write(`  • ${msg}\n`);
+    }
+  }
+  process.exit(1);
+}
+
+try {
+  main();
+} catch (err) {
+  process.stderr.write(`context-md-rubric ❌ ${err instanceof Error ? err.message : String(err)}\n`);
+  process.exit(1);
+}
+
+

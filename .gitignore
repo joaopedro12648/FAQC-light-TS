@@ -1,0 +1,7 @@
+tmp/
+scripts/tmp/
+
+# node & build artifacts
+node_modules/
+dist/
+coverage/

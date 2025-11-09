@@ -1,0 +1,27 @@
+# [SPEC:SnD-20251027-anti-mvp-policy-checks] Anti-MVP Policy Checks (YAML)
+
+# minimal, non-weak defaults aligned with code-based checker
+
+banned_terms:
+  patterns:
+    - "WIP"
+    - "fallback"
+    - "graceful"
+    - "legacy"
+    - "shim"
+    - "polyfill"
+    - "compat"
+    - "default to"
+    - "best-effort"
+    - "swallow"
+    - "ignore error"
+  word_boundary: true
+  paths:
+    - "**/*.{ts,tsx,mts,cts}"
+
+todo_ticket_required:
+  regex: "\\b(?:TODO|FIXME|HACK)\\b(?!.*\\(#\\s*[A-Z]{2,}-\\d+\\))"
+  paths:
+    - "**/*.{ts,tsx,mts,cts}"
+
+

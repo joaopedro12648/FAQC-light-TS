@@ -1,0 +1,111 @@
+#!/usr/bin/env node
+/**
+ * @file CI pre-implementation quality gate
+ * 目的: 変更に対して SPEC の quality_refresh_hash_before_impl を要求し、SPEC未更新のアプリ変更をブロック
+ * 備考: 特記事項なし
+ * - 関数は短く単一責務で構成し入出力と前提を明確に記す
+ * - 値は定数へ集約し意味を付与して可読性と変更容易性を高める
+ * - 型は具体化し段階的絞り込みで安全に扱い曖昧な変換を拒否する
+ * - 分岐は早期リターンで深さを抑え意図を表現し副作用を限定する
+ * - コメントは要旨のみで統一表記とし仕様と実装の差異を残さない
+ * - 例外は握り潰さず失敗経路を明示して呼び出し側で処理可能にする
+ * - 依存の向きを守り層の境界を越えず公開面を最小化して保護する
+ * - 抑止や緩和に頼らず規則へ適合する実装で根本原因から解決する
+ * - 静的検査の警告を残さず品質基準に適合し一貫した設計を維持する
+ * @see vibecoding/docs/PLAYBOOK/PRE-IMPL.md
+ * @see vibecoding/var/contexts/qualities/policy/no_relaxation/context.md
+ * @snd vibecoding/var/SPEC-and-DESIGN/SnD-creation.md
+ */
+
+import { execSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+
+function run(cmd) {
+  try {
+    return execSync(cmd, { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' }).trim();
+  } catch (e) {
+    return '';
+  }
+}
+
+function getChangedFiles() {
+  // 代表的な CI の差分範囲を試し、段階的にフォールバックする
+  const attempts = [
+    'git diff --name-only --diff-filter=ACMRTUXB origin/main...HEAD',
+    'git diff --name-only --diff-filter=ACMRTUXB $(git merge-base origin/main HEAD)..HEAD',
+    'git diff --name-only --diff-filter=ACMRTUXB HEAD~1..HEAD',
+  ];
+  for (const cmd of attempts) {
+    const out = run(cmd);
+    if (out) return Array.from(new Set(out.split('\n').filter(Boolean)));
+  }
+  // 最後の手段として、作業ツリーの変更を確認する（CI では空の可能性あり）
+  const wt = run('git ls-files -m -o --exclude-standard');
+  return wt ? Array.from(new Set(wt.split('\n').filter(Boolean))) : [];
+}
+
+function readFileSafe(p) {
+  try {
+    return fs.readFileSync(p, 'utf8');
+  } catch {
+    return '';
+  }
+}
+
+function extractFrontMatter(md) {
+  const m = md.match(/^---\s*[\r\n]+([\s\S]*?)[\r\n]+---\s*[\r\n]/);
+  return m ? m[1] : '';
+}
+
+function getQualityRefreshHashBeforeImpl(frontMatter) {
+  if (!frontMatter) return '';
+  // YAML フロントマターの行を捕捉: quality_refresh_hash_before_impl: "<StartAt> <hash>"
+  const m = frontMatter.match(/\bquality_refresh_hash_before_impl\s*:\s*["']?([^\r\n"']+)/);
+  return m ? m[1].trim() : '';
+}
+
+function isValidStartAtHash(value) {
+  // ISO8601 UTC + 空白 + 64 桁の 16 進数
+  return /^\d{4}-\d{2}-\d{2}T[^\s]+Z\s+[0-9a-f]{64}$/.test(value);
+}
+
+function main() {
+  const changed = getChangedFiles();
+  const codeChanged = changed.filter((p) => /^(apps|src)\//.test(p));
+  const specChanged = changed.filter((p) => /^vibecoding\/var\/SPEC-and-DESIGN\/.*\.md$/.test(p));
+
+  const errors = [];
+
+  // アプリコードが変更された場合、少なくとも 1 つの SPEC ファイルの更新を要求する
+  if (codeChanged.length > 0 && specChanged.length === 0) {
+    errors.push(
+      'App code changed without SPEC update. Update the relevant SPEC-and-DESIGN and record pre_impl.'
+    );
+  }
+
+  // 変更された各 SPEC について、quality_refresh_hash_before_impl の存在と妥当性を検証する
+  for (const specPath of specChanged) {
+    const abs = path.resolve(specPath);
+    const content = readFileSafe(abs);
+    const fm = extractFrontMatter(content);
+    const atHash = getQualityRefreshHashBeforeImpl(fm);
+    if (!isValidStartAtHash(atHash)) {
+      errors.push(
+        `Missing or invalid quality_refresh_hash_before_impl in front matter for SPEC: ${specPath}`
+      );
+    }
+  }
+
+  if (errors.length > 0) {
+    process.stderr.write('\nPRE-IMPL check failed:\n- ' + errors.join('\n- ') + '\n');
+    process.stderr.write('\nSee vibecoding/docs/PLAYBOOK/PRE-IMPL.md\n');
+    process.exit(1);
+  }
+
+  process.stdout.write('PRE-IMPL check passed.\n');
+}
+
+main();
+
+
