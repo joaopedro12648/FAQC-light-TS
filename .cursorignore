@@ -1,0 +1,5 @@
+# Exclude user-facing docs from LLM context
+README.md
+README.en.md
+
+
