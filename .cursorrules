@@ -199,7 +199,6 @@ quality_gate:
     - "Pass non-interactive flags (e.g., --yes/--ci/-q) whenever available."
     - "Do not run long-lived watch commands."
     - "Summarize failures with file:line and first error per file."
-    - "If the assistant introduced errors, attempt up to 3 targeted fixes; if still failing, stop and report."
     - "Never assume a specific language; prefer repo-defined scripts/config over heuristics."
     - "Scope policy: final/automated checks must analyze the entire repository (no changed-files gating)."
     - "Source of truth: PRE-IMPL.md is authoritative for gate execution specifics."
@@ -213,9 +212,6 @@ editing_policy:
 
 flow:
   1shot_impl: true
-  gate_runs_during_impl: deferred
-  gate_runs_after_impl: true
-  retries_after_gate_failure: 1
 
 # --- Output Policy (language-agnostic) ---
 # Intent: Prevent unsolicited status reports and verbose meta-commentary.
