@@ -361,6 +361,27 @@ guardrails:
         defined_in_playbooks:
           - "vibecoding/docs/PLAYBOOK/PRE-SnD.md"
           - "vibecoding/docs/PLAYBOOK/PRE-IMPL.md"
+      - name: "GIT"
+        allow_in_phases: ["SnD-ONLY", "IMPL"]
+        whitelist:
+          - "git fetch"
+          - "git fetch --all --prune"
+          - "git merge --ff-only <branch>"
+          - "git merge --ff-only --no-edit <branch>"
+          - "git rebase <branch>"
+          - "git push <remote> <branch>"
+        constraints:
+          require_non_interactive: true
+          abort_on_conflict: true
+          disallow_force_push: true
+          default_flags:
+            fetch: ["--prune"]
+            merge: ["--ff-only", "--no-edit"]
+        consent: "user_request_suffices"
+        protected_branches:
+          - "main"
+          - "master"
+          - "release/*"
           
 # --- Chat Output Hard Guards (anti-IDE spill) ---
 chat_output_guards:
