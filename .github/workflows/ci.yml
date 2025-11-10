@@ -2,58 +2,26 @@ name: CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches:
+      - main
   pull_request:
-    branches: [ main ]
 
 jobs:
-  build:
+  check:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Use Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: '18'
+          # lockfile を要求するキャッシュは使わない（B 方針）
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Install dependencies (no lockfile)
+        run: npm install --no-audit --no-fund --no-progress --no-package-lock
 
-      - name: Run checks
-        env:
-          CI: true
-        run: npm run check
-
-  quality-gates:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: verify:policy
-        run: npm run verify:policy
-
-      - name: typecheck
-        run: npm run typecheck
-
-      - name: lint
-        run: npm run lint
-
-      - name: tests
-        env:
-          CI: true
-        run: npm test
-
+      - name: Run quality gate
+        run: npm run -s check
 
