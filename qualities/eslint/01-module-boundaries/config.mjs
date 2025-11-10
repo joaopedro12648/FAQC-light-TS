@@ -18,6 +18,7 @@ import js from '@eslint/js';
 import importPlugin from 'eslint-plugin-import';
 import jsdoc from 'eslint-plugin-jsdoc';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
+
 import { FILES_JS, FILES_TS } from '../_shared/globs.mjs';
 
 export const moduleBoundaries = [
@@ -33,6 +34,8 @@ export const moduleBoundaries = [
         'error',
         { devDependencies: ['**/*.test.ts', 'qualities/**', 'tests/**', 'scripts/**', 'vibecoding/tests/**'] }
       ],
+      'import/no-duplicates': 'error',
+      'import/newline-after-import': ['error', { count: 1 }],
       'simple-import-sort/imports': 'error',
       'simple-import-sort/exports': 'error',
       'jsdoc/require-file-overview': 'error'
@@ -50,6 +53,8 @@ export const moduleBoundaries = [
         'error',
         { devDependencies: ['**/*.test.ts', 'qualities/**', 'tests/**', 'scripts/**', 'vibecoding/tests/**'] }
       ],
+      'import/no-duplicates': 'error',
+      'import/newline-after-import': ['error', { count: 1 }],
       'simple-import-sort/imports': 'error',
       'simple-import-sort/exports': 'error'
     }

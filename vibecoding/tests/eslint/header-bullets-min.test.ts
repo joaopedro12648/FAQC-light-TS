@@ -13,9 +13,10 @@
  * @see vibecoding/var/contexts/qualities/eslint/03-documentation/context.md
  * @snd vibecoding/var/SPEC-and-DESIGN/SnD-creation.md
  */
+import { describe, expect,it } from 'vitest';
+
 import { ruleHeaderBulletsMin } from '../../../qualities/eslint/plugins/header-bullets-min.js';
 
-import { describe, it, expect } from 'vitest';
 const ruleU: unknown = ruleHeaderBulletsMin;
 /**
  * メタ情報存在判定

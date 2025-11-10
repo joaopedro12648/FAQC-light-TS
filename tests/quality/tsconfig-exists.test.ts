@@ -16,7 +16,8 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { test, expect } from 'vitest';
+
+import { expect,test } from 'vitest';
 
 test('qualities/tsconfig/tsconfig.json should exist', () => {
   const p = path.join(process.cwd(), 'qualities', 'tsconfig', 'tsconfig.json');

@@ -14,8 +14,10 @@
  * @snd vibecoding/var/SPEC-and-DESIGN/SnD-creation.md
  */
 import path from 'node:path';
-import { describe, it, expect } from 'vitest';
-import { createTmpDir, writeTextFile, ensureDir, copyFile, cleanupDir } from '../framework/fsFixtures';
+
+import { describe, expect,it } from 'vitest';
+
+import { cleanupDir,copyFile, createTmpDir, ensureDir, writeTextFile } from '../framework/fsFixtures';
 import { runNode } from '../framework/runNode';
 
 describe('policy: jsdoc_no_duplicate', () => {

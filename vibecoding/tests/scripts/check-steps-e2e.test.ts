@@ -16,7 +16,9 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { describe, it, expect } from 'vitest';
+
+import { describe, expect,it } from 'vitest';
+
 import { stepDefs } from '../../../qualities/check-steps';
 
 describe('orchestrator: check-steps (E2E-lite)', () => {

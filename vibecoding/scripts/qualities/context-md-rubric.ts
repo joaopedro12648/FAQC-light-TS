@@ -99,7 +99,7 @@ function extractSection(content: string, headingPatterns: RegExp[]): string {
       if (currentLevel > 0 && currentLevel <= sectionLevel) {
         break;
       }
-      sectionContent += line + '\n';
+      sectionContent += `${line  }\n`;
     }
   }
   

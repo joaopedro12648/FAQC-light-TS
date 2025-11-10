@@ -17,7 +17,8 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { describe, it, expect } from 'vitest';
+
+import { describe, expect,it } from 'vitest';
 
 const CONTEXTS_BASE = path.resolve('vibecoding/var/contexts/qualities');
 

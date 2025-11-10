@@ -15,6 +15,7 @@
  * @snd vibecoding/var/SPEC-and-DESIGN/SnD-creation.md
  */
 import tseslint from '@typescript-eslint/eslint-plugin';
+
 import { FILES_ALL_CODE, FILES_TS } from '../_shared/globs.mjs';
 
 export const complexityAndMagic = [
@@ -24,7 +25,19 @@ export const complexityAndMagic = [
     rules: {
       complexity: ['error', 10],
       'max-lines-per-function': ['error', 80],
-      'max-nested-callbacks': ['error', 3]
+      'max-nested-callbacks': ['error', 3],
+      // Readable Code（一般則）
+      'no-nested-ternary': 'error',
+      'no-else-return': ['error', { allowElseIf: false }],
+      'no-useless-return': 'error',
+      'no-useless-constructor': 'error',
+      'prefer-const': 'error',
+      'prefer-template': 'error',
+      'object-shorthand': ['error', 'always'],
+      'prefer-arrow-callback': ['error', { allowNamedFunctions: false }],
+      'dot-notation': 'error',
+      'logical-assignment-operators': ['error', 'always', { enforceForIfStatements: true }],
+      'grouped-accessor-pairs': ['error', 'getBeforeSet']
     }
   },
 

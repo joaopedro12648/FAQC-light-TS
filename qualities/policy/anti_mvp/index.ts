@@ -18,9 +18,10 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { CheckFn, PolicyConfig, RunnerResult, Violation } from './types';
+
 import { run as bannedTerms } from './checks/banned_terms';
 import { run as todoTicketRequired } from './checks/todo_ticket_required';
+import type { CheckFn, PolicyConfig, RunnerResult, Violation } from './types';
 
 /**
  * banned_terms 可変構築用型

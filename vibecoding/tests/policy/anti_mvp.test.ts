@@ -13,10 +13,12 @@
  * @see vibecoding/var/contexts/qualities/policy/baseline.yaml
  * @snd vibecoding/var/SPEC-and-DESIGN/SnD-creation.md
  */
-import path from 'node:path';
-import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
-import { createTmpDir, writeTextFile, ensureDir, copyFile, cleanupDir } from '../framework/fsFixtures';
+import path from 'node:path';
+
+import { describe, expect,it } from 'vitest';
+
+import { cleanupDir,copyFile, createTmpDir, ensureDir, writeTextFile } from '../framework/fsFixtures';
 import { runNode } from '../framework/runNode';
 
 describe('policy: anti_mvp', () => {

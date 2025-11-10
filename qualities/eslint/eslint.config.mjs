@@ -14,12 +14,12 @@
  * @see vibecoding/docs/PLAYBOOK/PRE-IMPL.md
  * @snd vibecoding/var/SPEC-and-DESIGN/SnD-creation.md
  */
+import { IGNORES } from './_shared/globs.mjs';
 import { moduleBoundaries } from './01-module-boundaries/config.mjs';
 import { typeSafety } from './02-type-safety/config.mjs';
 import { documentation } from './03-documentation/config.mjs';
 import { complexityAndMagic } from './04-complexity-and-magic/config.mjs';
 import { environmentExceptions } from './05-environment-exceptions/config.mjs';
-import { IGNORES } from './_shared/globs.mjs';
 
 export default [
   // Ignores（グローバル）

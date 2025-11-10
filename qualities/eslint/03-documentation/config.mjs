@@ -15,9 +15,10 @@
  * @snd vibecoding/var/SPEC-and-DESIGN/SnD-creation.md
  */
 import jsdoc from 'eslint-plugin-jsdoc';
-import { FILES_TS, FILES_ALL_CODE } from '../_shared/globs.mjs';
-import { headerPlugin } from '../plugins/header-bullets-min.js';
+
+import { FILES_ALL_CODE,FILES_TS } from '../_shared/globs.mjs';
 import { blockCommentFormattingPlugin } from '../plugins/block-comment-formatting.js';
+import { headerPlugin } from '../plugins/header-bullets-min.js';
 
 export const documentation = [
   // TS/TSX の基本 JSDoc 要件

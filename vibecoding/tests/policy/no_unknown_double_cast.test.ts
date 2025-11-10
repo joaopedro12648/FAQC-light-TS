@@ -13,10 +13,12 @@
  * - 最低要件として箇条書きと参照リンク件数を満たす
  * @snd vibecoding/var/SPEC-and-DESIGN/SnD-creation.md
  */
-import path from 'node:path';
-import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
-import { createTmpDir, writeTextFile, cleanupDir } from '../framework/fsFixtures';
+import path from 'node:path';
+
+import { describe, expect,it } from 'vitest';
+
+import { cleanupDir,createTmpDir, writeTextFile } from '../framework/fsFixtures';
 import { runNode } from '../framework/runNode';
 
 describe('policy: no_unknown_double_cast', () => {

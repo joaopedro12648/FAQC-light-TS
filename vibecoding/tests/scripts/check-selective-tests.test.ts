@@ -13,7 +13,8 @@
  * @see vibecoding/docs/PLAYBOOK/PRE-IMPL.md
  * @snd vibecoding/var/SPEC-and-DESIGN/SnD-creation.md
  */
-import { describe, it, expect } from 'vitest';
+import { describe, expect,it } from 'vitest';
+
 import { evaluateShouldRunInternalTests } from '../../../scripts/qualities/check';
 
 describe('selective internal tests decision (evaluateShouldRunInternalTests)', () => {

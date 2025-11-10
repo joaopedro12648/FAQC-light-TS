@@ -14,7 +14,8 @@
  * @see vibecoding/var/contexts/qualities/eslint/03-documentation/context.md
  * @snd vibecoding/var/SPEC-and-DESIGN/SnD-creation.md
  */
-import { test, expect } from 'vitest';
+import { expect,test } from 'vitest';
+
 import { stepDefs } from '../../qualities/check-steps.ts';
 
 const MIN_STEPS_COUNT = 4;

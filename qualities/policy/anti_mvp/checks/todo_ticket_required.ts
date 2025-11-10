@@ -17,6 +17,7 @@
 // [SPEC:SnD-20251027-anti-mvp-policy-checks] Anti-MVP Policy Checks
 
 import * as path from 'node:path';
+
 import { globFiles, readText, toAbs } from '../fs-utils';
 import type { CheckFn, PolicyConfig, Violation } from '../types';
 
@@ -31,8 +32,8 @@ export const run: CheckFn = (rootDir: string, cfg: PolicyConfig) => {
   const rule = cfg.checks?.todo_ticket_required;
   if (!rule || !rule.regex) return [];
   const paths = rule.paths && rule.paths.length > 0 ? rule.paths : ['**/*.{ts,tsx,mts,cts}'];
-  const files = globFiles(rootDir, paths as readonly string[]);
-  const regex = new RegExp(rule.regex as string, 'i');
+  const files = globFiles(rootDir, paths);
+  const regex = new RegExp(rule.regex, 'i');
   const violations: Violation[] = [];
 
   for (const rel of files) {

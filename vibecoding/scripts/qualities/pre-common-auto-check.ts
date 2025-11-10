@@ -18,11 +18,12 @@
 /**
  * PRE-COMMON 用ユーティリティおよび診断出力。
  */
+import { spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
-import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+
 import { stepDefs } from '../../../qualities/check-steps.ts';
 
 const PROJECT_ROOT = process.cwd();
@@ -183,7 +184,7 @@ function getMaxMtimeMs(filePaths: string[]): number {
     try {
       const st = fs.statSync(fp);
       const ms = st.mtimeMs ?? new Date(st.mtime).getTime();
-      if (Number.isFinite(ms) && ms > maxMs) maxMs = ms as number;
+      if (Number.isFinite(ms) && ms > maxMs) maxMs = ms;
     } catch {
       // 無視
     }
@@ -345,7 +346,7 @@ function outputAndExit(startAt: string, mappings: Array<{ srcDir: string; destDi
 function formatCap(s: string, cap = DEFAULT_FORMAT_CAP): string {
   if (!s) return '';
   if (s.length <= cap) return s;
-  return s.slice(0, cap) + '\n... (truncated)\n';
+  return `${s.slice(0, cap)  }\n... (truncated)\n`;
 }
 
 // stepDefs 統合後に未使用となった runNpmScript を削除
@@ -434,7 +435,7 @@ function saveDiagnostics(diagnostics: string[]): void {
     fs.writeFileSync(diagOutFile, full, 'utf8');
   } catch {}
   const ascii = toAsciiPrintable(full);
-  process.stdout.write(ascii + '\n');
+  process.stdout.write(`${ascii  }\n`);
   if (diagOutFile) {
     process.stdout.write(`(full diagnostics saved: ${normalizePathForOutput(path.relative(PROJECT_ROOT, diagOutFile))})\n`);
   }
@@ -643,7 +644,7 @@ function emitReviewConflictMessages(pairs: Array<{ contextMd: string; reviewMd: 
       `  (It will keep failing with exit=2 while any context-review.md exists. Success prints "<StartAt> <hash>" with exit=0.)`,
       `- No relaxations or bypasses (see "no_relaxation" policy). This failure enforces synthesis, not copy-paste.`
     ].join('\n');
-    process.stdout.write(msg + '\n');
+    process.stdout.write(`${msg  }\n`);
   }
 }
 
@@ -656,7 +657,7 @@ function main(): void {
   const dupMsgs = buildDuplicateMessages();
   const dupViolation = dupMsgs.length > 0;
   if (dupViolation) {
-    for (const m of dupMsgs) process.stdout.write(m + '\n');
+    for (const m of dupMsgs) process.stdout.write(`${m  }\n`);
   }
   // Post-pass review detection: only run when other checks are satisfied
   if (mappings.length === 0 && !rubricViolation && !dupViolation) {

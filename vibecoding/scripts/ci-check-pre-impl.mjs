@@ -98,7 +98,7 @@ function main() {
   }
 
   if (errors.length > 0) {
-    process.stderr.write('\nPRE-IMPL check failed:\n- ' + errors.join('\n- ') + '\n');
+    process.stderr.write(`\nPRE-IMPL check failed:\n- ${  errors.join('\n- ')  }\n`);
     process.stderr.write('\nSee vibecoding/docs/PLAYBOOK/PRE-IMPL.md\n');
     process.exit(1);
   }

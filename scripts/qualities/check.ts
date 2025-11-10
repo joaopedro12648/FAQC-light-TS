@@ -15,12 +15,12 @@
  * @see vibecoding/docs/PLAYBOOK/PRE-IMPL.md
  * @snd vibecoding/var/SPEC-and-DESIGN/SnD-creation.md
  */
-import { spawn } from 'node:child_process';
-import { spawnSync } from 'node:child_process';
-import { existsSync, statSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync,readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { stepDefs } from '../../qualities/check-steps.ts';
 import { pathToFileURL } from 'node:url';
+
+import { stepDefs } from '../../qualities/check-steps.ts';
 
 /**
  * ゲート実行ステップのタプル型。[command, args]
