@@ -1,7 +1,7 @@
-# FAQC-light-TS
+# 速効品質コンテキスト TS軽量版
 
-**Fast-Acting Quality Context — TypeScript lightweight framework**  
-*(速効品質コンテキスト TS軽量版)*
+*FAQC-light-TS*  
+**Fast-Acting Quality Context — TypeScript lightweight framework**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![Docs: JP](https://img.shields.io/badge/Docs-JP-brightgreen)](#)
@@ -23,12 +23,18 @@
 - [基本的な開発フロー](#基本的な開発フロー)
 - [品質管理のプロンプト](#品質管理のプロンプト)
 - [よくある開発シナリオ](#よくある開発シナリオ)
-- [品質ポリシーについて](#品質ポリシーについて)
+- [デフォルトの品質ポリシーについて](#デフォルトの品質ポリシーについて)
 - [トラブルシューティング](#トラブルシューティング)
 - [高度な使い方](#高度な使い方)
 - [プロンプトのベストプラクティス](#プロンプトのベストプラクティス)
+- [AI との協働のコツ](#ai-との協働のコツ)
 - [チャット分割とハンドオフの実践](#チャット分割とハンドオフの実践)
 - [ライセンス](#ライセンス)
+- [さらに詳しく知りたい場合](#さらに詳しく知りたい場合)
+- [プロンプトクイックリファレンス](#プロンプトクイックリファレンス)
+- [Code of Conduct](#code-of-conduct)
+- [Security](#security)
+- [最後に](#最後に)
 
 ---
 
@@ -40,6 +46,8 @@ FAQC-light-TS は、AI コーデベロッパ（LLM）と協働して**品質駆�
 
 - **品質ゲートの自動実行**: ESLint、TypeScript 型検査、ポリシー検証、テストを AI が自動実行
 - **品質コンテキストの可視化**: AI が品質ルールを理解し、詳細レポートを自動生成
+- **品質コンテキストの自動生成・更新**: AI エージェントが PRE-COMMON 等で自動整備。ユーザーは品質ポリシー設定と検査コード（テスト/ポリシー）作成に集中できます
+- **検査コードで出力を制御**: テストやポリシーが AI の出力を拘束し、望む設計・スタイルへ誘導できます（「書ける限りコントロール可能」）
 - **厳格なポリシー検証**: Anti-MVP、型安全性、ドキュメント規約などを事前チェック
 - **SPEC-and-DESIGN 駆動**: 仕様を明文化してから実装に移行する明確なフロー
 - **プロンプトベース開発**: 自然言語の指示で品質を保ちながら開発を進行
@@ -61,6 +69,7 @@ FAQC-light-TS は、AI コーデベロッパ（LLM）と協働して**品質駆�
 - **初回通過率の向上**: 品質コンテキスト（Why/What/How）により適切なコードを初回で生成
 - **修正の高速化**: エラー発生時も context.md の「失敗パターン」「LLM典型NGパターン」を参照して的確に修正
 - **トークン効率**: 手戻りサイクルを削減し、生成コストを最小化
+- **検査コード主導の制御**: 検査コード（テスト/ポリシー）を書けば、AI 出力を組織の品質基準へ確実に収束させられます
 
 > 💡 **なぜコンテキストが重要なのか**
 >
@@ -101,7 +110,7 @@ FAQC-light-TS は、AI コーデベロッパ（LLM）と協働して**品質駆�
 FAQC-light-TS は以下を統合します：
 
 1. **規範的設定**（`qualities/**`）: 実行可能な品質ルール
-2. **詳細レポート**（`vibecoding/var/contexts/**`）: AI が理解できる形式の品質コンテキスト
+2. **詳細レポート**（`vibecoding/var/contexts/**`）: AI が理解できる形式の品質コンテキスト（※品質コンテキストは AI エージェントが自動作成・更新します）
 3. **実行フロー**（プレイブック）: 設計 → 実装のフェーズ管理
 4. **自動検証**（品質ゲート）: 生成コードの品質保証
 
@@ -176,7 +185,7 @@ FAQC-light-TS は以下を統合します：
    - Cursor では自動参照されますが、他環境では手動でプロンプトに含める必要がある可能性があります
 
 3. **品質コンテキストの明示的な読み込み**
-   - `vibecoding/var/contexts/qualities/**/context.md` を生成後、明示的に参照するよう指示
+   - `vibecoding/var/contexts/qualities/**/context.md` を生成後、明示的に参照するよう指示（※品質コンテキストは AI エージェントが自動作成・更新します）
    - Cursor では PRE-COMMON 実行時に自動参照されますが、他環境では手動指示が必要な可能性があります
 
 4. **フェーズ管理の手動化**
@@ -234,7 +243,7 @@ AI と対話する際、慣れないうちはこの README のプロンプト例
 
 AI は以下を実行します:
 - `npm install` で依存関係をインストール
-- `npm run check:pre-common` で品質コンテキストを生成
+- `npm run check:pre-common` で品質コンテキストを生成（※品質コンテキストは AI エージェントが自動作成・更新します）
 - 品質ゲートの初回実行で環境を確認
 
 手動で実行する場合（Cursor 以外の環境など）:
@@ -253,7 +262,7 @@ npm run check
 |---|---|
 | `npm run check` | 統一品質ゲート実行（ポリシー検証・型検査・Lint・テスト） |
 | `npm run check:fast` | 品質ゲートの高速版（範囲を一部短縮） |
-| `npm run check:pre-common` | PRE-COMMON 実行。品質コンテキスト詳細レポート作成/更新 |
+| `npm run check:pre-common` | PRE-COMMON 実行。品質コンテキスト詳細レポート作成/更新（※品質コンテキストは AI エージェントが自動作成・更新します） |
 | `npm run typecheck` | TypeScript 型検査（`qualities/tsconfig` を使用） |
 | `npm run lint` | ESLint 実行（`qualities/eslint` を SoT として使用） |
 | `npm run test` | テスト実行（vitest） |
@@ -287,6 +296,7 @@ FAQC-light-TS/
 │   │   ├── PRE-SnD.md         # SPEC-and-DESIGN作成前手順
 │   │   └── PRE-IMPL.md        # 実装開始前手順
 │   ├── scripts/qualities/     # 品質管理スクリプト
+│   ├── tests/                 # フレームワーク内製テスト（qualities または vibecoding の変更時のみ選択的に実行）
 │   └── var/
 │       ├── contexts/qualities/  # 品質コンテキスト詳細レポート（AI生成）
 │       └── SPEC-and-DESIGN/     # 仕様設計ドキュメント
@@ -481,29 +491,45 @@ AI の動作:
 
 ---
 
-## 品質ポリシーについて
+## デフォルトの品質ポリシーについて
 
-### Anti-MVP ポリシー（重要）
+この節ではレポジトリに標準で実装されている品質ポリシーについて解説します。品質ポリシーはユーザーが、必要であればAIエージェントの助力を得て、改変することも可能です。
 
-このプロジェクトでは、以下を**厳格に禁止**しています:
+### 実行順序（quality gate）
+`qualities/check-steps.ts` に基づく既定の順序は次の通りです。
+1. Policy 検査（`qualities/policy/**`）
+   - `anti_mvp` / `jsdoc_no_duplicate` / `no_unknown_double_cast` / `no_relaxation`
+2. 型検査（`qualities/tsconfig/tsconfig.json` を使用）
+3. ESLint（`qualities/eslint/eslint.config.mjs`）
+4. ビルド
+5. テスト（`tests/**`。`qualities/**` または `vibecoding/**` に変更がある場合は `vibecoding/tests/**` を選択的に追加実行）
 
-❌ **禁止事項:**
-- 沈黙フォールバック（エラーを握り潰す）
-- 後方互換のための残留実装（使われていないコードの温存）
-- TODO/FIXME にチケット番号がない
-- 段階的移行（新旧実装の長期併存）
-- 例外駆動制御（try/catch を正常系の分岐に使う）
+> 注記: 品質コンテキスト（`vibecoding/var/contexts/**`）は AI エージェントが自動作成・更新します。ユーザーはポリシー設定と検査コード作成に集中できます。
 
-✅ **推奨パターン:**
-- 明示的なエラーハンドリング（`throw new Error()` または `Result/Either` 型）
-- 型安全な列挙（`assertNever()` で網羅性を保証）
-- 明示的な機能フラグ（期限・削除期日・チケット番号を明記）
+### Policy（`qualities/policy/**`）
+- **Anti-MVP（重要）**: MVP的な緩和・暫定実装を禁止します。
+  - ❌ 沈黙フォールバック、未参照コード温存、無チケットの TODO/FIXME、長期の二重運用、例外駆動制御
+  - ✅ 明示的な失敗、網羅性保証（`assertNever` 等）、期日と根拠のある機能フラグ
+- **jsdoc_no_duplicate**: 隣接する JSDoc ブロックの重複を検出します（summary/key5 やタグ重複など）。
+- **no_relaxation**: `eslint-disable` / `ts-ignore` などの抑止ディレクティブや安易な型緩和を禁止します。
+- **no_unknown_double_cast**: `as unknown as` の二段キャストを禁止します。
 
-AI はこれらのポリシーを常に遵守してコードを生成します。
+### ESLint（`qualities/eslint/**`）
+- ユニット構成:
+  - `01-module-boundaries`: 層越え・循環参照などモジュール境界の遵守
+  - `02-type-safety`: 型安全性の確保（any/不必要な型緩和を抑止）
+  - `03-documentation`: ドキュメント規約（先頭ヘッダやJSDocの整合）
+  - `04-complexity-and-magic`: 複雑度・マジックナンバーの抑制
+  - `05-environment-exceptions`: 環境変数/例外に関する規約
+- プラグイン（`qualities/eslint/plugins`）:
+  - `header-bullets-min`: ファイル先頭ヘッダの最小要件を検証
+  - `block-comment-formatting`: 複数行JSDocの整形（開幕行に本文を置かない等）
+
+### TypeScript（`qualities/tsconfig/`）
+厳格な TypeScript 設定を提供します。`npm run typecheck` で本設定に基づく型検査を実行します。
 
 ### コメント規約
-
-すべての `src/**/*.ts` ファイルには、以下の構造を持つ先頭ヘッダが必要です:
+すべての `src/**/*.ts` ファイルは次の先頭ヘッダ形式に従います（`header-bullets-min` で検証）。
 
 ```typescript
 /**
@@ -518,7 +544,7 @@ AI はこれらのポリシーを常に遵守してコードを生成します�
  */
 ```
 
-AI は自動的にこの形式でコメントを生成します。日本語で記述されます。
+AI は既定でこの形式のコメントを生成します（本リポジトリでは日本語）。
 
 ---
 

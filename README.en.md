@@ -21,14 +21,18 @@ English | 日本語版: [README.md](README.md)
 - [Basic development flow](#basic-development-flow)
 - [Prompts for quality management](#prompts-for-quality-management)
 - [Common scenarios](#common-scenarios)
-- [Quality policies](#quality-policies)
+- [About default quality policies](#about-default-quality-policies)
 - [Troubleshooting](#troubleshooting)
 - [Advanced usage](#advanced-usage)
 - [Prompt best practices](#prompt-best-practices)
+- [Tips for collaborating with AI](#tips-for-collaborating-with-ai)
 - [Thread splitting and handoff in practice](#thread-splitting-and-handoff-in-practice)
+- [License](#license)
+- [Learn more](#learn-more)
 - [Code of Conduct](#code-of-conduct)
 - [Security](#security)
-- [License](#license)
+- [Prompt quick reference](#prompt-quick-reference)
+- [Finally](#finally)
 
 ---
 
@@ -36,10 +40,14 @@ English | 日本語版: [README.md](README.md)
 
 FAQC-light-TS is a TypeScript project framework that enables quality-driven development together with an AI co‑developer (LLM). It keeps a consistent quality bar from design to implementation and reduces rework by understanding the quality context before code generation.
 
+> Note: The AI agent automatically creates and updates the quality context. You focus on defining policies and writing checks; the AI’s output will be guided by those checks.
+
 ### Key features
 
 - **Automated quality gate**: ESLint, TypeScript type checking, policy verification, and tests executed by the AI agent
 - **Quality context visibility**: The AI reads quality rules and auto-generates detailed reports
+- **Auto creation and updates of the quality context**: The AI agent maintains it via PRE-COMMON and related flows, so you can focus on policy settings and writing checks (tests/policies)
+- **Test-driven output control**: Your checks constrain the AI’s output, steering it toward your intended design and style (“as much control as you can write”)
 - **Strict policy checks**: Anti-MVP, type safety, documentation rules, and more, verified in advance
 - **SPEC-and-DESIGN driven**: Clear flow to implement only after the spec is written down
 - **Prompt-based development**: Move forward in natural language while preserving quality
@@ -82,7 +90,7 @@ When using another AI agent (GitHub Copilot or other LLM tools):
    - Cursor references them automatically; other tools may require explicit prompts
 
 3. **Load the quality context explicitly**
-   - After generating `vibecoding/var/contexts/qualities/**/context.md`, instruct the agent to reference it
+   - After generating `vibecoding/var/contexts/qualities/**/context.md`, instruct the agent to reference it (The AI agent automatically creates and updates the quality context.)
    - Cursor does this automatically during PRE-COMMON; others may not
 
 4. **Manage phases explicitly**
@@ -178,6 +186,7 @@ FAQC-light-TS/
 │   │   ├── PRE-SnD.md          # Before writing SPEC-and-DESIGN
 │   │   └── PRE-IMPL.md         # Before implementation
 │   ├── scripts/qualities/      # Quality scripts
+│   ├── tests/                  # Internal framework tests (run selectively on changes to qualities or vibecoding)
 │   └── var/
 │       ├── contexts/qualities/ # Detailed quality context (AI-generated)
 │       └── SPEC-and-DESIGN/    # Specification and design docs
@@ -368,31 +377,43 @@ How can I fix it?
 
 ---
 
-## Quality policies
+## About default quality policies
 
-### Anti-MVP policy (Important)
+This section explains the quality policies that are implemented by default in this repository. If needed, users can modify these policies with the assistance of the AI agent.
 
-Strictly prohibited:
+### Execution order (quality gate)
+Based on `qualities/check-steps.ts`, the default order is:
+1. Policy checks (`qualities/policy/**`): `anti_mvp`, `jsdoc_no_duplicate`, `no_unknown_double_cast`, `no_relaxation`
+2. Type check using `qualities/tsconfig/tsconfig.json`
+3. ESLint via `qualities/eslint/eslint.config.mjs`
+4. Build
+5. Tests (`tests/**`; if `qualities/**` or `vibecoding/**` changed, `vibecoding/tests/**` runs additionally, selectively)
 
-❌
-- Silent fallback (swallowing errors)
-- Keeping unused legacy code for backward compatibility
-- TODO/FIXME without ticket reference
-- Prolonged dual-run migration (old/new coexistence)
-- Exception-driven control flow (using try/catch as branching for normal cases)
+> Note: The quality context (`vibecoding/var/contexts/**`) is automatically created and updated by the AI agent. You can focus on policies and checks.
+### Policies (`qualities/policy/**`)
+- **Anti-MVP (Important)**: Forbids MVP-like relaxation and provisional code.
+  - ❌ Silent fallback, keeping unused legacy code, TODO/FIXME without ticket, prolonged dual-run, exception-driven control flow
+  - ✅ Explicit failures, exhaustiveness (`assertNever`), feature flags with dates and rationale
+- **jsdoc_no_duplicate**: Detects duplicate adjacent JSDoc blocks (summary/key5 or tag duplication, etc.).
+- **no_relaxation**: Forbids `eslint-disable` / `ts-ignore` and similar suppression or loose typing.
+- **no_unknown_double_cast**: Forbids `as unknown as` double casts.
 
-Recommended patterns:
+### ESLint (`qualities/eslint/**`)
+- Units:
+  - `01-module-boundaries`: Enforce module/layer boundaries and prevent cycles
+  - `02-type-safety`: Strong type-safety (discourage `any` and unsafe relaxation)
+  - `03-documentation`: Documentation rules (top-of-file header, JSDoc consistency)
+  - `04-complexity-and-magic`: Limit complexity and magic numbers
+  - `05-environment-exceptions`: Conventions around env variables/exceptions
+- Plugins (`qualities/eslint/plugins`):
+  - `header-bullets-min`: Validates the minimum requirements for the top-of-file header
+  - `block-comment-formatting`: Formats multi-line JSDoc (e.g., no body on the opening line)
 
-✅
-- Explicit error handling (`throw new Error()` or `Result/Either` types)
-- Exhaustive enums (use `assertNever()` for exhaustiveness)
-- Explicit feature flags (with due date, removal date, ticket number)
-
-The AI always adheres to these policies when generating code.
+### TypeScript (`qualities/tsconfig/`)
+Provides strict TypeScript settings. `npm run typecheck` runs type checks against this config.
 
 ### Comment convention
-
-Every `src/**/*.ts` file must start with the following header:
+All `src/**/*.ts` files follow the header below (validated by `header-bullets-min`).
 
 ```typescript
 /**
@@ -406,7 +427,7 @@ Every `src/**/*.ts` file must start with the following header:
  */
 ```
 
-Note: By default, comments are generated in Japanese to match the repository’s locale policy. If you change the locale, comment language follows it.
+By default, comments are generated in Japanese per the repository locale policy.
 
 ---
 
@@ -647,6 +668,12 @@ Please report vulnerabilities via private contact rather than public issues: coz
 | Update quality context | `Please update the quality context.` |
 | Error resolution | `I see “[error]”. Please help me fix it.` |
 | Refactoring | `I want to refactor [scope]. Please create an SnD.` |
+
+---
+
+## Finally
+
+This repository weaves in a few design “tricks” and mechanisms that aren’t spelled out explicitly in the README. As you use it, there may be moments when things click and you think, “Ah, that’s why.” If you experience that, it’s a sign you’ve felt some of the depth of this framework. Please hold on to those insights.
 
 ---
 
