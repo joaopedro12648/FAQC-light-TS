@@ -182,17 +182,17 @@ export const blockCommentFormattingPlugin = {
         const sourceCode = context.sourceCode || context.getSourceCode();
 
 /**
- * describe/it/test 呼び出しかを判定する。
+ * describe 呼び出しかを判定する（it/test は対象外）。
  * @param {import('estree').Node} node 対象ノード（CallExpression など）
- * @returns {boolean} 対象テスト呼び出しであれば true
+ * @returns {boolean} describe 呼び出しであれば true
  */
-        function isTestCall(node) {
+        function isDescribeCall(node) {
           return (
             node &&
             node.type === 'CallExpression' &&
             node.callee &&
             node.callee.type === 'Identifier' &&
-            (node.callee.name === 'describe' || node.callee.name === 'it' || node.callee.name === 'test')
+            node.callee.name === 'describe'
           );
         }
 
@@ -230,7 +230,7 @@ export const blockCommentFormattingPlugin = {
 
         return {
           CallExpression(node) {
-            if (!isTestCall(node)) return;
+            if (!isDescribeCall(node)) return;
             const last = getLastPrecedingComment(node);
             const ok = last && isAdjacent(last, node) && isMeaningfulComment(last);
             if (!ok) {
