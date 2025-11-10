@@ -1,7 +1,7 @@
 ---
 id: SnD-20251108-snd-creation
 title: トップヘッダ規約と品質ゲート運用（SnD-creation）
-status: Implemented
+status: Ready
 createdAt: 2025-11-08
 author: AI Agent
 owners: [quality]

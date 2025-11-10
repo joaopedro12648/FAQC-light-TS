@@ -30,8 +30,10 @@ const sliceBlock = (lines, start, end) => {
     const raw = after[i];
     const ind = ((/^(\s*)/.exec(raw) || [,''])[1] || '').length;
     if (end.test(raw.trimEnd())) { eIdx = sIdx + 1 + i; break; }
+
     if (ind <= baseIndent && /^\s*[a-zA-Z0-9_]+:\s*$/.test(raw.trimEnd())) { eIdx = sIdx + 1 + i; break; }
   }
+
   return lines.slice(sIdx + 1, eIdx);
 };
 
@@ -43,12 +45,16 @@ const parseBanned = (lines) => {
   for (const raw of block) {
     const l = raw.trimEnd();
     if (/^\s*patterns:\s*$/.test(l)) { inPatterns = true; out.patterns = []; continue; }
+
     const mPat = l.match(/^\s*-\s+"?(.+?)"?\s*$/);
     if (inPatterns && mPat) { out.patterns.push(mPat[1]); continue; }
+
     const mWB = l.match(/^\s*word_boundary:\s*(true|false)\s*$/);
     if (mWB) { out.word_boundary = mWB[1] === 'true'; continue; }
+
     if (/^\s*paths:\s*/.test(l)) { out.paths = ['**/*.{ts,tsx,mts,cts}']; continue; }
   }
+
   return Object.keys(out).length ? out : undefined;
 };
 
@@ -60,11 +66,18 @@ const parseTodo = (lines) => {
     const l = raw.trimEnd();
     const mRegex = l.match(/^\s*regex:\s*"(.+)"\s*$/);
     if (mRegex) { out.regex = mRegex[1]; continue; }
+
     if (/^\s*paths:\s*/.test(l)) { out.paths = ['**/*.{ts,tsx,mts,cts}']; continue; }
   }
+
   return Object.keys(out).length ? out : undefined;
 };
 
+/**
+ * ポリシー設定 YAML を読み込み、ランナー用の構造体へ変換する。
+ * @param {string} repoRoot リポジトリルート
+ * @returns {{checks: Record<string, unknown>}} 解析済み設定オブジェクト
+ */
 function readYamlConfig(repoRoot) {
   const yamlPath = path.join(repoRoot, 'qualities', 'policy', 'anti_mvp', 'anti_mvp_policy.yaml');
   const raw = fs.readFileSync(yamlPath, 'utf8');
@@ -77,10 +90,20 @@ function readYamlConfig(repoRoot) {
   return cfg;
 }
 
+/**
+ * ルート配下の TS/TSX ファイル一覧を再帰的に収集する。
+ * @param {string} rootDir 走査起点のディレクトリ
+ * @returns {string[]} ルートからの相対パス配列
+ */
 function listAllTsFiles(rootDir) {
   const out = [];
   const IGNORES = new Set(['node_modules', 'dist', 'build', 'coverage', '.git']);
   const TS_EXT_RX = /\.(ts|tsx|mts|cts)$/i;
+  /**
+   * ディレクトリ配下を深さ優先で走査して TS/TSX を収集する。
+   * @param {string} dirAbs 絶対パスのディレクトリ
+   * @returns {void}
+   */
   function walk(dirAbs) {
     if (!fs.existsSync(dirAbs)) return;
     for (const entry of fs.readdirSync(dirAbs, { withFileTypes: true })) {
@@ -94,10 +117,17 @@ function listAllTsFiles(rootDir) {
       }
     }
   }
+
   walk(rootDir);
   return out;
 }
 
+/**
+ * 禁止語チェックを実行し、違反一覧を返す。
+ * @param {string} rootDir リポジトリルート
+ * @param {{checks?: {banned_terms?: {patterns?: string[], word_boundary?: boolean}}}} cfg 設定
+ * @returns {Array<{ruleId:string,message:string,file:string,line:number}>} 違反一覧
+ */
 function bannedTermsCheck(rootDir, cfg) {
   const rule = cfg.checks && cfg.checks.banned_terms;
   if (!rule || !rule.patterns || rule.patterns.length === 0) return [];
@@ -118,9 +148,16 @@ function bannedTermsCheck(rootDir, cfg) {
       }
     }
   }
+
   return violations;
 }
 
+/**
+ * TODO/TICKET 必須チェックを実行し、違反一覧を返す。
+ * @param {string} rootDir リポジトリルート
+ * @param {{checks?: {todo_ticket_required?: {regex?: string}}}} cfg 設定
+ * @returns {Array<{ruleId:string,message:string,file:string,line:number}>} 違反一覧
+ */
 function todoTicketRequiredCheck(rootDir, cfg) {
   const rule = cfg.checks && cfg.checks.todo_ticket_required;
   if (!rule || !rule.regex) return [];
@@ -134,10 +171,16 @@ function todoTicketRequiredCheck(rootDir, cfg) {
       if (regex.test(lines[i])) violations.push({ ruleId: 'todo_ticket_required', message: `${rel}:${i + 1} missing ticket for TODO/FIXME/HACK`, file: rel, line: i + 1 });
     }
   }
+
   return violations;
 }
 
 // 実行: 2チェックのみ（複雑度を抑制）
+/**
+ * すべてのチェックを順次実行し、結果を集約する。
+ * @param {string} rootDir リポジトリルート
+ * @returns {Promise<{ok:boolean,violations:Array<{ruleId:string,message:string,file?:string,line?:number}>}>} 実行結果
+ */
 async function runAll(rootDir) {
   const cfg = readYamlConfig(rootDir);
   const violations = [];
@@ -146,14 +189,20 @@ async function runAll(rootDir) {
   } catch (e) {
     violations.push({ ruleId: 'banned_terms', message: `checker crashed: ${e && e.message ? e.message : String(e)}` });
   }
+
   try {
     for (const v of todoTicketRequiredCheck(rootDir, cfg)) violations.push(v);
   } catch (e) {
     violations.push({ ruleId: 'todo_ticket_required', message: `checker crashed: ${e && e.message ? e.message : String(e)}` });
   }
+
   return { ok: violations.length === 0, violations };
 }
 
+/**
+ * エントリポイント
+ * @returns {Promise<void>} 非同期実行
+ */
 async function main() {
   const repoRoot = process.cwd();
   const { ok, violations } = await runAll(repoRoot);
@@ -161,8 +210,10 @@ async function main() {
     for (const v of violations) {
       process.stderr.write(`anti-mvp ❌ ${v.ruleId}: ${v.message}\n`);
     }
+
     process.exit(1);
   }
+
   process.stdout.write('anti-mvp ✅ no violations\n');
 }
 
@@ -170,5 +221,4 @@ main().catch((e) => {
   process.stderr.write(`anti-mvp ❌ runner error: ${e instanceof Error ? e.message : String(e)}\n`);
   process.exit(1);
 });
-
 

@@ -18,7 +18,6 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-
 import { run as bannedTerms } from './checks/banned_terms';
 import { run as todoTicketRequired } from './checks/todo_ticket_required';
 import type { CheckFn, PolicyConfig, RunnerResult, Violation } from './types';
@@ -70,6 +69,7 @@ function findBlockEnd(after: readonly string[], end: RegExp, baseIndent: number)
     if (end.test(trimmed)) return i;
     if (ind <= baseIndent && /^\s*[a-zA-Z0-9_]+:\s*$/.test(trimmed)) return i;
   }
+
   return -1;
 }
 
@@ -86,12 +86,16 @@ function parseBannedTerms(lines: readonly string[]): MutableBannedTerms | undefi
   for (const raw of block) {
     const l = raw.trimEnd();
     if (/^\s*patterns:\s*$/.test(l)) { inPatterns = true; out.patterns = []; continue; }
+
     const mPat = l.match(/^\s*-\s+"?(.+?)"?\s*$/);
     if (inPatterns && mPat && mPat[1] !== undefined) { out.patterns!.push(mPat[1]); continue; }
+
     const mWB = l.match(/^\s*word_boundary:\s*(true|false)\s*$/);
   if (mWB) { out.word_boundary = mWB[1] === 'true'; continue; }
+
   if (/^\s*paths:\s*/.test(l)) { out.paths = ['**/*.{ts,tsx,mts,cts}']; continue; }
   }
+
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
@@ -108,8 +112,10 @@ function parseTodo(lines: readonly string[]): MutableTodo | undefined {
     const l = raw.trimEnd();
   const mRegex = l.match(/^\s*regex:\s*"(.+)"\s*$/);
     if (mRegex && mRegex[1] !== undefined) { out.regex = mRegex[1]; continue; }
+
   if (/^\s*paths:\s*/.test(l)) { out.paths = ['**/*.{ts,tsx,mts,cts}']; continue; }
   }
+
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
@@ -204,5 +210,4 @@ export async function runAll(rootDir: string): Promise<RunnerResult> {
 }
 
 // index.ts はランナーからのみ使用される
-
 

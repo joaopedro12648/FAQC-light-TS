@@ -14,9 +14,9 @@
  * @snd vibecoding/var/SPEC-and-DESIGN/SnD-creation.md
  */
 import { describe, expect,it } from 'vitest';
-
 import { ruleHeaderBulletsMin } from '../../../qualities/eslint/plugins/header-bullets-min.js';
 
+/** テスト対象のルール実体（型は unknown で受ける） */
 const ruleU: unknown = ruleHeaderBulletsMin;
 /**
  * メタ情報存在判定
@@ -26,6 +26,7 @@ const ruleU: unknown = ruleHeaderBulletsMin;
 function hasMeta(x: unknown): x is { meta: unknown } {
   return typeof x === 'object' && x !== null && 'meta' in (x as Record<string, unknown>);
 }
+
 /**
  * メッセージ存在判定
  * @param x 対象
@@ -34,7 +35,10 @@ function hasMeta(x: unknown): x is { meta: unknown } {
 function hasMessages(x: unknown): x is { messages: unknown } {
   return typeof x === 'object' && x !== null && 'messages' in (x as Record<string, unknown>);
 }
+
+// 概要: ルールの公開面（meta/messages）を最低限確認するスモーク
 describe('ESLint rule (smoke): header-bullets-min', () => {
+  // 概要: ルールのメタ情報とメッセージの存在をスモークテストする
   it('exports rule meta and messages', () => {
     expect(typeof ruleU).toBe('object');
     expect(hasMeta(ruleU)).toBe(true);
@@ -50,5 +54,4 @@ describe('ESLint rule (smoke): header-bullets-min', () => {
     }
   });
 });
-
 

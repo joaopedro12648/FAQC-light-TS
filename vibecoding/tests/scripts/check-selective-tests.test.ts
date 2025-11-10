@@ -14,9 +14,9 @@
  * @snd vibecoding/var/SPEC-and-DESIGN/SnD-creation.md
  */
 import { describe, expect,it } from 'vitest';
-
 import { evaluateShouldRunInternalTests } from '../../../scripts/qualities/check';
 
+// 概要: 内製テスト追加実行の判定関数の分岐をテーブル駆動で検証
 describe('selective internal tests decision (evaluateShouldRunInternalTests)', () => {
   const ISO = '2025-01-01T00:00:00.000Z';
 
@@ -75,5 +75,4 @@ describe('selective internal tests decision (evaluateShouldRunInternalTests)', (
     });
   });
 });
-
 

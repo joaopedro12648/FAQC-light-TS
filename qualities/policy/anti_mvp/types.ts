@@ -51,4 +51,3 @@ export type RunnerResult = {
   readonly violations: readonly Violation[];
 };
 
-

@@ -15,9 +15,13 @@
  * @snd vibecoding/var/SPEC-and-DESIGN/SnD-creation.md
  */
 import tseslint from '@typescript-eslint/eslint-plugin';
-
 import { FILES_ALL_CODE, FILES_TS } from '../_shared/globs.mjs';
 
+/**
+ * 複雑度・可読性・マジックナンバーに関する設定断片。
+ * - 関数長やネストの上限、空行規律などを全域で適用する
+ * @returns Flat Config 配列
+ */
 export const complexityAndMagic = [
   // 複雑度・サイズ・ネストのガード（JS/TS 共通）
   {
@@ -37,7 +41,13 @@ export const complexityAndMagic = [
       'prefer-arrow-callback': ['error', { allowNamedFunctions: false }],
       'dot-notation': 'error',
       'logical-assignment-operators': ['error', 'always', { enforceForIfStatements: true }],
-      'grouped-accessor-pairs': ['error', 'getBeforeSet']
+      'grouped-accessor-pairs': ['error', 'getBeforeSet'],
+      // Spacing / Empty lines（読みやすさの統一）
+      'padding-line-between-statements': [
+        'error',
+        { blankLine: 'always', prev: ['function', 'block-like'], next: '*' }
+      ],
+      'no-multiple-empty-lines': ['error', { max: 1, maxBOF: 1, maxEOF: 1 }]
     }
   },
 
@@ -62,5 +72,4 @@ export const complexityAndMagic = [
 
   // 定数定義の例外を廃止（統一基準を適用）
 ];
-
 

@@ -17,8 +17,8 @@
 
 /**
  * Count bullet lines that look like `* - ...` inside a JSDoc block.
- * @param {string} commentText - Raw block comment text without the surrounding block delimiters
- * @returns {number}
+ * @param {string} commentText Raw block comment text without the surrounding block delimiters
+ * @returns {number} Number of bullet lines detected
  */
 function countBulletLines(commentText) {
   const lines = commentText.split(/\r?\n/);
@@ -28,12 +28,14 @@ function countBulletLines(commentText) {
       count += 1;
     }
   }
+
   return count;
 }
 
 /**
  * Determine whether a block comment node is a JSDoc-style comment.
- * @param {import('eslint').AST.Token | import('estree').Comment} node
+ * @param {import('eslint').AST.Token | import('estree').Comment} node Comment token or ESTree comment
+ * @returns {boolean} True when comment starts with '*'
  */
 function isJsDocBlock(node) {
   return node && node.type === 'Block' && node.value && node.value.startsWith('*');
@@ -41,7 +43,8 @@ function isJsDocBlock(node) {
 
 /**
  * Parse header elements from a JSDoc-looking block comment string (including leading " * " lines).
- * @param {string} text
+ * @param {string} text Raw JSDoc text including leading " * "
+ * @returns {{hasFile:boolean,hasNotes:boolean,bulletCount:number,seeCount:number,sndRaw:string|null}} Parsed summary
  */
 function parseHeader(text) {
   const lines = text.split(/\r?\n/);
@@ -67,8 +70,9 @@ function parseHeader(text) {
 
 /**
  * Validate @snd value
- * @param {string | null} value
- * @param {boolean} allowSndNone
+ * @param {string | null} value 検証対象の @snd 値（null 可）
+ * @param {boolean} allowSndNone `"なし"/"none"` を許容するか
+ * @returns {boolean} 妥当な .md パス または 許容された `"なし"` なら true
  */
 function isValidSnd(value, allowSndNone) {
   if (value == null) return false;
@@ -80,7 +84,8 @@ function isValidSnd(value, allowSndNone) {
 
 /**
  * Get the top-of-file JSDoc-like block comment, if any.
- * @param {import('eslint').SourceCode} sourceCode
+ * @param {import('eslint').SourceCode} sourceCode SourceCode インスタンス
+ * @returns {import('eslint').AST.Token | import('estree').Comment | null} 先頭JSDocコメント（なければ null）
  */
 function getHeaderComment(sourceCode) {
   const ast = sourceCode.ast;
@@ -96,10 +101,15 @@ function getHeaderComment(sourceCode) {
       if (isJsDocBlock(c)) return c;
     }
   }
+
   return null;
 }
 
-/** Normalize rule options */
+/**
+ * Normalize rule options.
+ * @param {unknown} raw User-supplied option object
+ * @returns {{min:number,max:number,requireSee:number,requireSnd:boolean,allowSndNone:boolean,customMessage:string|null}} Normalized options
+ */
 function normalizeOptions(raw) {
   const o = raw && typeof raw === 'object' ? raw : {};
   return {
@@ -112,6 +122,11 @@ function normalizeOptions(raw) {
   };
 }
 
+/**
+ * Basic structural checks for header presence.
+ * @param {{hasFile:boolean,hasNotes:boolean}} summary Parsed header summary
+ * @returns {Array<{messageId:string}>} Diagnostics to report
+ */
 function checkBase(summary) {
   const diags = [];
   if (!summary.hasFile) diags.push({ messageId: 'missingFile' });
@@ -119,6 +134,15 @@ function checkBase(summary) {
   return diags;
 }
 
+/**
+ * Validate bullet count range.
+ * @param {{bulletCount:number}} summary Parsed header summary
+ * @param {number} min Minimum required bullets
+ * @param {number} max Maximum allowed bullets
+ * @param {string|null} customMessage Optional message override
+ * @param {{messages:Record<string,string>}} meta Rule meta for default message
+ * @returns {string|null} Message or null when compliant
+ */
 function checkBullets(summary, min, max, customMessage, meta) {
   if (summary.bulletCount >= min && summary.bulletCount <= max) return null;
   return (
@@ -130,11 +154,25 @@ function checkBullets(summary, min, max, customMessage, meta) {
   );
 }
 
+/**
+ * Validate @see count.
+ * @param {{seeCount:number}} summary Parsed header summary
+ * @param {number} requireSee Minimum required @see entries
+ * @param {{messages:Record<string,string>}} meta Rule meta for default message
+ * @returns {string|null} Message or null when compliant
+ */
 function checkSee(summary, requireSee, meta) {
   if (!(requireSee > 0) || summary.seeCount >= requireSee) return null;
   return meta.messages.missingSee.replace('{{requireSee}}', String(requireSee));
 }
 
+/**
+ * Validate @snd value shape and presence.
+ * @param {{sndRaw:string|null}} summary Parsed header summary
+ * @param {boolean} requireSnd Whether @snd is required
+ * @param {boolean} allowSndNone Whether 'なし'|'none' is allowed
+ * @returns {{messageId:string}|null} Diagnostic payload or null
+ */
 function checkSnd(summary, requireSnd, allowSndNone) {
   if (!requireSnd) return null;
   if (summary.sndRaw == null) return { messageId: 'missingSnd' };
@@ -142,6 +180,10 @@ function checkSnd(summary, requireSnd, allowSndNone) {
   return null;
 }
 
+/**
+ * 先頭JSDocの構造を検証するESLintルール本体。
+ * @returns {import('eslint').Rule.RuleModule} ルールモジュール
+ */
 export const ruleHeaderBulletsMin = {
   meta: {
     type: 'problem',
@@ -227,10 +269,13 @@ export const ruleHeaderBulletsMin = {
   },
 };
 
+/**
+ * プラグインエクスポート（rules マップ）
+ * @returns {{rules: Record<string, unknown>}} ルール名→実体
+ */
 export const headerPlugin = {
   rules: {
     'header-bullets-min': ruleHeaderBulletsMin,
   },
 };
-
 

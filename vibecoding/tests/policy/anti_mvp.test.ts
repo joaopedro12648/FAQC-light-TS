@@ -15,12 +15,11 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-
 import { describe, expect,it } from 'vitest';
-
 import { cleanupDir,copyFile, createTmpDir, ensureDir, writeTextFile } from '../framework/fsFixtures';
 import { runNode } from '../framework/runNode';
 
+// 概要: anti_mvp ランナーが禁止語の検出と正常系を正しく判定することを検証
 describe('policy: anti_mvp', () => {
   it('fails on banned term and passes otherwise', async () => {
     const tmp = createTmpDir();
@@ -41,6 +40,7 @@ describe('policy: anti_mvp', () => {
       // OK: クリア
       // 失敗ファイルを削除してから OK を検証
       try { fs.rmSync(path.join(tmp, 'ng.ts')); } catch {}
+
       writeTextFile(path.join(tmp, 'ok.ts'), 'export const ok = 1;');
       const ok = await runNode('node', [path.join(process.cwd(), 'qualities', 'policy', 'anti_mvp', 'run.mjs')], { cwd: tmp });
       expect(ok.code).toBe(0);
@@ -50,5 +50,4 @@ describe('policy: anti_mvp', () => {
     }
   });
 });
-
 

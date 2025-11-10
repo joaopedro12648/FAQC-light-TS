@@ -14,12 +14,11 @@
  * @snd vibecoding/var/SPEC-and-DESIGN/SnD-creation.md
  */
 import path from 'node:path';
-
 import { describe, expect,it } from 'vitest';
-
 import { cleanupDir,copyFile, createTmpDir, ensureDir, writeTextFile } from '../framework/fsFixtures';
 import { runNode } from '../framework/runNode';
 
+// 概要: 連続するJSDoc重複の検出/非検出をスモークで確認
 describe('policy: jsdoc_no_duplicate', () => {
   it('detects adjacent duplicates (NG) and passes when no duplicates (OK)', async () => {
     const tmp = createTmpDir();
@@ -59,5 +58,4 @@ describe('policy: jsdoc_no_duplicate', () => {
     }
   });
 });
-
 

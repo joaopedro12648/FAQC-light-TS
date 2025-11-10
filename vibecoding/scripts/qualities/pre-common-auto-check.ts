@@ -23,21 +23,31 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-
 import { stepDefs } from '../../../qualities/check-steps.ts';
 
+/** リポジトリのプロジェクトルート（cwd） */
 const PROJECT_ROOT = process.cwd();
+/** 本スクリプトの配置ディレクトリ */
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+/** スクリプトからみたリポジトリルートの絶対パス */
 const REPO_ROOT_FROM_SCRIPT = path.resolve(SCRIPT_DIR, '../../..');
+/** ソースの品質設定が置かれるベースディレクトリ（qualities/） */
 const QUALITIES_DIR = path.join(PROJECT_ROOT, 'qualities');
+/** 生成物（var/contexts/qualities）のベースパス */
 const OUTPUT_BASE = path.join(PROJECT_ROOT, 'vibecoding', 'var', 'contexts', 'qualities');
+/** PRE-COMMON の鮮度記録（ISO文字列）ファイルパス */
 const LAST_UPDATED_FILE = path.join(OUTPUT_BASE, 'last_updated');
+/** ハッシュ計算用の固定シークレット（安定性目的） */
 const SECRET = 'SAT-light-TS::PRE-COMMON::v1';
 
 // 定数
+/** 診断出力の最大文字数（安全のための切り詰め上限） */
 const DEFAULT_FORMAT_CAP = 8000;
+/** ASCII 可視文字の下限コードポイント */
 const ASCII_PRINTABLE_MIN = 32;
+/** ASCII 可視文字の上限コードポイント */
 const ASCII_PRINTABLE_MAX = 126;
+/** 診断用サンプルコード（静的に生成） */
 const KATA_TS = `// kata.ts
 // 暫定対応: 必要に応じて代替実装を使い、明示的にエラーを処理する。
 
@@ -161,6 +171,7 @@ function listFilesRecursive(dir: string): string[] {
     } catch {
       continue; // 読み取れないディレクトリはスキップ
     }
+
     for (const e of entries) {
       const full = path.join(current, e.name);
       if (e.isDirectory()) {
@@ -170,6 +181,7 @@ function listFilesRecursive(dir: string): string[] {
       }
     }
   }
+
   return files;
 }
 
@@ -189,6 +201,7 @@ function getMaxMtimeMs(filePaths: string[]): number {
       // 無視
     }
   }
+
   return maxMs;
 }
 
@@ -261,6 +274,7 @@ function computeNeededMappings(targetDirs: string[]): Array<{ srcDir: string; de
       mappings.push({ srcDir: srcOut, destDir: destOut });
     }
   }
+
   return mappings;
 }
 
@@ -286,6 +300,7 @@ function writeLastUpdated(): string {
     process.stderr.write(`pre-common-auto-check: failed to write last_updated: ${String((e as Error)?.message || e)}\n`);
     process.exit(1);
   }
+
   return startAt;
 }
 
@@ -307,6 +322,7 @@ function checkRubric(): boolean {
     const res1 = spawnSync(process.execPath, ['--import', tsxLoaderArg, rubricChecker], { stdio: 'pipe', encoding: 'utf8' });
     if (typeof res1.status === 'number' && res1.status === 0) return false; // compliant
   }
+
   // 試行2: npx -y tsx rubric.ts（クロスプラットフォーム代替）
   const res2 = spawnSync('npx', ['-y', 'tsx', rubricChecker], { stdio: 'pipe', encoding: 'utf8', shell: true });
   return !(typeof res2.status === 'number' && res2.status === 0);
@@ -324,16 +340,20 @@ function outputAndExit(startAt: string, mappings: Array<{ srcDir: string; destDi
     process.stdout.write(`${startAt} ${hash}\n`);
     process.exit(0);
   }
+
   for (const m of mappings) {
     process.stdout.write(`[GATE] ${m.srcDir} => ${m.destDir}\n`);
   }
+
   if (rubricViolation && mappings.length === 0) {
     process.stdout.write('[GATE] contexts/qualities => vibecoding/var/contexts/qualities  # rubric noncompliant\n');
   }
+
   // 診断は、少なくとも1つ以上の対象ユニットで context.md が存在しない場合のみ出力する。
   if (!allTargetContextMdExist()) {
     emitDiagnostics();
   }
+
   process.exit(2);
 }
 
@@ -386,9 +406,11 @@ function runGateCommandsWithKata(_pkgJson: unknown): string[] {
       results.push('');
       appendDiagnosticsForStep(d, results);
     }
+
     return results;
   } finally {
     try { fs.unlinkSync(kataPath); } catch {}
+
     try {
       const remains = fs.readdirSync(kataDir);
       if (remains.length === 0) fs.rmdirSync(kataDir);
@@ -410,6 +432,7 @@ function appendDiagnosticsForStep(d: typeof stepDefs[number], results: string[])
   for (const ln of lines) {
     results.push(`[SAMPLE] ${ln}`);
   }
+
   results.push(`[SAMPLE] exit=${result.status}`);
   const out = (result.stdout || '') + (result.stderr ? `\n[stderr]\n${result.stderr}` : '');
   const capped = formatCap(out, DEFAULT_FORMAT_CAP);
@@ -434,6 +457,7 @@ function saveDiagnostics(diagnostics: string[]): void {
     fs.mkdirSync(path.dirname(diagOutFile), { recursive: true });
     fs.writeFileSync(diagOutFile, full, 'utf8');
   } catch {}
+
   const ascii = toAsciiPrintable(full);
   process.stdout.write(`${ascii  }\n`);
   if (diagOutFile) {
@@ -496,6 +520,7 @@ function collectVarContextYamlFiles(): string[] {
       if (path.basename(f) === 'context.yaml') files.push(f);
     }
   }
+
   return Array.from(new Set(files));
 }
 
@@ -511,6 +536,7 @@ function detectTopLevelKeyDuplicates(filePath: string): Array<{ key: string; lin
   } catch {
     return [];
   }
+
   const lines = content.split(/\r?\n/);
   const keyToLines = new Map<string, number[]>();
   for (let i = 0; i < lines.length; i++) processTopLevelYamlLine(String(lines[i] ?? ''), i, keyToLines);
@@ -518,11 +544,12 @@ function detectTopLevelKeyDuplicates(filePath: string): Array<{ key: string; lin
   for (const [k, occ] of keyToLines.entries()) {
     if (occ.length > 1) dups.push({ key: k, lines: occ });
   }
+
   return dups;
 }
 
 /**
-* 単一行のトップレベルYAMLキーを集計
+ * 単一行のトップレベルYAMLキーを集計
  * @param ln 行文字列
  * @param idx 行番号0始まり
  * @param keyToLines キー→出現行のマップ
@@ -554,9 +581,11 @@ function buildDuplicateMessages(): string[] {
       out.push(` - key: ${d.key} @ lines ${d.lines.join(', ')}`);
     }
   }
+
   if (out.length > 0) {
     out.push('[GATE] Action: Merge into a single YAML document without repeating top-level keys.');
   }
+
   return out;
 }
 
@@ -578,6 +607,7 @@ function allTargetContextMdExist(): boolean {
       return false;
     }
   }
+
   return true;
 }
 
@@ -599,6 +629,7 @@ function toAsciiPrintable(s: string): string {
       out += '?';
     }
   }
+
   return out;
 }
 
@@ -617,6 +648,7 @@ function findContextReviewPairs(): Array<{ contextMd: string; reviewMd: string }
       pairs.push({ contextMd, reviewMd });
     }
   }
+
   return pairs;
 }
 
@@ -659,6 +691,7 @@ function main(): void {
   if (dupViolation) {
     for (const m of dupMsgs) process.stdout.write(`${m  }\n`);
   }
+
   // Post-pass review detection: only run when other checks are satisfied
   if (mappings.length === 0 && !rubricViolation && !dupViolation) {
     const reviewPairs = findContextReviewPairs();
@@ -667,10 +700,12 @@ function main(): void {
       process.exit(2);
     }
   }
+
   if (mappings.length === 0 && !rubricViolation && dupViolation) {
     // 重複のみで Fail（他の理由が無い場合）
     process.exit(2);
   }
+
   outputAndExit(startAt, mappings, rubricViolation);
 }
 
@@ -680,5 +715,4 @@ try {
   process.stderr.write(`pre-common-auto-check: fatal error: ${String((e as Error)?.message || e)}\n`);
   process.exit(1);
 }
-
 

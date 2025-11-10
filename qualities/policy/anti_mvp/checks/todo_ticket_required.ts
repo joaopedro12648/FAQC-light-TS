@@ -17,7 +17,6 @@
 // [SPEC:SnD-20251027-anti-mvp-policy-checks] Anti-MVP Policy Checks
 
 import * as path from 'node:path';
-
 import { globFiles, readText, toAbs } from '../fs-utils';
 import type { CheckFn, PolicyConfig, Violation } from '../types';
 
@@ -53,9 +52,7 @@ export const run: CheckFn = (rootDir: string, cfg: PolicyConfig) => {
       }
     }
   }
+
   return violations;
 };
-
- 
-
 

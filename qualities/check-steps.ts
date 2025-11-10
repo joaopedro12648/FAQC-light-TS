@@ -49,12 +49,17 @@ export type StepDef = Readonly<{
  * 登録された品質ゲート実行ステップ一覧。
  * - 診断/実ゲートの順序と対象を定義する規範的リスト
  */
+/**
+ * ゲート実行ステップ定義（実行順序は優先度を反映）
+ * - policies → typecheck → lint → build/test の順序と対象を定義
+ */
 export const stepDefs: ReadonlyArray<StepDef> = [
   // Policies (explicitly listed; no aggregator)
   { id: 'policy:anti_mvp', command: 'node', args: ['qualities/policy/anti_mvp/run.mjs'], configRelDir: 'policy/anti_mvp', runMode: 'both' },
   { id: 'policy:jsdoc_no_duplicate', command: 'node', args: ['qualities/policy/jsdoc_no_duplicate/run.mjs'], configRelDir: 'policy/jsdoc_no_duplicate', runMode: 'both' },
   { id: 'policy:no_unknown_double_cast', command: 'node', args: ['qualities/policy/no_unknown_double_cast/run.mjs'], configRelDir: 'policy/no_unknown_double_cast', runMode: 'both' },
   { id: 'policy:no_relaxation', command: 'node', args: ['qualities/policy/no_relaxation/run.mjs'], configRelDir: 'policy/no_relaxation', runMode: 'both' },
+  { id: 'policy:comment_locale', command: 'node', args: ['qualities/policy/comment_locale/run.mjs'], configRelDir: 'policy/comment_locale', runMode: 'both' },
   { id: 'typecheck',     command: 'npm',  args: ['run', 'typecheck', '--silent'],        configRelDir: 'tsconfig', runMode: 'both' },
   // 実ゲート用の lint（1回）
   { id: 'lint',          command: 'npm',  args: ['run', 'lint', '--silent'],             configRelDir: 'eslint', runMode: 'gate' },
@@ -69,5 +74,4 @@ export const stepDefs: ReadonlyArray<StepDef> = [
   { id: 'build',         command: 'npm',  args: ['run', 'build', '--silent'],            configRelDir: '', runMode: 'both' },
   { id: 'test',          command: 'npm',  args: ['test', '--silent'],                    configRelDir: '', runMode: 'both' },
 ] as const;
-
 

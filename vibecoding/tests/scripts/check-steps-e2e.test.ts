@@ -16,11 +16,10 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-
 import { describe, expect,it } from 'vitest';
-
 import { stepDefs } from '../../../qualities/check-steps';
 
+// 概要: check-steps のゲート定義が期待どおりに存在し、参照ディレクトリも実在することを確認
 describe('orchestrator: check-steps (E2E-lite)', () => {
   it('contains expected gate steps and existing config directories', () => {
     const gates = stepDefs.filter((d) => d.runMode === 'gate' || d.runMode === 'both');
@@ -41,5 +40,4 @@ describe('orchestrator: check-steps (E2E-lite)', () => {
     }
   });
 });
-
 

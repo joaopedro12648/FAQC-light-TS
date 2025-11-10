@@ -15,9 +15,9 @@
  * @snd vibecoding/var/SPEC-and-DESIGN/SnD-creation.md
  */
 import { expect,test } from 'vitest';
-
 import { stepDefs } from '../../qualities/check-steps.ts';
 
+/** 最低保証するステップ数（品質ゲート構成の健全性） */
 const MIN_STEPS_COUNT = 4;
 
 test('stepDefs should be >=4 length with id, command, args, configRelDir', () => {
@@ -45,5 +45,4 @@ test('build step should exist and call vite build via npm script', () => {
   expect(build?.command).toBe('npm');
   expect(build?.args.includes('build')).toBe(true);
 });
-
 

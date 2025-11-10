@@ -72,4 +72,3 @@ export function cleanupDir(dir: string): void {
   }
 }
 
-

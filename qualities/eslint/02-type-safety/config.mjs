@@ -14,15 +14,18 @@
  * @see vibecoding/docs/PLAYBOOK/PRE-IMPL.md
  * @snd vibecoding/var/SPEC-and-DESIGN/SnD-creation.md
  */
-import path from 'node:path';
-
 import tseslint from '@typescript-eslint/eslint-plugin';
 import tsparser from '@typescript-eslint/parser';
-
+import path from 'node:path';
 import { FILES_TS } from '../_shared/globs.mjs';
 
 const tsconfigRootDir = path.resolve(process.cwd());
 
+/**
+ * 型安全（@typescript-eslint）に関するフラット設定断片を提供する。
+ * - 型/境界に関する禁止事項と推奨事項を一括で適用する
+ * @returns Flat Config 配列
+ */
 export const typeSafety = [
   {
     files: FILES_TS,
@@ -70,5 +73,4 @@ export const typeSafety = [
     }
   }
 ];
-
 

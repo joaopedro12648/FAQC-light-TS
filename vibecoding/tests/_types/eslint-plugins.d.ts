@@ -14,26 +14,25 @@
  * @snd vibecoding/var/SPEC-and-DESIGN/SnD-creation.md
  */
 declare module '../../../qualities/eslint/plugins/block-comment-formatting.js' {
-  /** プラグイン: ブロックコメント整形ルール */
+  /** ルール: ブロックコメント整形（メタ/メッセージを公開） */
   export const ruleBlockCommentFormatting: unknown;
-  /** プラグインオブジェクト（rules マップ） */
+  /** プラグイン: ルールマップ（blockfmt/*） */
   export const blockCommentFormattingPlugin: unknown;
 }
 declare module '../../../qualities/eslint/plugins/header-bullets-min.js' {
-  /** プラグイン: ヘッダ箇条書き最小件数ルール */
+  /** ルール: ヘッダ箇条書き最小件数（メッセージを公開） */
   export const ruleHeaderBulletsMin: unknown;
-  /** プラグインオブジェクト（rules マップ） */
+  /** プラグイン: ルールマップ（header/*） */
   export const headerPlugin: unknown;
 }
 declare module '../../../qualities/eslint/plugins/*.js' {
-  /** プラグイン: ブロックコメント整形ルール */
+  /** ルール: ブロックコメント整形（補助ワイルドカード宣言） */
   export const ruleBlockCommentFormatting: unknown;
-  /** プラグインオブジェクト（rules マップ） */
+  /** プラグイン: ルールマップ（補助ワイルドカード宣言） */
   export const blockCommentFormattingPlugin: unknown;
-  /** プラグイン: ヘッダ箇条書き最小件数ルール */
+  /** ルール: ヘッダ箇条書き最小件数（補助ワイルドカード宣言） */
   export const ruleHeaderBulletsMin: unknown;
-  /** プラグインオブジェクト（rules マップ） */
+  /** プラグイン: ルールマップ（補助ワイルドカード宣言） */
   export const headerPlugin: unknown;
 }
-
 

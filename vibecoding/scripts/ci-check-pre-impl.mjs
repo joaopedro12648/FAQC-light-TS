@@ -21,6 +21,11 @@ import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
+/**
+ * コマンドを同期実行する（失敗時は空文字を返す安全運転）。
+ * @param {string} cmd 実行するシェルコマンド
+ * @returns {string} 標準出力（trim 済み）。失敗時は空文字。
+ */
 function run(cmd) {
   try {
     return execSync(cmd, { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' }).trim();
@@ -29,6 +34,10 @@ function run(cmd) {
   }
 }
 
+/**
+ * 変更ファイル一覧を取得する（CI で一般的な差分範囲を順に試行）。
+ * @returns {string[]} 変更された（または作業ツリーで変更検出された）パスの配列
+ */
 function getChangedFiles() {
   // 代表的な CI の差分範囲を試し、段階的にフォールバックする
   const attempts = [
@@ -40,11 +49,17 @@ function getChangedFiles() {
     const out = run(cmd);
     if (out) return Array.from(new Set(out.split('\n').filter(Boolean)));
   }
+
   // 最後の手段として、作業ツリーの変更を確認する（CI では空の可能性あり）
   const wt = run('git ls-files -m -o --exclude-standard');
   return wt ? Array.from(new Set(wt.split('\n').filter(Boolean))) : [];
 }
 
+/**
+ * ファイル読み込み（失敗時は空文字を返す）。
+ * @param {string} p ファイルパス
+ * @returns {string} ファイル内容（UTF-8）。失敗時は空文字。
+ */
 function readFileSafe(p) {
   try {
     return fs.readFileSync(p, 'utf8');
@@ -53,11 +68,21 @@ function readFileSafe(p) {
   }
 }
 
+/**
+ * Markdown 文字列から YAML フロントマター部分を抽出する。
+ * @param {string} md Markdown 文字列
+ * @returns {string} フロントマターの中身（区切り線を除く）。無ければ空文字。
+ */
 function extractFrontMatter(md) {
   const m = md.match(/^---\s*[\r\n]+([\s\S]*?)[\r\n]+---\s*[\r\n]/);
   return m ? m[1] : '';
 }
 
+/**
+ * フロントマターから `quality_refresh_hash_before_impl` の値を抽出する。
+ * @param {string} frontMatter 抽出済みフロントマター文字列
+ * @returns {string} `<StartAt> <hash>` 形式の値。見つからなければ空文字。
+ */
 function getQualityRefreshHashBeforeImpl(frontMatter) {
   if (!frontMatter) return '';
   // YAML フロントマターの行を捕捉: quality_refresh_hash_before_impl: "<StartAt> <hash>"
@@ -65,11 +90,19 @@ function getQualityRefreshHashBeforeImpl(frontMatter) {
   return m ? m[1].trim() : '';
 }
 
+/**
+ * `<StartAt> <sha256>` 形式の妥当性を検証する。
+ * @param {string} value 値
+ * @returns {boolean} 妥当であれば true
+ */
 function isValidStartAtHash(value) {
   // ISO8601 UTC + 空白 + 64 桁の 16 進数
   return /^\d{4}-\d{2}-\d{2}T[^\s]+Z\s+[0-9a-f]{64}$/.test(value);
 }
 
+/**
+ * エントリポイント。SPEC の pre-impl ハッシュ有無を検査し、欠落時は失敗させる。
+ */
 function main() {
   const changed = getChangedFiles();
   const codeChanged = changed.filter((p) => /^(apps|src)\//.test(p));
@@ -107,5 +140,4 @@ function main() {
 }
 
 main();
-
 

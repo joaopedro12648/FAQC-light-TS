@@ -25,6 +25,7 @@ export type RunResult = {
   signal: NodeJS.Signals | null;
 };
 
+/** 既定の実行タイムアウト（ミリ秒） */
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 /**
@@ -67,5 +68,4 @@ export function runNode(
     });
   });
 }
-
 

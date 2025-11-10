@@ -18,9 +18,14 @@ import js from '@eslint/js';
 import importPlugin from 'eslint-plugin-import';
 import jsdoc from 'eslint-plugin-jsdoc';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
-
 import { FILES_JS, FILES_TS } from '../_shared/globs.mjs';
 
+/**
+ * モジュール境界／依存関係に関するフラット設定断片を提供する。
+ * - JS と TS で適切な import 規律や default export 禁止等を適用する
+ * - CI/ローカルで一貫したimport順序と空行規律を強制する
+ * @returns Flat Config 配列
+ */
 export const moduleBoundaries = [
   // JS ベース（おすすめ設定 + 境界）
   {
@@ -36,7 +41,8 @@ export const moduleBoundaries = [
       ],
       'import/no-duplicates': 'error',
       'import/newline-after-import': ['error', { count: 1 }],
-      'simple-import-sort/imports': 'error',
+      // インポート間の空行を詰める（単一グループ化）
+      'simple-import-sort/imports': ['error', { groups: [['^\\u0000', '^', '^\\.']] }],
       'simple-import-sort/exports': 'error',
       'jsdoc/require-file-overview': 'error'
     },
@@ -55,7 +61,8 @@ export const moduleBoundaries = [
       ],
       'import/no-duplicates': 'error',
       'import/newline-after-import': ['error', { count: 1 }],
-      'simple-import-sort/imports': 'error',
+      // インポート間の空行を詰める（単一グループ化）
+      'simple-import-sort/imports': ['error', { groups: [['^\\u0000', '^', '^\\.']] }],
       'simple-import-sort/exports': 'error'
     }
   },
@@ -67,5 +74,4 @@ export const moduleBoundaries = [
     rules: { 'import/no-default-export': 'off' }
   }
 ];
-
 

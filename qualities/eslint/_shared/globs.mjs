@@ -15,11 +15,23 @@
  * @snd vibecoding/var/SPEC-and-DESIGN/SnD-creation.md
  */
 
+/**
+ * Lint の対象外パス（成果物・キャッシュ等）
+ */
 export const IGNORES = ['dist/**', 'coverage/**', 'node_modules/**', 'tmp/**', 'scripts/tmp/**'];
 
+/**
+ * JS 系ファイルのグロブ（ESM/CJS 含む）
+ */
 export const FILES_JS = ['**/*.{js,cjs,mjs}'];
 
+/**
+ * TS 系ファイルのグロブ（*.ts/*.tsx など）
+ */
 export const FILES_TS = ['**/*.{ts,tsx,mts,cts}'];
 
+/**
+ * JS/TS 全コードファイルのグロブ
+ */
 export const FILES_ALL_CODE = ['**/*.{js,cjs,mjs,ts,tsx,mts,cts}'];
 

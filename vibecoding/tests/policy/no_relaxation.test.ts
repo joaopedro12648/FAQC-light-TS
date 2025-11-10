@@ -15,12 +15,11 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-
 import { describe, expect,it } from 'vitest';
-
 import { cleanupDir,createTmpDir, writeTextFile } from '../framework/fsFixtures';
 import { runNode } from '../framework/runNode';
 
+// 概要: 抑止ディレクティブの検出/クリア判定を黒箱で確認
 describe('policy: no_relaxation', () => {
   it('detects relaxations and passes when none present', async () => {
     const tmp = createTmpDir();
@@ -36,6 +35,7 @@ describe('policy: no_relaxation', () => {
       // OK: クリア
       // 失敗ファイルを削除してから OK を検証
       try { fs.rmSync(path.join(tmp, 'ng.ts')); } catch {}
+
       writeTextFile(path.join(tmp, 'ok.ts'), 'export const ok = 1;');
       const ok = await runNode('node', [path.join(process.cwd(), 'qualities', 'policy', 'no_relaxation', 'run.mjs')], { cwd: tmp });
       expect(ok.code).toBe(0);
@@ -45,5 +45,4 @@ describe('policy: no_relaxation', () => {
     }
   });
 });
-
 

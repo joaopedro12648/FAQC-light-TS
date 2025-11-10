@@ -22,6 +22,11 @@ const PROJECT_ROOT = process.cwd();
 const TARGET_DIRS = ['.'];
 const EXCLUDE_DIRS = new Set(['node_modules', 'dist', 'build', 'coverage', '.git']);
 
+/**
+ * ディレクトリ以下のファイルを再帰的に列挙する。
+ * @param {string} dir 起点ディレクトリ
+ * @returns {string[]} 発見したファイルパスの配列
+ */
 function listFilesRecursive(dir) {
   const files = [];
   const stack = [dir];
@@ -30,6 +35,7 @@ function listFilesRecursive(dir) {
     if (!d) break;
     let entries;
     try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { continue; }
+
     for (const e of entries) {
       const full = path.join(d, e.name);
       const base = path.basename(full);
@@ -38,11 +44,17 @@ function listFilesRecursive(dir) {
       else if (e.isFile()) files.push(full);
     }
   }
+
   return files;
 }
 
 const RX = /as\s+unknown\s+as/g;
 
+/**
+ * 二重キャスト表現 `as unknown as` のヒット位置を抽出する。
+ * @param {string} content ファイル全文
+ * @returns {Array<{line:number,snippet:string}>} ヒット行と抜粋の配列
+ */
 function scan(content) {
   const hits = [];
   let m;
@@ -53,9 +65,14 @@ function scan(content) {
     hits.push({ line, snippet });
     if (m.index === RX.lastIndex) RX.lastIndex++;
   }
+
   return hits;
 }
 
+/**
+ * エントリポイント。
+ * ルート配下の TS 系ファイルを走査し、二重キャストの有無を検査する。
+ */
 function main() {
   const roots = TARGET_DIRS.map((d) => path.join(PROJECT_ROOT, d));
   const files = roots.flatMap(listFilesRecursive).filter((f) => /\.(ts|tsx|mts|cts)$/.test(f));
@@ -63,13 +80,16 @@ function main() {
   for (const fp of files) {
     let content = '';
     try { content = fs.readFileSync(fp, 'utf8'); } catch { continue; }
+
     const hits = scan(content);
     if (hits.length) violations.push({ file: path.relative(PROJECT_ROOT, fp), hits });
   }
+
   if (violations.length === 0) {
     process.stdout.write('[policy:no_unknown_double_cast] OK: no "as unknown as" found\n');
     process.exit(0);
   }
+
   process.stderr.write('[policy:no_unknown_double_cast] NG: "as unknown as" double cast detected\n');
   for (const v of violations) for (const h of v.hits) process.stderr.write(`${v.file}:${h.line}: ${h.snippet}\n`);
   process.exit(1);
@@ -79,5 +99,4 @@ try { main(); } catch (e) {
   process.stderr.write(`[policy:no_unknown_double_cast] fatal: ${String((e?.message) || e)}\n`);
   process.exit(2);
 }
-
 

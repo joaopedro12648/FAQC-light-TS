@@ -16,6 +16,11 @@
  */
 import { FILES_ALL_CODE } from '../_shared/globs.mjs';
 
+/**
+ * 環境別の例外方針（基本は禁止で必要時に明示許容）を定義する設定断片。
+ * - 既定では console 使用を禁止（各ファイルで必要に応じて局所許可）
+ * @returns Flat Config 配列
+ */
 export const environmentExceptions = [
   // デフォルトでは console 禁止
   {
@@ -27,5 +32,4 @@ export const environmentExceptions = [
 
   // 設定ファイルの default export 例外は撤廃（各ファイル内で必要に応じて明示）
 ];
-
 

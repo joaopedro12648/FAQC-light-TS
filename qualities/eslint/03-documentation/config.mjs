@@ -14,16 +14,22 @@
  * @see vibecoding/docs/PLAYBOOK/PRE-IMPL.md
  * @snd vibecoding/var/SPEC-and-DESIGN/SnD-creation.md
  */
+import eslintComments from 'eslint-plugin-eslint-comments';
 import jsdoc from 'eslint-plugin-jsdoc';
-
 import { FILES_ALL_CODE,FILES_TS } from '../_shared/globs.mjs';
 import { blockCommentFormattingPlugin } from '../plugins/block-comment-formatting.js';
 import { headerPlugin } from '../plugins/header-bullets-min.js';
 
+/**
+ * ドキュメント/コメント規律（JSDoc・ヘッダ・ESLintディレクティブ）に関する設定断片。
+ * - JS/TS 全域に JSDoc の基本要件とファイル概要を適用
+ * - トップヘッダの構造要件と describe 直前コメントを強制
+ * @returns Flat Config 配列
+ */
 export const documentation = [
   // TS/TSX の基本 JSDoc 要件
   {
-    files: FILES_TS,
+    files: FILES_ALL_CODE,
     plugins: { jsdoc },
     rules: {
       'jsdoc/require-jsdoc': [
@@ -45,6 +51,13 @@ export const documentation = [
           ]
         }
       ],
+      // JSDoc 整形の厳格化（途切れ/ズレを検出）
+      'jsdoc/check-alignment': 'error',
+      'jsdoc/check-indentation': 'error',
+      'jsdoc/require-description': 'error',
+      'jsdoc/require-param-description': 'error',
+      'jsdoc/require-returns-description': 'error',
+      'jsdoc/empty-tags': 'error',
       'jsdoc/require-param': 'error',
       'jsdoc/require-returns': 'error',
       'jsdoc/require-file-overview': 'error'
@@ -52,37 +65,6 @@ export const documentation = [
     settings: { jsdoc: { mode: 'typescript' } }
   },
 
-  // リポジトリ全域の export 強化（オブジェクトプロパティ/enum メンバなど）
-  {
-    files: FILES_TS,
-    plugins: { jsdoc },
-    rules: {
-      'jsdoc/require-jsdoc': [
-        'error',
-        {
-          publicOnly: false,
-          require: {
-            FunctionDeclaration: true,
-            MethodDefinition: true,
-            ClassDeclaration: true,
-            ArrowFunctionExpression: false,
-            FunctionExpression: false
-          },
-          contexts: [
-            'TSInterfaceDeclaration',
-            'TSTypeAliasDeclaration',
-            'ExportNamedDeclaration',
-            'ExportDefaultDeclaration',
-            'ExportNamedDeclaration > VariableDeclaration > VariableDeclarator > ObjectExpression > Property',
-            'ExportDefaultDeclaration > VariableDeclaration > VariableDeclarator > ObjectExpression > Property',
-            'ExportNamedDeclaration > TSEnumDeclaration > TSEnumMember',
-            'ExportDefaultDeclaration > TSEnumDeclaration > TSEnumMember'
-          ]
-        }
-      ]
-    }
-  }
-  ,
   // ファイル先頭JSDocの箇条書き（Header Checklist）を最低件数で強制
   {
     files: FILES_ALL_CODE,
@@ -103,9 +85,51 @@ export const documentation = [
     files: FILES_ALL_CODE,
     plugins: { blockfmt: blockCommentFormattingPlugin },
     rules: {
-      'blockfmt/block-comment-formatting': 'error'
+      'blockfmt/block-comment-formatting': 'error',
+      'blockfmt/no-empty-comment': 'error'
+    }
+  },
+  // ESLint ディレクティブコメントの説明必須・過剰抑止禁止
+  {
+    files: FILES_ALL_CODE,
+    plugins: { 'eslint-comments': eslintComments },
+    rules: {
+      'eslint-comments/require-description': 'error',
+      'eslint-comments/no-unused-disable': 'error',
+      'eslint-comments/no-unlimited-disable': 'error'
     }
   }
+  ,
+  // describe コメント必須（グローバル適用、ルール内で describe のみ対象）
+  {
+    files: FILES_ALL_CODE,
+    plugins: { blockfmt: blockCommentFormattingPlugin },
+    rules: { 'blockfmt/require-describe-comment': 'error' }
+  },
+  // プロダクトコードのトップレベル const に JSDoc を要求（src/** のみ）
+  {
+    files: FILES_ALL_CODE,
+    plugins: { jsdoc },
+    rules: {
+      'jsdoc/require-jsdoc': [
+        'error',
+        {
+          publicOnly: false,
+          require: {
+            FunctionDeclaration: true,
+            MethodDefinition: true,
+            ClassDeclaration: true,
+            ArrowFunctionExpression: false,
+            FunctionExpression: false
+          },
+          contexts: [
+            // エクスポートされた const（JSDoc は export 文の直上に付与する）
+            'ExportNamedDeclaration[declaration.type="VariableDeclaration"]'
+          ]
+        }
+      ]
+    },
+    settings: { jsdoc: { mode: 'typescript' } }
+  }
 ];
-
 

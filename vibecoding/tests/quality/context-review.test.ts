@@ -17,9 +17,9 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-
 import { describe, expect,it } from 'vitest';
 
+/** 品質コンテキスト（var/contexts/qualities）のルートパス */
 const CONTEXTS_BASE = path.resolve('vibecoding/var/contexts/qualities');
 
 /**
@@ -55,6 +55,7 @@ function findContextMdFiles(dir: string): string[] {
   return files;
 }
 
+// 概要: 各 context.md に対応する context-review.md の存在を保証する
 describe('context-review.md existence', () => {
   it('each context.md should have a corresponding context-review.md', () => {
     if (!fs.existsSync(CONTEXTS_BASE)) {
@@ -103,6 +104,4 @@ describe('context-review.md existence', () => {
     }
   });
 });
-
-
 

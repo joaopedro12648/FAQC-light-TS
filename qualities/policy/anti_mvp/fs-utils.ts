@@ -22,10 +22,10 @@ import * as path from 'node:path';
 // 単純なグロブ解決（今回の用途に限定して実装）
 // 対応: "src/**/*.ts", "**/src/**/*.ts"（必要に応じて拡張）
 /**
- * パターンからファイル一覧を取得（今回の用途に合わせた限定実装）
- * @param rootDir - ルートディレクトリ
- * @param patterns - 走査パターン配列（例: src/deep/path/file.ts）
- * @returns 相対パスの配列
+ * パターンに基づき .ts ファイルの相対パス一覧を収集する。
+ * @param rootDir ルートディレクトリ
+ * @param patterns 走査パターン配列
+ * @returns 相対パス配列
  */
 export const globFiles = (rootDir: string, patterns: readonly string[]): string[] => {
   const results: string[] = [];
@@ -45,6 +45,7 @@ export const globFiles = (rootDir: string, patterns: readonly string[]): string[
       }
     }
   }
+
   return results;
 };
 
@@ -65,6 +66,7 @@ const listAllTsUnder = (dirAbs: string): string[] => {
       out.push(abs);
     }
   }
+
   return out;
 };
 
@@ -89,27 +91,28 @@ const listAllTsUnderAnySrc = (rootDir: string): string[] => {
         if (name === 'src') {
           for (const file of listAllTsUnder(abs)) out.push(file);
         }
+
         walk(abs);
       }
     }
   };
+
   walk(rootDir);
   return out;
 };
 
 /**
- * テキスト読み込み（UTF-8）
- * @param absPath - 絶対パス
+ * UTF-8 テキストを読み込むユーティリティ。
+ * @param absPath 絶対パス
  * @returns 読み込んだ文字列
  */
 export const readText = (absPath: string): string => fs.readFileSync(absPath, 'utf8');
 
 /**
- * ルートと相対から絶対パスを得る
- * @param rootDir - ルート
- * @param relPath - ルートからの相対
+ * ルートと相対パスを結合して絶対パスを得る。
+ * @param rootDir ルートディレクトリ
+ * @param relPath ルートからの相対パス
  * @returns 絶対パス
  */
 export const toAbs = (rootDir: string, relPath: string): string => path.join(rootDir, relPath);
-
 

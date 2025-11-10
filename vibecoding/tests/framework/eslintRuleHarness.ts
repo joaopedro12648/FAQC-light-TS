@@ -15,6 +15,7 @@
  */
 import { RuleTester } from 'eslint';
 
+/** 使用する ECMAScript バージョン（解析用） */
 const ECMA_VERSION = 2022;
 
 /**
@@ -32,5 +33,4 @@ export function createTsRuleTester(): RuleTester {
     },
   });
 }
-
 

@@ -18,12 +18,17 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+/** リポジトリのルートディレクトリ（カレントワーキングディレクトリ） */
 const repoRoot = process.cwd();
+/** 解析対象の品質コンテキスト（var 配下）の基底ディレクトリ */
 const VAR_BASE = path.join(repoRoot, 'vibecoding', 'var', 'contexts', 'qualities');
 
 // しきい値
+/** コードブロック（```）の最低個数 */
 const MIN_CODE_FENCES = 4;
+/** NG パターンの最低件数（典型NGの列挙） */
 const MIN_NG_PATTERNS = 5;
+/** 本文の最低行数（密度確保のための下限） */
 const MIN_LINES = 60; // 下限のみ（上限は初回/更新でLLMが判断）
 
 /**
@@ -43,12 +48,14 @@ function listFilesRecursive(dir: string): string[] {
     } catch {
       continue;
     }
+
     for (const e of entries) {
       const full = path.join(cur, e.name);
       if (e.isDirectory()) stack.push(full);
       else if (e.isFile()) files.push(full);
     }
   }
+
   return files;
 }
 
@@ -91,6 +98,7 @@ function extractSection(content: string, headingPatterns: RegExp[]): string {
       if (sectionLevel === 0) {
         sectionLevel = 2;
       }
+
       continue;
     }
     
@@ -99,6 +107,7 @@ function extractSection(content: string, headingPatterns: RegExp[]): string {
       if (currentLevel > 0 && currentLevel <= sectionLevel) {
         break;
       }
+
       sectionContent += `${line  }\n`;
     }
   }
@@ -118,6 +127,7 @@ function checkWhySection(text: string): string[] {
     errs.push('Why: missing heading');
     return errs;
   }
+
   const whySection = extractSection(text, whyPatterns);
   const hasQualityImpact = /型安全性|保守性|セキュリティ|type.?safe|maintain|security/i.test(whySection);
   const hasCostImpact = /トークン|時間|認知負荷|token|time|cognitive|分|秒/i.test(whySection);
@@ -138,6 +148,7 @@ function checkWhereSection(text: string): string[] {
     errs.push('Where: missing heading');
     return errs;
   }
+
   const whereSection = extractSection(text, wherePatterns);
   const hasGlobPattern = /\*\*\/\*|\*\.[a-z]+/i.test(whereSection);
   if (!hasGlobPattern) errs.push('Where: missing glob pattern examples');
@@ -156,6 +167,7 @@ function checkWhatSection(text: string): string[] {
     errs.push('What: missing heading');
     return errs;
   }
+
   const whatSection = extractSection(text, whatPatterns);
   const hasTable = /\|.*\|.*\|/.test(whatSection);
   const hasCommandSetup = /(コマンド|command|設定|config|範囲|coverage)/i.test(whatSection);
@@ -194,6 +206,7 @@ function checkHowSection(text: string): string[] {
     errs.push('How: missing heading');
     return errs;
   }
+
   const howSection = extractSection(text, howPatterns);
   const codeFences = (howSection.match(/```/g) || []).length;
   if (codeFences < MIN_CODE_FENCES) errs.push('How: need >= 2 code blocks (success/failure patterns)');
@@ -242,6 +255,7 @@ function main(): void {
     process.stdout.write('context-md-rubric: no var contexts found, skipping\n');
     process.exit(0);
   }
+
   const files = listFilesRecursive(VAR_BASE).filter((f) => /context\.md$/i.test(f));
   const allErrors: Array<{ file: string; errs: string[] }> = [];
   for (const f of files) {
@@ -250,10 +264,12 @@ function main(): void {
       allErrors.push({ file: path.relative(repoRoot, f).replace(/\\/g, '/'), errs });
     }
   }
+
   if (allErrors.length === 0) {
     process.stdout.write(`context-md-rubric ✅ all ${files.length} file(s) compliant\n`);
     process.exit(0);
   }
+
   process.stderr.write(`\ncontext-md-rubric ❌ violations:\n`);
   for (const e of allErrors) {
     process.stderr.write(`- ${e.file}\n`);
@@ -261,6 +277,7 @@ function main(): void {
       process.stderr.write(`  • ${msg}\n`);
     }
   }
+
   process.exit(1);
 }
 
@@ -270,5 +287,4 @@ try {
   process.stderr.write(`context-md-rubric ❌ ${err instanceof Error ? err.message : String(err)}\n`);
   process.exit(1);
 }
-
 

@@ -26,7 +26,11 @@ const PROJECT_ROOT = process.cwd();
 const TS_EXT_RX = /\.(ts|tsx|mts|cts)$/i;
 const SKIP_DIR_NAMES = new Set(['node_modules', 'dist', 'build', 'coverage', '.git']);
 
-/** @returns {string[]} */
+/**
+ * ディレクトリ以下のファイルを再帰的に列挙する。
+ * @param {string} dir 起点ディレクトリ
+ * @returns {string[]} 発見したファイルパスの配列
+ */
 function listFilesRecursive(dir) {
   const files = [];
   const stack = [dir];
@@ -35,6 +39,7 @@ function listFilesRecursive(dir) {
     if (!d) break;
     let entries;
     try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { continue; }
+
     for (const e of entries) {
       const full = path.join(d, e.name);
       if (e.isDirectory()) {
@@ -45,6 +50,7 @@ function listFilesRecursive(dir) {
       }
     }
   }
+
   return files;
 }
 
@@ -55,7 +61,11 @@ const patterns = [
   /@ts-nocheck\b/i
 ];
 
-/** @param {string} fp */
+/**
+ * ファイルを走査して緩和ディレクティブの出現箇所を収集する。
+ * @param {string} fp 走査対象ファイルのパス
+ * @returns {Array<{line:number,text:string}>} ヒット行の配列
+ */
 function scanFile(fp) {
   const content = fs.readFileSync(fp, 'utf8');
   const hits = [];
@@ -67,9 +77,14 @@ function scanFile(fp) {
       });
     }
   }
+
   return hits;
 }
 
+/**
+ * エントリポイント。
+ * ルート配下の TS 系ファイルを全走査し、緩和ディレクティブの有無を検査する。
+ */
 function main() {
   const violations = [];
   const files = listFilesRecursive(PROJECT_ROOT).filter((f) => TS_EXT_RX.test(f));
@@ -79,16 +94,19 @@ function main() {
       violations.push({ file: path.relative(PROJECT_ROOT, fp), hits });
     }
   }
+
   if (violations.length === 0) {
     process.stdout.write('[policy:no_relaxation] OK: no relaxations found in TS/**\n');
     process.exit(0);
   }
+
   process.stderr.write('[policy:no_relaxation] NG: relaxations found in TS/**\n');
   for (const v of violations) {
     for (const h of v.hits) {
       process.stderr.write(`${v.file}:${h.line}: ${h.text}\n`);
     }
   }
+
   process.exit(1);
 }
 
@@ -96,5 +114,4 @@ try { main(); } catch (e) {
   process.stderr.write(`[policy:no_relaxation] fatal: ${String((e?.message) || e)}\n`);
   process.exit(2);
 }
-
 

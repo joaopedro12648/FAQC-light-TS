@@ -19,7 +19,6 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync,readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-
 import { stepDefs } from '../../qualities/check-steps.ts';
 
 /**
@@ -50,13 +49,17 @@ function runCommand(command: string, args: readonly string[]): Promise<void> {
 
 /** 引数解析 */
 const argv = process.argv.slice(2);
+/** 高速モード指定（ポリシーと型検査とlintのみ） */
 const isFast = argv.includes('--fast');
+/** スコープ引数（--scope=changed 等） */
 const scopeArg = argv.find((a) => a.startsWith('--scope='));
+/** スコープの実値（既定は all） */
 const scope = scopeArg?.split('=')[1] ?? 'all';
 
 /** 対象ステップの選択 */
 // 実ゲート用: runMode が 'gate' または 'both' のみ対象
 const gateSteps = stepDefs.filter((d) => d.runMode === 'gate' || d.runMode === 'both');
+/** 実行対象ステップ（--fast の場合は一部を抽出） */
 const selectedSteps = isFast
   ? gateSteps.filter((d) => d.id.startsWith('policy:') || d.id === 'typecheck' || d.id === 'lint')
   : gateSteps;
@@ -122,11 +125,14 @@ function traverseUpdatedNewerThan(dir: string, thresholdMs: number): boolean {
       const next = path.join(dir, name);
       if (traverseUpdatedNewerThan(next, thresholdMs)) return true;
     }
+
     return false;
   }
+
   if (stat.isFile()) {
     return stat.mtime.getTime() > thresholdMs;
   }
+
   return false;
 }
 
@@ -171,6 +177,7 @@ export function evaluateShouldRunInternalTests(params: {
     );
     if (hit) return true;
   }
+
   if (lastUpdatedIso == null) return true; // 無い/読めない → 安全側 true
   if (lastUpdatedIso.trim() === '') return true; // 空 → 安全側 true
   if (anyUpdatedSince == null) return false; // 判定不能は消極的（git なし・last_updated ありのときは別経路で true 測る）
@@ -247,6 +254,7 @@ function hasInternalTestFiles(): boolean {
       }
     }
   }
+
   return false;
 }
 
@@ -263,10 +271,12 @@ export async function runQualityGate(): Promise<void> {
         continue;
       }
     }
+
     if (id === 'lint' && (await handleLintStep(scope))) continue;
     if (id === 'test') {
       if (await handleTestStep(cmd, args)) continue;
     }
+
     // 順次実行（ゲートは前提条件の成立が重要）
     await runCommand(cmd, args);
   }
@@ -285,6 +295,7 @@ async function handleLintStep(scope: string): Promise<boolean> {
     await runCommand('npm', ['run', 'lint', '--silent']);
     return true;
   }
+
   await runCommand('npx', [
     'eslint',
     '--config',
@@ -313,6 +324,7 @@ async function handleTestStep(cmd: string, args: readonly string[]): Promise<boo
         // 一時的な Vitest 設定で include を vibecoding/** に限定して実行
         const tmpDir = path.join(process.cwd(), 'tmp');
         try { mkdirSync(tmpDir, { recursive: true }); } catch {}
+
         const internalCfg = path.join('tmp', 'vitest.internal.config.cjs');
         const cfgContent = [
           'const { defineConfig } = require("vitest/config");',
@@ -325,6 +337,7 @@ async function handleTestStep(cmd: string, args: readonly string[]): Promise<boo
           '',
         ].join('\n');
         try { writeFileSync(internalCfg, cfgContent, 'utf8'); } catch {}
+
         await runCommand('npx', ['vitest', 'run', '--config', internalCfg, '--silent']);
       } else {
         process.stdout.write('[test] 内製テストファイルなし: 追加実行をスキップ\n');
@@ -335,9 +348,11 @@ async function handleTestStep(cmd: string, args: readonly string[]): Promise<boo
   } else {
     process.stdout.write('[test] 変更なし判定: 内製テストはスキップ\n');
   }
+
   return true;
 }
 
+/** このファイルが直接起動されたかの判定（ユニットテストからの import を除外） */
 const isMain = (() => {
   try {
     const arg1 = typeof process.argv[1] === 'string' ? process.argv[1] : null;
@@ -358,5 +373,4 @@ if (isMain) {
     process.exit(1);
   });
 }
-
 

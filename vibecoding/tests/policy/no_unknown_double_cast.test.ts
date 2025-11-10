@@ -15,12 +15,11 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-
 import { describe, expect,it } from 'vitest';
-
 import { cleanupDir,createTmpDir, writeTextFile } from '../framework/fsFixtures';
 import { runNode } from '../framework/runNode';
 
+// 概要: unknown 二重キャストの検出/非検出動作を確認
 describe('policy: no_unknown_double_cast', () => {
   it('detects double-cast via unknown and passes otherwise', async () => {
     const tmp = createTmpDir();
@@ -37,6 +36,7 @@ describe('policy: no_unknown_double_cast', () => {
       // OK
       // 失敗ファイルを削除してから OK を検証
       try { fs.rmSync(path.join(tmp, 'ng.ts')); } catch {}
+
       writeTextFile(path.join(tmp, 'ok.ts'), 'const n: number = 1;');
       const ok = await runNode('node', [path.join(process.cwd(), 'qualities', 'policy', 'no_unknown_double_cast', 'run.mjs')], { cwd: tmp });
       expect(ok.code).toBe(0);
@@ -46,5 +46,4 @@ describe('policy: no_unknown_double_cast', () => {
     }
   });
 });
-
 
