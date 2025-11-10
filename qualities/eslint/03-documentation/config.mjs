@@ -36,7 +36,12 @@ export const documentation = [
             ArrowFunctionExpression: false,
             FunctionExpression: false
           },
-          contexts: ['TSInterfaceDeclaration', 'TSTypeAliasDeclaration']
+          contexts: [
+            'TSInterfaceDeclaration',
+            'TSTypeAliasDeclaration',
+            // 全域適用: すべての enum メンバーに JSDoc を要求
+            'TSEnumDeclaration > TSEnumMember'
+          ]
         }
       ],
       'jsdoc/require-param': 'error',

@@ -17,6 +17,7 @@
 import js from '@eslint/js';
 import importPlugin from 'eslint-plugin-import';
 import jsdoc from 'eslint-plugin-jsdoc';
+import simpleImportSort from 'eslint-plugin-simple-import-sort';
 import { FILES_JS, FILES_TS } from '../_shared/globs.mjs';
 
 export const moduleBoundaries = [
@@ -25,13 +26,15 @@ export const moduleBoundaries = [
     ...js.configs.recommended,
     files: FILES_JS,
     languageOptions: { ecmaVersion: 'latest', sourceType: 'module' },
-    plugins: { import: importPlugin, jsdoc },
+    plugins: { import: importPlugin, jsdoc, 'simple-import-sort': simpleImportSort },
     rules: {
       'import/no-default-export': 'error',
       'import/no-extraneous-dependencies': [
         'error',
         { devDependencies: ['**/*.test.ts', 'qualities/**', 'tests/**', 'scripts/**', 'vibecoding/tests/**'] }
       ],
+      'simple-import-sort/imports': 'error',
+      'simple-import-sort/exports': 'error',
       'jsdoc/require-file-overview': 'error'
     },
     settings: { jsdoc: { mode: 'typescript' } }
@@ -40,13 +43,15 @@ export const moduleBoundaries = [
   // TS/TSX 向けのモジュール境界
   {
     files: FILES_TS,
-    plugins: { import: importPlugin },
+    plugins: { import: importPlugin, 'simple-import-sort': simpleImportSort },
     rules: {
       'import/no-default-export': 'error',
       'import/no-extraneous-dependencies': [
         'error',
         { devDependencies: ['**/*.test.ts', 'qualities/**', 'tests/**', 'scripts/**', 'vibecoding/tests/**'] }
-      ]
+      ],
+      'simple-import-sort/imports': 'error',
+      'simple-import-sort/exports': 'error'
     }
   },
 
