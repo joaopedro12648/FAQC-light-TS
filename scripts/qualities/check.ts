@@ -17,7 +17,7 @@
  */
 import { spawn } from 'node:child_process';
 import { spawnSync } from 'node:child_process';
-import { existsSync, statSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, statSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { stepDefs } from '../../qualities/check-steps.ts';
 import { pathToFileURL } from 'node:url';
@@ -52,7 +52,7 @@ function runCommand(command: string, args: readonly string[]): Promise<void> {
 const argv = process.argv.slice(2);
 const isFast = argv.includes('--fast');
 const scopeArg = argv.find((a) => a.startsWith('--scope='));
-const scope = scopeArg ? scopeArg.split('=')[1] : 'all';
+const scope = scopeArg?.split('=')[1] ?? 'all';
 
 /** 対象ステップの選択 */
 // 実ゲート用: runMode が 'gate' または 'both' のみ対象
@@ -166,7 +166,9 @@ export function evaluateShouldRunInternalTests(params: {
   const { vibecodingExists, changedPaths, lastUpdatedIso, anyUpdatedSince } = params;
   if (!vibecodingExists) return false;
   if (Array.isArray(changedPaths)) {
-    const hit = changedPaths.some((p) => p.startsWith('qualities/') || p.startsWith('vibecoding/'));
+    const hit = changedPaths.some((p) =>
+      p.startsWith('vibecoding/scripts/') || p.startsWith('vibecoding/tests/')
+    );
     if (hit) return true;
   }
   if (lastUpdatedIso == null) return true; // 無い/読めない → 安全側 true
@@ -192,7 +194,9 @@ export function shouldRunInternalTests(): boolean {
   // 優先1: Git 差分
   const changed = getChangedPathsRaw();
   if (Array.isArray(changed)) {
-    const hit = changed.some((p) => p.startsWith('qualities/') || p.startsWith('vibecoding/'));
+    const hit = changed.some((p) =>
+      p.startsWith('vibecoding/scripts/') || p.startsWith('vibecoding/tests/')
+    );
     if (hit) return true;
   }
 
@@ -202,8 +206,8 @@ export function shouldRunInternalTests(): boolean {
     const isoRaw = readFileSync(lastUpdatedPath, { encoding: 'utf8' });
     const iso = isoRaw.trim();
     const anyUpdated =
-      hasFilesUpdatedAfter('qualities', iso) ||
-      hasFilesUpdatedAfter('vibecoding', iso);
+      hasFilesUpdatedAfter('vibecoding/scripts', iso) ||
+      hasFilesUpdatedAfter('vibecoding/tests', iso);
     return evaluateShouldRunInternalTests({
       vibecodingExists,
       changedPaths: changed,
@@ -252,56 +256,6 @@ function hasInternalTestFiles(): boolean {
  * - 内製テスト vibecoding/tests/** は選択的に追加実行
  */
 export async function runQualityGate(): Promise<void> {
-  /**
-   * Lint ステップを処理する（--scope=changed をサポート）。
-   * @returns 処理した場合は true（ループ側で continue する）
-   */
-  async function handleLintStep(): Promise<boolean> {
-    if (!(scope === 'changed')) return false;
-    const changed = getChangedFilesForLint();
-    if (changed.length === 0) {
-      process.stdout.write('[lint] --scope=changed: 対象ファイルが無いため full lint にフォールバック\n');
-      await runCommand('npm', ['run', 'lint', '--silent']);
-      return true;
-    }
-    await runCommand('npx', [
-      'eslint',
-      '--config',
-      'qualities/eslint/eslint.config.mjs',
-      '--max-warnings=0',
-      '--cache',
-      '--cache-location',
-      'node_modules/.cache/eslint',
-      ...changed,
-    ]);
-    return true;
-  }
-
-  /**
-   * テストステップを処理する（ユーザー → 条件付きで内製）。
-   * @param cmd 既定のテストコマンド
-   * @param args 既定の引数
-   * @returns 常に true（ループ側で continue する）
-   */
-  async function handleTestStep(cmd: string, args: readonly string[]): Promise<boolean> {
-    await runCommand(cmd, args);
-    if (shouldRunInternalTests()) {
-      if (existsSync('vibecoding')) {
-        if (hasInternalTestFiles()) {
-          process.stdout.write('[test] vibecoding/ 変更あり: 内製テストを追加実行します\n');
-          await runCommand('npx', ['vitest', 'run', '--config', 'tests/vitest.config.cjs', 'vibecoding/tests', '--silent']);
-        } else {
-          process.stdout.write('[test] 内製テストファイルなし: 追加実行をスキップ\n');
-        }
-      } else {
-        process.stdout.write('[test] vibecoding/ ディレクトリなし: 内製テストはスキップ\n');
-      }
-    } else {
-      process.stdout.write('[test] 変更なし判定: 内製テストはスキップ\n');
-    }
-    return true;
-  }
-
   for (const step of selectedSteps) {
     const { id, command: cmd, args } = step;
     if (id === 'build') {
@@ -309,13 +263,79 @@ export async function runQualityGate(): Promise<void> {
         continue;
       }
     }
-    if (id === 'lint' && (await handleLintStep())) continue;
+    if (id === 'lint' && (await handleLintStep(scope))) continue;
     if (id === 'test') {
       if (await handleTestStep(cmd, args)) continue;
     }
     // 順次実行（ゲートは前提条件の成立が重要）
     await runCommand(cmd, args);
   }
+}
+
+/**
+ * Lint ステップを処理する（--scope=changed をサポート）。
+ * @param {string} scope スコープ指定（'changed' のとき変更差分のみを対象）
+ * @returns {Promise<boolean>} 処理した場合は true（ループ側で continue する）
+ */
+async function handleLintStep(scope: string): Promise<boolean> {
+  if (!(scope === 'changed')) return false;
+  const changed = getChangedFilesForLint();
+  if (changed.length === 0) {
+    process.stdout.write('[lint] --scope=changed: 対象ファイルが無いため full lint にフォールバック\n');
+    await runCommand('npm', ['run', 'lint', '--silent']);
+    return true;
+  }
+  await runCommand('npx', [
+    'eslint',
+    '--config',
+    'qualities/eslint/eslint.config.mjs',
+    '--max-warnings=0',
+    '--cache',
+    '--cache-location',
+    'node_modules/.cache/eslint',
+    ...changed,
+  ]);
+  return true;
+}
+
+/**
+ * テストステップを処理する（ユーザー → 条件付きで内製）。
+ * @param cmd 既定のテストコマンド
+ * @param args 既定の引数
+ * @returns 常に true（ループ側で continue する）
+ */
+async function handleTestStep(cmd: string, args: readonly string[]): Promise<boolean> {
+  await runCommand(cmd, args);
+  if (shouldRunInternalTests()) {
+    if (existsSync('vibecoding')) {
+      if (hasInternalTestFiles()) {
+        process.stdout.write('[test] vibecoding/ 変更あり: 内製テストを追加実行します\n');
+        // 一時的な Vitest 設定で include を vibecoding/** に限定して実行
+        const tmpDir = path.join(process.cwd(), 'tmp');
+        try { mkdirSync(tmpDir, { recursive: true }); } catch {}
+        const internalCfg = path.join('tmp', 'vitest.internal.config.cjs');
+        const cfgContent = [
+          'const { defineConfig } = require("vitest/config");',
+          'module.exports = defineConfig({',
+          '  test: {',
+          '    include: ["vibecoding/**/*.test.ts"],',
+          '    environment: "node",',
+          '  },',
+          '});',
+          '',
+        ].join('\n');
+        try { writeFileSync(internalCfg, cfgContent, 'utf8'); } catch {}
+        await runCommand('npx', ['vitest', 'run', '--config', internalCfg, '--silent']);
+      } else {
+        process.stdout.write('[test] 内製テストファイルなし: 追加実行をスキップ\n');
+      }
+    } else {
+      process.stdout.write('[test] vibecoding/ ディレクトリなし: 内製テストはスキップ\n');
+    }
+  } else {
+    process.stdout.write('[test] 変更なし判定: 内製テストはスキップ\n');
+  }
+  return true;
 }
 
 const isMain = (() => {

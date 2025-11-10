@@ -30,9 +30,9 @@ describe('selective internal tests decision (evaluateShouldRunInternalTests)', (
 
   const rows: Row[] = [
     [
-      'git present and changes under qualities -> true',
+      'git present and changes under qualities -> false (narrowed to vibecoding/{scripts,tests})',
       { vibecodingExists: true, changedPaths: ['qualities/eslint/x.mjs'], lastUpdatedIso: ISO, anyUpdatedSince: false },
-      true,
+      false,
     ],
     [
       'no git (changedPaths=null), last_updated exists and updates present -> true',

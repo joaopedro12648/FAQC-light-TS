@@ -561,7 +561,7 @@ Notes:
 - We (framework maintainers) use this prompt internally to validate behavior.
 - Validated LLM models: GPT-5 / GPT-5 High / Sonnet 4.5 (Thinking).
 - The “implementation complete” artifact may still contain defects; we fix them through additional conversations.
-- From creating the SnD to finishing implementation and fixes, it typically consumes around 15 million tokens (model-dependent).
+- From SnD creation to implementation completion, depending on the model, around 20 million tokens are required. For fixes, it depends on the content and additional requirements, but in practice it’s often about the same as from SnD through implementation completion.
 
 ---
 
@@ -624,6 +624,14 @@ Notes:
 - Phase switch (approval)
   ```
   If the SnD is Ready, move to implementation: PHASE=IMPL APPROVE: SnD=<path>. (Japanese: PHASE=IMPL 承認: SnD=<path>)
+  ```
+
+- Implement in a separate chat, review in the original chat
+  ```
+  (Separate chat / IMPL) PHASE=IMPL APPROVE: SnD=vibecoding/var/SPEC-and-DESIGN/SnD-<YYYYMMDD>-<slug>.md
+  Implementation has finished. Ensure the quality gate passes and report completion.
+
+  (Original chat / SnD) Implementation for the above SnD has completed in another chat. Please review key diffs against the codebase and the SnD, and output the review results in this chat.
   ```
 
 ---
