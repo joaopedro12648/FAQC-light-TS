@@ -207,13 +207,13 @@ export const ruleHeaderBulletsMin = {
 
         // Bullet count range
         {
-          const msg = checkBullets(summary, min, max, customMessage, context.meta);
+          const msg = checkBullets(summary, min, max, customMessage, ruleHeaderBulletsMin.meta);
           if (msg) context.report({ loc: headerComment.loc, message: msg });
         }
 
         // @see requirement
         {
-          const msg = checkSee(summary, requireSee, context.meta);
+          const msg = checkSee(summary, requireSee, ruleHeaderBulletsMin.meta);
           if (msg) context.report({ loc: headerComment.loc, message: msg });
         }
 

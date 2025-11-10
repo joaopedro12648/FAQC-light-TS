@@ -17,6 +17,7 @@
 import jsdoc from 'eslint-plugin-jsdoc';
 import { FILES_TS, FILES_ALL_CODE } from '../_shared/globs.mjs';
 import { headerPlugin } from '../plugins/header-bullets-min.js';
+import { blockCommentFormattingPlugin } from '../plugins/block-comment-formatting.js';
 
 export const documentation = [
   // TS/TSX の基本 JSDoc 要件
@@ -89,6 +90,14 @@ export const documentation = [
             'Header checklist is missing or too short (min: 8 bullet items). Refer to the Quality Gate Context and update the file header comment according to PRE-IMPL.md.'
         }
       ]
+    }
+  },
+  // ブロックコメントの先頭行に本文を置かない（複数行JSDoc対象）
+  {
+    files: FILES_ALL_CODE,
+    plugins: { blockfmt: blockCommentFormattingPlugin },
+    rules: {
+      'blockfmt/block-comment-formatting': 'error'
     }
   }
 ];

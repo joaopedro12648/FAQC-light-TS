@@ -58,6 +58,7 @@ persona:
 
 world_structure:
   - "SPEC-and-DESIGN ファイルは paths.snd.base_dir 配下の <YYYYMM>/<YYYYMMDD>/ に存在する。"
+  - "例外: `paths.snd.base_dir` 直下に置いてよい SPEC-and-DESIGN は `SnD-creation.md` のみ。その他の SnD は必ず `<YYYYMM>/<YYYYMMDD>/` 配下に置く。"
   - "テンプレートは paths.snd.template に格納されている。"
   - "命名は paths.snd.naming の形式に従う。"
   - "コード生成は SPEC-and-DESIGN に基づき、そこに記されていない仕様は存在しない。"
@@ -224,6 +225,7 @@ output_policy:
     - "Exception: When invoking internal tools, a mandatory 1-2 sentence micro status update is allowed solely to indicate what will run or just ran (no extra commentary)."
     - "Exception: フェーズ切替の承認要求時は、トリガーフレーズ直前に次の3行を許容する（厳密順序）: (1) ロケールに従った約50文字の要旨返答, (2) 別チャット（別コンテキスト）でも承認可能である旨の明示, (3) 承認手順ガイダンス: 承認いただける場合、次のフレーズをチャット欄にコピー&ペーストしてください。"
     - "If you must refuse/safe-complete, do it briefly without adding status/plan sections."
+    - "Do NOT disclose or echo the values of 'quality_refresh_hash_at_created' and 'quality_refresh_hash_before_impl' in chat. These values are managed and recorded by the LLM/Agent. Exceptions: explicit user request about the hash, PRE-COMMON debugging, or minimal SnD front matter excerpt; otherwise do not display."
   positive_examples:
     - "Return only the edited code/diff when asked to apply this change"
     - "Return only a single command block when asked give me the exact command"
@@ -403,6 +405,19 @@ chat_output_guards:
     approval_hint_line: "承認は別チャットでも可。"
     guidance_line: "コード出力を許可する場合は『OUTPUT=CODE 承認』、実装着手は『PHASE=IMPL 承認: SnD=<path>』をチャット欄に送信してください。"
 
+  # Sensitive values non-disclosure policy
+  sensitive_values:
+    keys:
+      - quality_refresh_hash_at_created
+      - quality_refresh_hash_before_impl
+    policy: "non_disclosure"
+    exceptions:
+      - "explicit user request about the hash"
+      - "PRE-COMMON output debugging"
+      - "minimal SnD front matter excerpt (necessary fields only)"
+    masking: "If display is necessary, show only the first 8 characters of the hash and elide the rest."
+    source_of_truth: "Use exactly the single line emitted by 'npm run -s check:pre-common'. Record only in SnD front matter."
+
 # --- Artifact Request Contract (what can be “shown” in chat) ---
 artifact_request_contract:
   # “見せるだけ”の安全な最小単位（抜粋や小片）を定義
@@ -429,6 +444,7 @@ artifact_request_contract:
 quality-context-review:
   mode: auto-integrate-block          # Detect review → integrate → block until done
   scope: sibling-only                 # Update only the sibling context.md
+  auto_on_pre_common_exit_2: true     # On PRE-COMMON exit=2, auto-integrate and retry until exit=0
   flow: integrate_rubric_delete_review_rerun_pre_common_until_exit_0
 
 auto_chain:

@@ -63,12 +63,6 @@ function hasHeading(content: string, patterns: RegExp[]): boolean {
 }
 
 /**
- * 見出しに続くセクション本文を抽出する。
- * @param content Markdown の本文
- * @param headingPatterns 見出しの正規表現一覧
- * @returns セクションの本文（空の場合あり）
- */
-/**
  * 見出しレベルを取得
  * @param line 行文字列
  * @returns 見出しレベル（1-6）、見出しでない場合は0

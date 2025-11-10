@@ -520,7 +520,8 @@ function detectTopLevelKeyDuplicates(filePath: string): Array<{ key: string; lin
   return dups;
 }
 
-/** 単一行のトップレベルYAMLキーを集計
+/**
+* 単一行のトップレベルYAMLキーを集計
  * @param ln 行文字列
  * @param idx 行番号0始まり
  * @param keyToLines キー→出現行のマップ

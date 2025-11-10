@@ -69,7 +69,8 @@ function collectBlocks(content) {
     const raw = m[0] || '';
     const summary = extractSummary(raw);
     const key5 = first5NoSpace(summary);
-    blocks.push({ start, end, line, key5 });
+    const tags = extractTags(raw);
+    blocks.push({ start, end, line, key5, tags });
     if (m.index === BLOCK_RX.lastIndex) BLOCK_RX.lastIndex++;
   }
   return blocks;
@@ -82,9 +83,11 @@ function collectAdjacentMatches(content, blocks) {
     const b = blocks[i + 1];
     const between = content.slice(a.end, b.start);
     if (!/^[\s]*$/.test(between)) continue;
-    if (a.key5 && b.key5 && a.key5 === b.key5) {
+    const key5Dup = Boolean(a.key5 && b.key5 && a.key5 === b.key5);
+    const commonTags = intersectTags(a.tags, b.tags);
+    if (key5Dup || commonTags.length > 0) {
       const snippet = content.slice(a.start, Math.min(b.start + 40, a.start + 120)).replace(/\s+/g, ' ').trim();
-      hits.push({ line: a.line, snippet, key5: a.key5 });
+      hits.push({ line: a.line, snippet, key5: a.key5, commonTags, key5Dup });
     }
   }
   return hits;
@@ -109,6 +112,39 @@ function first5NoSpace(s) {
   return normalized.slice(0, 5);
 }
 
+/**
+ * JSDoc ブロックからタグ名の集合を抽出（厳しめ: 出現するタグ名が1つでも共通なら重複扱い）
+ * 例: @param, @returns, @deprecated, @example, @file など
+ * @param {string} raw
+ * @returns {string[]} ソート済みユニークタグ名（小文字）
+ */
+function extractTags(raw) {
+  const body = raw.replace(/^\/\*\*/,'').replace(/\*\/$/, '');
+  const lines = body.split(/\n/).map((l) => l.replace(/^\s*\*\s?/, '').trim());
+  const tags = new Set();
+  for (const l of lines) {
+    if (!l.startsWith('@')) continue;
+    const m = l.match(/^@([A-Za-z][\w-]*)/);
+    if (m && m[1]) tags.add(m[1].toLowerCase());
+  }
+  return Array.from(tags).sort();
+}
+
+/**
+ * 2つのタグ配列の共通要素（昇順・ユニーク）
+ * @param {string[]} a
+ * @param {string[]} b
+ * @returns {string[]}
+ */
+function intersectTags(a, b) {
+  if (!a?.length || !b?.length) return [];
+  const sb = new Set(b);
+  const out = [];
+  for (const t of a) if (sb.has(t)) out.push(t);
+  out.sort();
+  return Array.from(new Set(out));
+}
+
 function main() {
   const targets = TARGET_DIRS.map((d) => path.join(PROJECT_ROOT, d));
   const files = targets.flatMap(listFilesRecursive).filter((f) => /\.(ts|tsx|mts|cts)$/i.test(f));
@@ -122,13 +158,14 @@ function main() {
     }
   }
   if (violations.length === 0) {
-    process.stdout.write('[policy:jsdoc_no_duplicate] OK: no adjacent JSDoc duplicates (matching first 5 non-whitespace chars)\n');
+    process.stdout.write('[policy:jsdoc_no_duplicate] OK: no adjacent JSDoc duplicates (no key5 match and no tag overlap)\n');
     process.exit(0);
   }
-  process.stderr.write('[policy:jsdoc_no_duplicate] NG: adjacent JSDoc duplicates detected (first 5 non-whitespace chars match)\n');
+  process.stderr.write('[policy:jsdoc_no_duplicate] NG: adjacent JSDoc duplicates detected (key5 match or tag overlap)\n');
   for (const v of violations) {
     for (const h of v.hits) {
-      process.stderr.write(`${v.file}:${h.line}: duplicate JSDoc (key='${h.key5}') -> ${h.snippet}\n`);
+      const reason = h.key5Dup ? `key5='${h.key5}'` : `tags=[${h.commonTags.join(',')}]`;
+      process.stderr.write(`${v.file}:${h.line}: duplicate JSDoc (${reason}) -> ${h.snippet}\n`);
     }
   }
   process.exit(1);

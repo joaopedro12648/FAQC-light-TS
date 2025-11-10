@@ -30,7 +30,7 @@ export const moduleBoundaries = [
       'import/no-default-export': 'error',
       'import/no-extraneous-dependencies': [
         'error',
-        { devDependencies: ['**/*.test.ts', 'qualities/**', 'tests/**', 'scripts/**'] }
+        { devDependencies: ['**/*.test.ts', 'qualities/**', 'tests/**', 'scripts/**', 'vibecoding/tests/**'] }
       ],
       'jsdoc/require-file-overview': 'error'
     },
@@ -45,7 +45,7 @@ export const moduleBoundaries = [
       'import/no-default-export': 'error',
       'import/no-extraneous-dependencies': [
         'error',
-        { devDependencies: ['**/*.test.ts', 'qualities/**', 'tests/**', 'scripts/**'] }
+        { devDependencies: ['**/*.test.ts', 'qualities/**', 'tests/**', 'scripts/**', 'vibecoding/tests/**'] }
       ]
     }
   },
