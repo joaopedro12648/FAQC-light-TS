@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * @file コメント言語のロケール整合チェック（ja系ロケール時はASCIIのみのヘッダJSDocを禁止）
+ * @file コメント言語のロケール整合チェック（ja系ロケール時は「ASCIIのみ」のJSDocを禁止）
  * 備考:
- * - 目的: ロケールが ja（ja, ja-JP, など）の場合、各ファイルの先頭JSDocが ASCII のみで構成されていれば失敗とする
+ * - 目的: ロケールが ja（ja, ja-JP, など）の場合、「JSDoc ブロックが ASCII 可視文字のみ」なら失敗とする
  * - 対象: JS/TS（*.{js,cjs,mjs,ts,tsx,mts,cts}）
  * - 例外: ヘッダJSDocが存在しない/検出できない場合は他ルールに委ねる（本ポリシーでは不検出＝スキップ）
  * - ロケール判定: CLI引数(--locale=xx) > 環境変数(CHECK_LOCALE) > OS/Nodeロケール
- * - 表記: 1つでも非ASCII文字（例: 日本語）が含まれていればOK
+ * - 表記: 1つでも 非ASCII（例: 日本語）が含まれていれば OK。ASCII 可視文字のみは NG。
  * - 出力: OK/NG を一行と、NG時はファイルごとの指摘行を出力
  * - 安全側: ロケール不明時はスキップ（OK 扱い）
  * - 実行: 品質ゲート（policies）で自動実行し CI/ローカル共通で適用
@@ -125,18 +125,146 @@ function listFilesRecursive(dir) {
 }
 
 /**
- * すべてのブロックコメント（/* ... *\/ および /** ... *\/）を抽出する。
- * @param {string} content ファイル全文
- * @returns {Array<{raw:string,start:number,end:number}>} 抽出したブロックコメント配列
+ * 行コメント（// ...）を読み飛ばす。
+ * @param {string} content 入力ソース
+ * @param {number} i '//' 直後の位置
+ * @returns {number} 改行位置または末尾の位置
+ */
+// --- simple lexing helpers (reduce complexity by consuming tokens) ---
+function consumeLine(content, i) {
+  const n = content.length;
+  while (i < n && content[i] !== '\n') i += 1;
+  return i;
+}
+
+/**
+ * クォート文字列（'...' または "..."）を読み飛ばす。
+ * @param {string} content 入力ソース
+ * @param {number} i 開きクォート位置
+ * @param {string} quote クォート文字（' または "）
+ * @returns {number} 閉じクォートの次の位置
+ */
+function consumeQuoted(content, i, quote) {
+  const n = content.length;
+  // i points at the opening quote
+  i += 1;
+  while (i < n) {
+    const ch = content[i];
+    if (ch === '\\') {
+      i += 2;
+      continue;
+    }
+
+    if (ch === quote) {
+      i += 1;
+      break;
+    }
+
+    i += 1;
+  }
+
+  return i;
+}
+
+/**
+ * テンプレートリテラル（`...`）を読み飛ばす（${} は簡易無視）。
+ * @param {string} content 入力ソース
+ * @param {number} i 開きバッククォート位置
+ * @returns {number} 閉じバッククォートの次の位置
+ */
+function consumeTemplate(content, i) {
+  const n = content.length;
+  // i at backtick
+  i += 1;
+  while (i < n) {
+    const ch = content[i];
+    if (ch === '\\') {
+      i += 2;
+      continue;
+    }
+
+    if (ch === '`') {
+      i += 1;
+      break;
+    }
+
+    i += 1;
+  }
+
+  return i;
+}
+
+/**
+ * ブロックコメント（/* ... *\/）を読み取り、終端まで進める。
+ * @param {string} content 入力ソース
+ * @param {number} i 開始インデックス（'/' の位置）
+ * @returns {{end:number, raw:string}} 終端位置と元コメント文字列
+ */
+function consumeBlock(content, i) {
+  const n = content.length;
+  const start = i;
+  // i at '/'
+  i += 2; // skip '/*'
+  while (i < n) {
+    const ch = content[i];
+    const next = i + 1 < n ? content[i + 1] : '';
+    if (ch === '*' && next === '/') {
+      const end = i + 2;
+      return { end, raw: content.slice(start, end) };
+    }
+
+    i += 1;
+  }
+
+  // unterminated; return until end
+  return { end: n, raw: content.slice(start) };
+}
+
+/**
+ * 文字列/テンプレートを除外して、実際のブロックコメントのみを収集する。
+ * @param {string} content 入力ソース全文
+ * @returns {Array<{raw:string,start:number,end:number}>} 収集したブロックコメント配列
  */
 function collectAllBlockComments(content) {
   const out = [];
-  const rx = /\/\*[\s\S]*?\*\//g;
-  let m;
-  while ((m = rx.exec(content)) !== null) {
-    const raw = m[0] || '';
-    out.push({ raw, start: m.index, end: rx.lastIndex });
-    if (m.index === rx.lastIndex) rx.lastIndex++;
+  const n = content.length;
+  let i = 0;
+
+  while (i < n) {
+    const ch = content[i];
+    const next = i + 1 < n ? content[i + 1] : '';
+
+    // line comment
+    if (ch === '/' && next === '/') {
+      i = consumeLine(content, i + 2);
+      continue;
+    }
+
+    // block comment
+    if (ch === '/' && next === '*') {
+      const { end, raw } = consumeBlock(content, i);
+      out.push({ raw, start: i, end });
+      i = end;
+      continue;
+    }
+
+    // strings
+    if (ch === '\'') {
+      i = consumeQuoted(content, i, '\'');
+      continue;
+    }
+
+    if (ch === '"') {
+      i = consumeQuoted(content, i, '"');
+      continue;
+    }
+
+    if (ch === '`') {
+      i = consumeTemplate(content, i);
+      continue;
+    }
+
+    i += 1;
   }
 
   return out;
@@ -194,12 +322,12 @@ function main() {
     const jsdocBlocks = blocks.filter((b) => b.raw.startsWith('/**'));
     if (jsdocBlocks.length === 0) continue;
 
-    // 厳格度: 'all' は全JSDocに非ASCIIを要求、'any' は少なくとも1つのJSDocが非ASCIIならOK
+    // 厳格度: 'all' は全JSDocが ASCII のみである場合に違反、'any' は1つでも ASCII のみがあれば違反
     const asciiOnlyFlags = jsdocBlocks.map((b) => isAsciiOnly(normalizeBlockText(b.raw)));
     const violate =
       strictness === 'all'
-        ? asciiOnlyFlags.some((f) => f === true) // どれか1つでもASCII-onlyなら違反
-        : asciiOnlyFlags.every((f) => f === true); // 全てASCII-onlyなら違反（1つでも非ASCIIがあればOK）
+        ? asciiOnlyFlags.every((f) => f === true)
+        : asciiOnlyFlags.some((f) => f === true);
 
     if (violate) {
       violations.push({ file: path.relative(PROJECT_ROOT, fp) });
@@ -207,13 +335,13 @@ function main() {
   }
 
   if (violations.length === 0) {
-    process.stdout.write('[policy:comment_locale] OK: 日本語ロケール下で全ブロックコメントに非ASCIIが含まれています\n');
+    process.stdout.write('[policy:comment_locale] OK: ASCIIのみのJSDocは検出されませんでした\n');
     process.exit(0);
   }
 
-  process.stderr.write('[policy:comment_locale] NG: 日本語ロケールでは、すべてのJSDocブロックを日本語で記述してください（ASCIIのみは不可）\n');
+  process.stderr.write('[policy:comment_locale] NG: 日本語ロケールでは「ASCIIのみ」のJSDocブロックは禁止です\n');
   for (const v of violations) {
-    process.stderr.write(`${v.file}: 日本語ロケール下ではJSDocブロックを日本語で書いてください\n`);
+    process.stderr.write(`${v.file}: ASCIIのみのJSDocを避け、非ASCII（例: 日本語）を含めてください\n`);
   }
 
   process.exit(1);

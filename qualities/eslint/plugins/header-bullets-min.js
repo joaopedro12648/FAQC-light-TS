@@ -17,6 +17,7 @@
 
 /**
  * Count bullet lines that look like `* - ...` inside a JSDoc block.
+ * 日本語: JSDoc内の箇条書き行を数える
  * @param {string} commentText Raw block comment text without the surrounding block delimiters
  * @returns {number} Number of bullet lines detected
  */
@@ -34,6 +35,7 @@ function countBulletLines(commentText) {
 
 /**
  * Determine whether a block comment node is a JSDoc-style comment.
+ * 日本語: ブロックコメントがJSDoc風かを判定する
  * @param {import('eslint').AST.Token | import('estree').Comment} node Comment token or ESTree comment
  * @returns {boolean} True when comment starts with '*'
  */
@@ -43,6 +45,7 @@ function isJsDocBlock(node) {
 
 /**
  * Parse header elements from a JSDoc-looking block comment string (including leading " * " lines).
+ * 日本語: ヘッダJSDocから要素を抽出する
  * @param {string} text Raw JSDoc text including leading " * "
  * @returns {{hasFile:boolean,hasNotes:boolean,bulletCount:number,seeCount:number,sndRaw:string|null}} Parsed summary
  */
@@ -84,6 +87,7 @@ function isValidSnd(value, allowSndNone) {
 
 /**
  * Get the top-of-file JSDoc-like block comment, if any.
+ * 日本語: 先頭JSDocコメントを取得する（存在すれば）
  * @param {import('eslint').SourceCode} sourceCode SourceCode インスタンス
  * @returns {import('eslint').AST.Token | import('estree').Comment | null} 先頭JSDocコメント（なければ null）
  */
@@ -107,6 +111,7 @@ function getHeaderComment(sourceCode) {
 
 /**
  * Normalize rule options.
+ * 日本語: ルールオプションを正規化する
  * @param {unknown} raw User-supplied option object
  * @returns {{min:number,max:number,requireSee:number,requireSnd:boolean,allowSndNone:boolean,customMessage:string|null}} Normalized options
  */
@@ -124,6 +129,7 @@ function normalizeOptions(raw) {
 
 /**
  * Basic structural checks for header presence.
+ * 日本語: ヘッダの基本構造を検証する
  * @param {{hasFile:boolean,hasNotes:boolean}} summary Parsed header summary
  * @returns {Array<{messageId:string}>} Diagnostics to report
  */
@@ -136,6 +142,7 @@ function checkBase(summary) {
 
 /**
  * Validate bullet count range.
+ * 日本語: 箇条書き件数の範囲を検証する
  * @param {{bulletCount:number}} summary Parsed header summary
  * @param {number} min Minimum required bullets
  * @param {number} max Maximum allowed bullets
@@ -156,6 +163,7 @@ function checkBullets(summary, min, max, customMessage, meta) {
 
 /**
  * Validate @see count.
+ * 日本語: @see 行数の下限を検証する
  * @param {{seeCount:number}} summary Parsed header summary
  * @param {number} requireSee Minimum required @see entries
  * @param {{messages:Record<string,string>}} meta Rule meta for default message
@@ -168,6 +176,7 @@ function checkSee(summary, requireSee, meta) {
 
 /**
  * Validate @snd value shape and presence.
+ * 日本語: @snd の値の形式と存在を検証する
  * @param {{sndRaw:string|null}} summary Parsed header summary
  * @param {boolean} requireSnd Whether @snd is required
  * @param {boolean} allowSndNone Whether 'なし'|'none' is allowed
