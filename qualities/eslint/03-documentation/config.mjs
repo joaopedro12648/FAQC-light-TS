@@ -16,9 +16,11 @@
  */
 import eslintComments from 'eslint-plugin-eslint-comments';
 import jsdoc from 'eslint-plugin-jsdoc';
-import { FILES_ALL_CODE,FILES_TS } from '../_shared/globs.mjs';
+import { FILES_ALL_CODE, FILES_JS, FILES_TS } from '../_shared/globs.mjs';
 import { blockCommentFormattingPlugin } from '../plugins/block-comment-formatting.js';
 import { headerPlugin } from '../plugins/header-bullets-min.js';
+import { branchesPlugin } from '../plugins/require-comment-previous-line-for-branches.js';
+import { typedefPlugin } from '../plugins/require-options-typedef.js';
 
 /**
  * ドキュメント/コメント規律（JSDoc・ヘッダ・ESLintディレクティブ）に関する設定断片。
@@ -89,6 +91,29 @@ export const documentation = [
       'blockfmt/no-empty-comment': 'error'
     }
   },
+  // 分岐/ループ直前コメント必須（ロケール整合: ja 系では非ASCIIを要求）
+  {
+    // まずはプロダクトコード（src/**）に限定適用し、qualities/** や vibecoding/** は対象外とする
+    files: ['src/**/*.{js,cjs,mjs,ts,tsx,mts,cts}'],
+    plugins: { branches: branchesPlugin },
+    rules: {
+      // requireTagPattern は実行環境のロケールに同期（--locale > CHECK_LOCALE > OS）
+      'branches/require-comment-previous-line-for-branches': [
+        'error',
+        {
+          allowBlankLine: false,
+          ignoreElseIf: true,
+          ignoreCatch: true,
+          // ja 系なら少なくとも1文字の非ASCIIを要求。それ以外は未設定（無効化）が望ましいが、ここでは動的に切替。
+          requireTagPattern: (() => {
+            const envLocale = (process.env.CHECK_LOCALE || '').trim();
+            const lang = (envLocale || Intl.DateTimeFormat().resolvedOptions().locale || '').split(/[-_]/)[0] || '';
+            return lang.toLowerCase() === 'ja' ? '[^\\x00-\\x7F]' : '';
+          })()
+        }
+      ]
+    }
+  },
   // ESLint ディレクティブコメントの説明必須・過剰抑止禁止
   {
     files: FILES_ALL_CODE,
@@ -130,6 +155,24 @@ export const documentation = [
       ]
     },
     settings: { jsdoc: { mode: 'typescript' } }
+  }
+  ,
+  // リポジトリ全体に Options typedef を適用（一般 JS/MJS 対象、グローバル ignores は eslint.config.mjs の IGNORES に従う）
+  {
+    files: FILES_JS,
+    plugins: { typedef: typedefPlugin },
+    rules: {
+      'typedef/require-options-typedef': ['error', { generalJsMode: 'error' }]
+    }
+  }
+  ,
+  // JS ローカルプラグインに Options typedef を要求（meta.schema.properties を包含）
+  {
+    files: ['qualities/eslint/plugins/**/*.js'],
+    plugins: { typedef: typedefPlugin },
+    rules: {
+      'typedef/require-options-typedef': ['error', { generalJsMode: 'off' }]
+    }
   }
 ];
 

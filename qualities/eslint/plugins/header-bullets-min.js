@@ -16,6 +16,16 @@
  */
 
 /**
+ * @typedef {Object} HeaderBulletsMinOptions
+ * @property {number} [min] 箇条書きの最小件数（既定: 8）
+ * @property {number} [max] 箇条書きの最大件数（既定: 10）
+ * @property {number} [requireSee] 必要な @see 行数（既定: 2）
+ * @property {boolean} [requireSnd] @snd 行を必須とするか（既定: true）
+ * @property {boolean} [allowSndNone] @snd=なし/none を許容するか（既定: true）
+ * @property {string} [message] 件数不一致時のカスタムメッセージ（任意）
+ */
+
+/**
  * JSDoc ブロック内にある「`* - ...`」形式の箇条書き行を数える。
  * @param {string} commentText ブロック区切り（例: /* ... *\/）を含むJSDoc生文字列
  * @returns {number} 検出した箇条書き行の件数
