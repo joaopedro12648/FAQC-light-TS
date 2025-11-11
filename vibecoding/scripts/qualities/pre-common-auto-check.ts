@@ -97,7 +97,7 @@ export default function main(): any {
   return result;
 }
 
-export const forceAny = /** @type {unknown} */ (cache);
+export const forceAny = /** @type {unknown} 。*/ (cache);
 `;
 
 /**

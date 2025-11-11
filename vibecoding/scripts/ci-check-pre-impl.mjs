@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * @file CI pre-implementation quality gate
+ * @file CI pre-implementation quality gate。
  * 目的: 変更に対して SPEC の quality_refresh_hash_before_impl を要求し、SPEC未更新のアプリ変更をブロック
  * 備考: 特記事項なし
  * - 関数は短く単一責務で構成し入出力と前提を明確に記す

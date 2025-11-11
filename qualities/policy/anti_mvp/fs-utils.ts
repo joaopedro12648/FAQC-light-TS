@@ -20,7 +20,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 // 単純なグロブ解決（今回の用途に限定して実装）
-// 対応: "src/**/*.ts", "**/src/**/*.ts"（必要に応じて拡張）
+// 対応: "src/**/*.ts", "*。*/src/**/*.ts"（必要に応じて拡張）
 /**
  * パターンに基づき .ts ファイルの相対パス一覧を収集する。
  * @param rootDir ルートディレクトリ

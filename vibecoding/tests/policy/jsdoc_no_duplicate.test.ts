@@ -49,7 +49,7 @@ describe('policy: jsdoc_no_duplicate', () => {
       expect(ng.stderr).toMatch(/duplicate JSDoc/);
 
       // 上書きして OK 期待
-      writeTextFile(path.join(tmp, 'a.ts'), '/** summary */\nexport const x2 = 2;');
+      writeTextFile(path.join(tmp, 'a.ts'), '/** summary 。*/\nexport const x2 = 2;');
       const ok = await runNode('node', [path.join(process.cwd(), 'qualities', 'policy', 'jsdoc_no_duplicate', 'run.mjs')], { cwd: tmp });
       expect(ok.code).toBe(0);
       expect(ok.stdout).toMatch(/OK: no adjacent JSDoc duplicates/);

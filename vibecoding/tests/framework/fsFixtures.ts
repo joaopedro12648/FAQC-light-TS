@@ -30,7 +30,7 @@ export function createTmpDir(prefix = 'vc-tests-'): string {
 /**
  * ディレクトリを再帰的に作成
  * @param {string} dir 対象ディレクトリ
- * @returns {void}
+ * @returns {void}。
  */
 export function ensureDir(dir: string): void {
   fs.mkdirSync(dir, { recursive: true });
@@ -40,7 +40,7 @@ export function ensureDir(dir: string): void {
  * テキストファイルを書き込む（UTF-8）
  * @param {string} fp ファイルパス
  * @param {string} content 内容
- * @returns {void}
+ * @returns {void}。
  */
 export function writeTextFile(fp: string, content: string): void {
   ensureDir(path.dirname(fp));
@@ -51,7 +51,7 @@ export function writeTextFile(fp: string, content: string): void {
  * ファイルをコピー（上書き）
  * @param {string} src 参照元
  * @param {string} dest 出力先
- * @returns {void}
+ * @returns {void}。
  */
 export function copyFile(src: string, dest: string): void {
   ensureDir(path.dirname(dest));
@@ -61,7 +61,7 @@ export function copyFile(src: string, dest: string): void {
 /**
  * ディレクトリを再帰削除（存在しなくても成功扱い）
  * @param {string} dir 対象ディレクトリ
- * @returns {void}
+ * @returns {void}。
  */
 export function cleanupDir(dir: string): void {
   try {

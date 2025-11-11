@@ -102,7 +102,7 @@ function listAllTsFiles(rootDir) {
   /**
    * ディレクトリ配下を深さ優先で走査して TS/TSX を収集する。
    * @param {string} dirAbs 絶対パスのディレクトリ
-   * @returns {void}
+   * @returns {void}。
    */
   function walk(dirAbs) {
     if (!fs.existsSync(dirAbs)) return;

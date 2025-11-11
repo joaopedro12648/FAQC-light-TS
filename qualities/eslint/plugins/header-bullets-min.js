@@ -16,10 +16,9 @@
  */
 
 /**
- * Count bullet lines that look like `* - ...` inside a JSDoc block.
- * 日本語: JSDoc内の箇条書き行を数える
- * @param {string} commentText Raw block comment text without the surrounding block delimiters
- * @returns {number} Number of bullet lines detected
+ * JSDoc ブロック内にある「`* - ...`」形式の箇条書き行を数える。
+ * @param {string} commentText ブロック区切り（例: /* ... *\/）を含むJSDoc生文字列
+ * @returns {number} 検出した箇条書き行の件数
  */
 function countBulletLines(commentText) {
   const lines = commentText.split(/\r?\n/);
@@ -34,20 +33,18 @@ function countBulletLines(commentText) {
 }
 
 /**
- * Determine whether a block comment node is a JSDoc-style comment.
- * 日本語: ブロックコメントがJSDoc風かを判定する
- * @param {import('eslint').AST.Token | import('estree').Comment} node Comment token or ESTree comment
- * @returns {boolean} True when comment starts with '*'
+ * ブロックコメントがJSDocスタイルかを判定する。
+ * @param {import('eslint').AST.Token | import('estree').Comment} node コメントトークン（または ESTree コメント）
+ * @returns {boolean} 先頭が '*' のブロックコメントであれば true
  */
 function isJsDocBlock(node) {
   return node && node.type === 'Block' && node.value && node.value.startsWith('*');
 }
 
 /**
- * Parse header elements from a JSDoc-looking block comment string (including leading " * " lines).
- * 日本語: ヘッダJSDocから要素を抽出する
- * @param {string} text Raw JSDoc text including leading " * "
- * @returns {{hasFile:boolean,hasNotes:boolean,bulletCount:number,seeCount:number,sndRaw:string|null}} Parsed summary
+ * ヘッダJSDoc（先頭コメント）から要素を抽出する（先頭の " * " 行を含む前提）。
+ * @param {string} text 先頭JSDocの生文字列（先頭行の " * " を含む）
+ * @returns {{hasFile:boolean,hasNotes:boolean,bulletCount:number,seeCount:number,sndRaw:string|null}} 解析結果の要約
  */
 function parseHeader(text) {
   const lines = text.split(/\r?\n/);
@@ -72,9 +69,9 @@ function parseHeader(text) {
 }
 
 /**
- * Validate @snd value
+ * snd の値を検証する。
  * @param {string | null} value 検証対象の @snd 値（null 可）
- * @param {boolean} allowSndNone `"なし"/"none"` を許容するか
+ * @param {boolean} allowSndNone `"なし"`/`"none"` を許容するか
  * @returns {boolean} 妥当な .md パス または 許容された `"なし"` なら true
  */
 function isValidSnd(value, allowSndNone) {
@@ -86,10 +83,9 @@ function isValidSnd(value, allowSndNone) {
 }
 
 /**
- * Get the top-of-file JSDoc-like block comment, if any.
- * 日本語: 先頭JSDocコメントを取得する（存在すれば）
+ * 先頭JSDocコメント（トップオブファイルのJSDoc）を取得する。
  * @param {import('eslint').SourceCode} sourceCode SourceCode インスタンス
- * @returns {import('eslint').AST.Token | import('estree').Comment | null} 先頭JSDocコメント（なければ null）
+ * @returns {import('eslint').AST.Token | import('estree').Comment | null} 先頭JSDocコメント（無ければ null）
  */
 function getHeaderComment(sourceCode) {
   const ast = sourceCode.ast;
@@ -110,10 +106,9 @@ function getHeaderComment(sourceCode) {
 }
 
 /**
- * Normalize rule options.
- * 日本語: ルールオプションを正規化する
- * @param {unknown} raw User-supplied option object
- * @returns {{min:number,max:number,requireSee:number,requireSnd:boolean,allowSndNone:boolean,customMessage:string|null}} Normalized options
+ * ルールオプションを正規化する。
+ * @param {unknown} raw 利用者指定のオプションオブジェクト
+ * @returns {{min:number,max:number,requireSee:number,requireSnd:boolean,allowSndNone:boolean,customMessage:string|null}} 正規化済みオプション
  */
 function normalizeOptions(raw) {
   const o = raw && typeof raw === 'object' ? raw : {};
@@ -128,10 +123,9 @@ function normalizeOptions(raw) {
 }
 
 /**
- * Basic structural checks for header presence.
- * 日本語: ヘッダの基本構造を検証する
- * @param {{hasFile:boolean,hasNotes:boolean}} summary Parsed header summary
- * @returns {Array<{messageId:string}>} Diagnostics to report
+ * ヘッダの基本構造を検証する。
+ * @param {{hasFile:boolean,hasNotes:boolean}} summary 解析結果
+ * @returns {Array<{messageId:string}>} 構造違反の診断配列
  */
 function checkBase(summary) {
   const diags = [];
@@ -141,14 +135,13 @@ function checkBase(summary) {
 }
 
 /**
- * Validate bullet count range.
- * 日本語: 箇条書き件数の範囲を検証する
- * @param {{bulletCount:number}} summary Parsed header summary
- * @param {number} min Minimum required bullets
- * @param {number} max Maximum allowed bullets
- * @param {string|null} customMessage Optional message override
- * @param {{messages:Record<string,string>}} meta Rule meta for default message
- * @returns {string|null} Message or null when compliant
+ * 箇条書き件数の範囲を検証する。
+ * @param {{bulletCount:number}} summary 解析結果
+ * @param {number} min 最低必要件数
+ * @param {number} max 許容最大件数
+ * @param {string|null} customMessage メッセージ上書き（任意）
+ * @param {{messages:Record<string,string>}} meta デフォルト文言の参照先
+ * @returns {string|null} 不一致時のメッセージ（適合時は null）
  */
 function checkBullets(summary, min, max, customMessage, meta) {
   if (summary.bulletCount >= min && summary.bulletCount <= max) return null;
@@ -162,12 +155,11 @@ function checkBullets(summary, min, max, customMessage, meta) {
 }
 
 /**
- * Validate @see count.
- * 日本語: @see 行数の下限を検証する
- * @param {{seeCount:number}} summary Parsed header summary
- * @param {number} requireSee Minimum required @see entries
- * @param {{messages:Record<string,string>}} meta Rule meta for default message
- * @returns {string|null} Message or null when compliant
+ * see の件数要件を検証する。
+ * @param {{seeCount:number}} summary 解析結果
+ * @param {number} requireSee 最低必要件数
+ * @param {{messages:Record<string,string>}} meta 文言定義
+ * @returns {string|null} 不足時のメッセージ（適合時は null）
  */
 function checkSee(summary, requireSee, meta) {
   if (!(requireSee > 0) || summary.seeCount >= requireSee) return null;
@@ -175,12 +167,11 @@ function checkSee(summary, requireSee, meta) {
 }
 
 /**
- * Validate @snd value shape and presence.
- * 日本語: @snd の値の形式と存在を検証する
- * @param {{sndRaw:string|null}} summary Parsed header summary
- * @param {boolean} requireSnd Whether @snd is required
- * @param {boolean} allowSndNone Whether 'なし'|'none' is allowed
- * @returns {{messageId:string}|null} Diagnostic payload or null
+ * snd の形式と存在を検証する。
+ * @param {{sndRaw:string|null}} summary 解析結果
+ * @param {boolean} requireSnd @snd を必須とするか
+ * @param {boolean} allowSndNone 'なし'|'none' を許容するか
+ * @returns {{messageId:string}|null} 診断（適合時は null）
  */
 function checkSnd(summary, requireSnd, allowSndNone) {
   if (!requireSnd) return null;

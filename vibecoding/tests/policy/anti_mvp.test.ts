@@ -10,7 +10,7 @@
  * - 規範に合わせヘッダ箇条書きは 8 件以上を維持する
  * - 参照リンクはコンテキストと YAML の 2 件以上を保持する
  * @see vibecoding/var/contexts/qualities/policy/anti_mvp/context.md
- * @see vibecoding/var/contexts/qualities/policy/baseline.yaml
+ * @see vibecoding/var/contexts/qualities/policy/baseline.yaml。
  * @snd vibecoding/var/SPEC-and-DESIGN/SnD-creation.md
  */
 import fs from 'node:fs';

@@ -1,5 +1,5 @@
 /**
- * @file Sanity test: ensure qualities/tsconfig/tsconfig.json exists
+ * @file Sanity test: ensure qualities/tsconfig/tsconfig.json exists。
  * 備考: 特記事項なし
  * - 関数は短く単一責務で構成し入出力と前提を明確に記す
  * - 値は定数へ集約し意味を付与して可読性と変更容易性を高める

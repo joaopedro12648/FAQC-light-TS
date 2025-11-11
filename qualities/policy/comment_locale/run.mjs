@@ -291,10 +291,31 @@ function normalizeBlockText(raw) {
  */
 function isAsciiOnly(s) {
   if (!s) return true;
-  // 可視文字領域に着目（空白や改行は無視）
+  // 可視文字から末尾の連続した句読点/記号を落として判定（元のファイルは変更しない）
   const visible = s.replace(/\s+/g, '');
-  if (visible.length === 0) return true;
-  return /^[\x00-\x7F]+$/.test(visible);
+  const stripped = visible.replace(/[\p{P}\p{S}]+$/u, '');
+  if (stripped.length === 0) return true;
+  return /^[\x00-\x7F]+$/.test(stripped);
+}
+
+/**
+ * パスまたはURLらしさを判定する（行単位、周辺空白は無視）。
+ * 例: "http://...", "https://...", "file://...", "vibecoding/var/....md", "../path/file.ts", "C:\path\to\file.ts"
+ * @param {string} s 入力行
+ * @returns {boolean} パス/URLとみなせるなら true
+ */
+function isPathOrUrl(s) {
+  if (!s) return false;
+  const t = s.trim();
+  // URL (scheme://...)
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\/\S+$/.test(t)) return true;
+  // Windows ドライブレター開始
+  if (/^[A-Za-z]:\\/.test(t)) return true;
+  // 相対パス開始 ../, ./, .\, ..\
+  if (/^\.{0,2}[\\/]/.test(t)) return true;
+  // スラッシュを含み、拡張子らしきものを持つ
+  if (/[\\/]/.test(t) && /\.[A-Za-z0-9]+(?:[?#].*|$)/.test(t)) return true;
+  return false;
 }
 
 /**
@@ -322,12 +343,21 @@ function main() {
     const jsdocBlocks = blocks.filter((b) => b.raw.startsWith('/**'));
     if (jsdocBlocks.length === 0) continue;
 
-    // 厳格度: 'all' は全JSDocが ASCII のみである場合に違反、'any' は1つでも ASCII のみがあれば違反
-    const asciiOnlyFlags = jsdocBlocks.map((b) => isAsciiOnly(normalizeBlockText(b.raw)));
+    // 行単位チェック: JSDoc 内の任意の行が ASCII のみ（可視文字に非ASCIIを含まない）なら違反とする
+    // 厳格度:
+    //  - 'any': 1つでも ASCII-only 行があれば違反
+    //  - 'all': すべての行が ASCII-only の場合に違反（例外的運用だが互換維持）
+    const lines = jsdocBlocks.flatMap((b) => normalizeBlockText(b.raw).split('\n'));
+    const lineAsciiOnly = lines
+      .map((ln) => ln.trim())
+      // 例外: JSDocタグ行、およびパス/URLのみの行は対象外
+      .filter((ln) => ln.length > 0 && !/^@/.test(ln) && !isPathOrUrl(ln))
+      .map((ln) => isAsciiOnly(ln));
+
     const violate =
       strictness === 'all'
-        ? asciiOnlyFlags.every((f) => f === true)
-        : asciiOnlyFlags.some((f) => f === true);
+        ? lineAsciiOnly.length > 0 && lineAsciiOnly.every((f) => f === true)
+        : lineAsciiOnly.some((f) => f === true);
 
     if (violate) {
       violations.push({ file: path.relative(PROJECT_ROOT, fp) });
@@ -335,13 +365,13 @@ function main() {
   }
 
   if (violations.length === 0) {
-    process.stdout.write('[policy:comment_locale] OK: ASCIIのみのJSDocは検出されませんでした\n');
+    process.stdout.write('[policy:comment_locale] OK: ASCIIのみのJSDoc行は検出されませんでした\n');
     process.exit(0);
   }
 
-  process.stderr.write('[policy:comment_locale] NG: 日本語ロケールでは「ASCIIのみ」のJSDocブロックは禁止です\n');
+  process.stderr.write('[policy:comment_locale] NG: 日本語ロケールでは「ASCIIのみ」のJSDoc行は禁止です。品質コンテキストのルールに従った言語でのコメントを書くべきであり、文末にマルチバイト文字を追加するなどではなく、全体を該当言語に翻訳してください。\n');
   for (const v of violations) {
-    process.stderr.write(`${v.file}: ASCIIのみのJSDocを避け、非ASCII（例: 日本語）を含めてください\n`);
+    process.stderr.write(`${v.file}: ASCIIのみのJSDoc行を避け、各行に非ASCII（例: 日本語）を含めてください。品質コンテキストのルールに従った言語でのコメントを書くべきであり、文末にマルチバイト文字を追加するなどではなく、全体を該当言語に翻訳してください。\n`);
   }
 
   process.exit(1);

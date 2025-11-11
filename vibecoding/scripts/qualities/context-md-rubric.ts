@@ -18,6 +18,42 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+/**
+ * 使用方法（CLI）
+ * - 全ファイル（既定）:
+ * 例: npx tsx vibecoding/scripts/qualities/context-md-rubric.ts
+ *
+ * - 対象を絞る（--include または位置引数。複数可・カンマ区切り可）:
+ * 例: npx tsx vibecoding/scripts/qualities/context-md-rubric.ts --include vibecoding/var/contexts/qualities/policy/anti_mvp/context.md
+ * 例: npx tsx vibecoding/scripts/qualities/context-md-rubric.ts --include vibecoding/var/contexts/qualities/eslint/** --include vibecoding/var/contexts/qualities/tsconfig/context.md
+ * 例: npx tsx vibecoding/scripts/qualities/context-md-rubric.ts qualities/policy/no_relaxation/**,qualities/policy/no_unknown_double_cast/**
+ *
+ * - 便宜機能: qualities/ からの指定を var 側に自動マップ
+ * 例: npx tsx vibecoding/scripts/qualities/context-md-rubric.ts --include qualities/policy/anti_mvp/**
+ *
+ * 絞り込み挙動
+ * - 引数未指定: vibecoding/var/contexts/qualities/**\/context.md を全走査
+ * - --include/位置引数指定時: 引数を簡易グロブ（** と *）として repo 相対パスにマッチさせフィルタ
+ * - マッチ 0 件時: 「no files matched by --include」を出して 0 終了（スキップ扱い）
+ *
+ * context.md 作成上の注意（rubric 検出要件の要点）
+ * - すべての項目は各セクション内に存在すること（見出しは「…（Why/Where/What/How）」または "Why/Where/What/How" のいずれか）
+ * 1) Why: 品質影響（型安全性/保守性/セキュリティ等）とコスト影響（トークン/時間/認知負荷等）を明記
+ * 2) Where: グロブ例（例: **\/\*, \*.ts 等）を本文に含める
+ * 3) What: コマンド/設定/coverage の対応（語: command/config/coverage いずれかの出現）
+ * 4) How: 下記4要素を「How セクションの中に」含める
+ * - コードブロック ≥ 2（フェンス記号 ``` の合計 ≥ 4）
+ * - 見出し「### LLM典型NG」（表記揺れ対応。番号付き 1. **… 形式が5件以上）
+ * - チェックリスト（- [ ] の形式が1つ以上）
+ * - 修正方針（語: 修正/対処/方針/remediation/fix のいずれかを含む）
+ * - 本文の最低行数（空行除外）: 60 行以上
+ *
+ * 推奨運用
+ * - 最初にテンプレに沿って各ユニットの context.md を作成（How 内に上記4要素を必ず内包）
+ * - まとめて編集後に rubric を1回だけ実行（O(n) 運用）。逐次修正は O(n^2) 寄りになりがち
+ * - 増分チェック時は --include で対象ユニットのみに絞って実行（例: `--include qualities/policy/anti_mvp/**`）。最終確認は全体実行
+ */
+
 /** リポジトリのルートディレクトリ（カレントワーキングディレクトリ） */
 const repoRoot = process.cwd();
 /** 解析対象の品質コンテキスト（var 配下）の基底ディレクトリ */
@@ -57,6 +93,84 @@ function listFilesRecursive(dir: string): string[] {
   }
 
   return files;
+}
+
+/**
+ * パスを POSIX 形式（/ 区切り）へ正規化
+ * @param p 入力パス
+ * @returns POSIX 形式へ正規化したパス
+ */
+function toPosix(p: string): string {
+  return p.replace(/\\/g, '/');
+}
+
+/**
+ * 簡易グロブを正規表現に変換（** -> .* / * -> [^/]*）
+ * @param glob 簡易グロブ文字列
+ * @returns 生成した正規表現
+ */
+function globToRegex(glob: string): RegExp {
+  const posix = toPosix(glob.trim());
+  // 先に ** を退避
+  const doubled = posix.replace(/\*\*/g, '§DOUBLESTAR§');
+  // 正規表現メタをエスケープ（* は後で処理するため除外）
+  const escaped = doubled.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+  // 単独 * をセグメント内ワイルドカードへ
+  const withSingles = escaped.replace(/\*/g, '[^/]*');
+  // 退避した ** をディレクトリ横断ワイルドカードへ
+  const finalBody = withSingles.replace(/§DOUBLESTAR§/g, '.*');
+  return new RegExp(`^${finalBody}$`, 'i');
+}
+
+/**
+ * CLI 引数から include パターンを取得。
+ * サポート:
+ * - 例: --include=pattern1,pattern2
+ * - 例: --include pattern1 --include pattern2
+ * - 位置引数（先頭が '-' で始まらないもの）をパターンとして扱う
+ * @param argv プロセス引数（先頭2要素除去後）
+ * @returns include パターン配列
+ */
+function parseIncludeArgs(argv: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < argv.length; i += 1) {
+    const a = argv[i] ?? '';
+    if (a.startsWith('--include=')) {
+      const body = a.slice('--include='.length).trim();
+      if (body) out.push(...body.split(',').map((s) => s.trim()).filter(Boolean));
+      continue;
+    }
+
+    if (a === '--include') {
+      const nxt = argv[i + 1] ?? '';
+      if (nxt && !nxt.startsWith('-')) {
+        out.push(...nxt.split(',').map((s) => s.trim()).filter(Boolean));
+        i += 1;
+      }
+
+      continue;
+    }
+
+    if (!a.startsWith('-')) {
+      out.push(...a.split(',').map((s) => s.trim()).filter(Boolean));
+    }
+  }
+  // context.md を対象にするのが基本なので、パターンがディレクトリで終わる場合は補完
+
+  return out.map((raw) => {
+
+    let p = raw;
+    // 便宜置換: qualities/** → vibecoding/var/contexts/qualities/**
+    if (/^qualities\//i.test(p)) {
+      p = p.replace(/^qualities\//i, 'vibecoding/var/contexts/qualities/');
+    }
+
+    if (p.endsWith('/')) return `${p}**/context.md`;
+    if (/\/context\.md$/i.test(p)) return p;
+    // 明示的に *.md が無ければ context.md に寄せる（広げたい場合は **/* を利用）
+    if (!/\*/.test(p) && !/\.md$/i.test(p)) return `${p}/context.md`;
+    return p;
+  });
 }
 
 /**
@@ -256,7 +370,25 @@ function main(): void {
     process.exit(0);
   }
 
-  const files = listFilesRecursive(VAR_BASE).filter((f) => /context\.md$/i.test(f));
+  // 引数処理（--include / 位置引数）
+  const argv = process.argv.slice(2);
+  const includeGlobs = parseIncludeArgs(argv);
+
+  // 走査とフィルタ
+  let files = listFilesRecursive(VAR_BASE).filter((f) => /context\.md$/i.test(f));
+  if (includeGlobs.length > 0) {
+    const relToRepo = (abs: string) => toPosix(path.relative(repoRoot, abs));
+    const regs = includeGlobs.map(globToRegex);
+    files = files.filter((abs) => {
+      const rel = relToRepo(abs);
+      return regs.some((re) => re.test(rel));
+    });
+    if (files.length === 0) {
+      process.stdout.write('context-md-rubric: no files matched by --include\n');
+      process.exit(0);
+    }
+  }
+
   const allErrors: Array<{ file: string; errs: string[] }> = [];
   for (const f of files) {
     const errs = checkContextMd(f);

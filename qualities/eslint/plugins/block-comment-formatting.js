@@ -30,7 +30,7 @@ function isJsDocBlock(node) {
  * @returns {{hasInlineFirstLine: boolean, inlineText: string, beforeInline: string}} 検出結果（先頭行本文の有無と抽出文字列）
  */
 function detectInlineFirstLine(fullText) {
-  // fullText は例えば "/** hoge\n * piyo\n */"
+  // fullText は例えば "/** hoge\n * piyo\n 。*/"
   const firstNewline = fullText.indexOf('\n');
   if (firstNewline === -1) {
     // 1行コメント（単一行）なので対象外
@@ -150,7 +150,7 @@ export const blockCommentFormattingPlugin = {
                 continue;
               }
 
-              // Block comment (/* ... */ or /** ... */)
+              // Block comment (/* ... */ or /** ... 。*/)
               if (c.type === 'Block' && typeof c.value === 'string') {
                 const raw = c.value;
                 const isJsdoc = raw.startsWith('*');

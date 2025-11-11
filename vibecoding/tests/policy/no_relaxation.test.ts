@@ -9,7 +9,7 @@
  * - フィクスチャは最小限に抑え実行時間を短縮する
  * - 例外時も後始末が行われることを保証する
  * @see vibecoding/var/contexts/qualities/policy/no_relaxation/context.md
- * @see vibecoding/var/contexts/qualities/policy/baseline.yaml
+ * @see vibecoding/var/contexts/qualities/policy/baseline.yaml。
  * - 最低要件として箇条書きと参照リンク件数を満たす
  * @snd vibecoding/var/SPEC-and-DESIGN/SnD-creation.md
  */

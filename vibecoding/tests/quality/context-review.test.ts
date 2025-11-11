@@ -1,5 +1,5 @@
 /**
- * @file Tests for context-review.md existence
+ * @file Tests for context-review.md existence。
  * 備考: 特記事項なし
  * Why: 将来の実装改善のため、各 context.md に対応するレビューがあることを保証する
  * - 関数は短く単一責務で構成し入出力と前提を明確に記す
@@ -24,8 +24,8 @@ const CONTEXTS_BASE = path.resolve('vibecoding/var/contexts/qualities');
 
 /**
  * context.md を再帰的に探索する
- * @param {string} dir - Root directory to begin the search
- * @returns {string[]} Absolute paths to discovered context.md files
+ * @param {string} dir - Root directory to begin the search。
+ * @returns {string[]} Absolute paths to discovered context.md files。
  */
 function findContextMdFiles(dir: string): string[] {
   const files: string[] = [];
