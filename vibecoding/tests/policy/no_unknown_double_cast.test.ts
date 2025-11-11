@@ -23,6 +23,7 @@ import { runNode } from '../framework/runNode';
 describe('policy: no_unknown_double_cast', () => {
   it('detects double-cast via unknown and passes otherwise', async () => {
     const tmp = createTmpDir();
+    // 一時ディレクトリの作成/破棄を保証し副作用を隔離する
     try {
       // NG
       // テストコード本体に問題の連続語を含めないため、分割して組み立てる
@@ -35,6 +36,7 @@ describe('policy: no_unknown_double_cast', () => {
 
       // OK
       // 失敗ファイルを削除してから OK を検証
+      // NG の残存物を除去して OK 検証を独立させる
       try { fs.rmSync(path.join(tmp, 'ng.ts')); } catch {}
 
       writeTextFile(path.join(tmp, 'ok.ts'), 'const n: number = 1;');

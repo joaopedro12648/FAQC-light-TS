@@ -27,6 +27,7 @@ import path from 'node:path';
  * @returns {string} 標準出力（trim 済み）。失敗時は空文字。
  */
 function run(cmd) {
+  // サブプロセス失敗時も処理継続するため空文字でフォールバックする
   try {
     return execSync(cmd, { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' }).trim();
   } catch (e) {
@@ -45,8 +46,10 @@ function getChangedFiles() {
     'git diff --name-only --diff-filter=ACMRTUXB $(git merge-base origin/main HEAD)..HEAD',
     'git diff --name-only --diff-filter=ACMRTUXB HEAD~1..HEAD',
   ];
+  // 差分取得手段を順に試し最初に成功した結果を採用する
   for (const cmd of attempts) {
     const out = run(cmd);
+    // 最初に成功した差分範囲の結果を採用して余計な走査を避ける
     if (out) return Array.from(new Set(out.split('\n').filter(Boolean)));
   }
 
@@ -61,6 +64,7 @@ function getChangedFiles() {
  * @returns {string} ファイル内容（UTF-8）。失敗時は空文字。
  */
 function readFileSafe(p) {
+  // 読み込み失敗時も処理継続するため空文字でフォールバックする
   try {
     return fs.readFileSync(p, 'utf8');
   } catch {
@@ -84,6 +88,7 @@ function extractFrontMatter(md) {
  * @returns {string} `<StartAt> <hash>` 形式の値。見つからなければ空文字。
  */
 function getQualityRefreshHashBeforeImpl(frontMatter) {
+  // front matter が空なら欠落扱いとして空文字を返す
   if (!frontMatter) return '';
   // YAML フロントマターの行を捕捉: quality_refresh_hash_before_impl: "<StartAt> <hash>"
   const m = frontMatter.match(/\bquality_refresh_hash_before_impl\s*:\s*["']?([^\r\n"']+)/);
@@ -123,6 +128,7 @@ function main() {
     const content = readFileSafe(abs);
     const fm = extractFrontMatter(content);
     const atHash = getQualityRefreshHashBeforeImpl(fm);
+    // SPEC の pre-impl ハッシュが欠落/不正な場合はエラーとして記録する
     if (!isValidStartAtHash(atHash)) {
       errors.push(
         `Missing or invalid quality_refresh_hash_before_impl in front matter for SPEC: ${specPath}`
@@ -130,6 +136,7 @@ function main() {
     }
   }
 
+  // 収集したエラーが存在する場合は失敗として詳細を出力する
   if (errors.length > 0) {
     process.stderr.write(`\nPRE-IMPL check failed:\n- ${  errors.join('\n- ')  }\n`);
     process.stderr.write('\nSee vibecoding/docs/PLAYBOOK/PRE-IMPL.md\n');

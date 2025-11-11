@@ -18,19 +18,24 @@
 // [SPEC:SnD-20251027-anti-mvp-policy-checks] Anti-MVP Policy Checks
 import fs from 'node:fs';
 import path from 'node:path';
+import { IGNORES as SOT_IGNORES } from '../../_shared/ignores.mjs';
 
 // 複雑度を抑えるためのヘルパー
 const sliceBlock = (lines, start, end) => {
   const sIdx = lines.findIndex((l) => start.test(l.trimEnd()));
+  // 開始位置が見つからなければ空配列を返す
   if (sIdx === -1) return [];
   const after = lines.slice(sIdx + 1);
   const baseIndent = ((/^(\s*)/.exec(lines[sIdx]) || [,''])[1] || '').length;
   let eIdx = lines.length;
+  // ブロックの終端または同レベル次セクションに到達するまで前進する
   for (let i = 0; i < after.length; i += 1) {
     const raw = after[i];
     const ind = ((/^(\s*)/.exec(raw) || [,''])[1] || '').length;
+    // 終端パターンに一致したら切り出しを終了する
     if (end.test(raw.trimEnd())) { eIdx = sIdx + 1 + i; break; }
 
+    // 同レベルの別セクション開始を検知したらブロック境界とみなす
     if (ind <= baseIndent && /^\s*[a-zA-Z0-9_]+:\s*$/.test(raw.trimEnd())) { eIdx = sIdx + 1 + i; break; }
   }
 
@@ -39,19 +44,25 @@ const sliceBlock = (lines, start, end) => {
 
 const parseBanned = (lines) => {
   const block = sliceBlock(lines, /^\s*banned_terms:\s*$/, /^\s*todo_ticket_required:\s*$/);
+  // 設定ブロックが存在しない場合は本チェックを無効化し undefined を返す
   if (!block.length) return undefined;
   const out = {};
   let inPatterns = false;
+  // YAML セクションを1行ずつ評価して構造体に反映する
   for (const raw of block) {
     const l = raw.trimEnd();
+    // ここから先はパターン配列を構築するフラグを立てる
     if (/^\s*patterns:\s*$/.test(l)) { inPatterns = true; out.patterns = []; continue; }
 
     const mPat = l.match(/^\s*-\s+"?(.+?)"?\s*$/);
+    // パターン行であれば配列へ順次追加する
     if (inPatterns && mPat) { out.patterns.push(mPat[1]); continue; }
 
     const mWB = l.match(/^\s*word_boundary:\s*(true|false)\s*$/);
+    // 単語境界の有無をここで反映する
     if (mWB) { out.word_boundary = mWB[1] === 'true'; continue; }
 
+    // パス指定がある場合は既定値へ正規化して後段の走査対象を明確にする
     if (/^\s*paths:\s*/.test(l)) { out.paths = ['**/*.{ts,tsx,mts,cts}']; continue; }
   }
 
@@ -60,13 +71,17 @@ const parseBanned = (lines) => {
 
 const parseTodo = (lines) => {
   const block = sliceBlock(lines, /^\s*todo_ticket_required:\s*$/, /^\s*banned_terms:\s*$/);
+  // 設定ブロックが存在しない場合は本チェックを無効化し undefined を返す
   if (!block.length) return undefined;
   const out = {};
+  // YAML セクションを1行ずつ評価して構造体に反映する
   for (const raw of block) {
     const l = raw.trimEnd();
     const mRegex = l.match(/^\s*regex:\s*"(.+)"\s*$/);
+    // 正規表現の指定を抽出して後段の検査に利用する
     if (mRegex) { out.regex = mRegex[1]; continue; }
 
+    // パス指定がある場合は既定値へ正規化して後段の走査対象を明確にする
     if (/^\s*paths:\s*/.test(l)) { out.paths = ['**/*.{ts,tsx,mts,cts}']; continue; }
   }
 
@@ -85,7 +100,9 @@ function readYamlConfig(repoRoot) {
   const cfg = { checks: {} };
   const banned = parseBanned(lines);
   const todo = parseTodo(lines);
+  // banned_terms が定義されている場合はチェック群へ反映する
   if (banned) cfg.checks.banned_terms = banned;
+  // todo_ticket_required が定義されている場合はチェック群へ反映する
   if (todo) cfg.checks.todo_ticket_required = todo;
   return cfg;
 }
@@ -97,7 +114,13 @@ function readYamlConfig(repoRoot) {
  */
 function listAllTsFiles(rootDir) {
   const out = [];
-  const IGNORES = new Set(['node_modules', 'dist', 'build', 'coverage', '.git']);
+  const SKIP_DIR_NAMES = new Set(
+    SOT_IGNORES
+      .map((p) => p.replace(/\/\*\*$/, ''))
+      .map((p) => p.replace(/^\.\//, ''))
+      .map((p) => p.split('/').pop())
+      .filter(Boolean)
+  );
   const TS_EXT_RX = /\.(ts|tsx|mts|cts)$/i;
   /**
    * ディレクトリ配下を深さ優先で走査して TS/TSX を収集する。
@@ -105,14 +128,20 @@ function listAllTsFiles(rootDir) {
    * @returns {void}。
    */
   function walk(dirAbs) {
+    // 実行中にディレクトリが消えていても安全に続行できるよう存在確認を行う
     if (!fs.existsSync(dirAbs)) return;
+    // 深さ優先でファイル・ディレクトリを列挙して対象のみを収集する
     for (const entry of fs.readdirSync(dirAbs, { withFileTypes: true })) {
       const name = entry.name;
       const abs = path.join(dirAbs, name);
+      // 無視対象のディレクトリは潜らずスキップして不要な走査を避ける
       if (entry.isDirectory()) {
-        if (IGNORES.has(name)) continue;
+        // 無視対象なら処理をスキップする
+        if (SKIP_DIR_NAMES.has(name)) continue;
         walk(abs);
-      } else if (entry.isFile() && TS_EXT_RX.test(name)) {
+      }
+      // 型対象の拡張子に一致するファイルのみをリストへ追加する
+      else if (entry.isFile() && TS_EXT_RX.test(name)) {
         out.push(path.relative(rootDir, abs));
       }
     }
@@ -130,6 +159,7 @@ function listAllTsFiles(rootDir) {
  */
 function bannedTermsCheck(rootDir, cfg) {
   const rule = cfg.checks && cfg.checks.banned_terms;
+  // 設定が無ければ本チェックは無効なため早期に空結果を返す
   if (!rule || !rule.patterns || rule.patterns.length === 0) return [];
   const files = listAllTsFiles(rootDir);
   const escaped = rule.patterns.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
@@ -137,11 +167,15 @@ function bannedTermsCheck(rootDir, cfg) {
   const body = rule.word_boundary ? `\\b(?:${joined})\\b` : `(?:${joined})`;
   const regex = new RegExp(body, 'i');
   const violations = [];
+  // 全対象ファイルを走査して違反を集計する
   for (const rel of files) {
     const abs = path.join(rootDir, rel);
     const lines = fs.readFileSync(abs, 'utf8').split(/\r?\n/);
+    // 各行を確認して最初にマッチしたトークンを報告に含める
     for (let i = 0; i < lines.length; i += 1) {
+      // マッチした行を違反として収集する
       const m = regex.exec(lines[i]);
+      // マッチした行のみを違反として記録し、発見語をメッセージへ含める
       if (m) {
         const found = m[0] ?? '';
         violations.push({ ruleId: 'banned_terms', message: `${rel}:${i + 1} contains "${found}"`, file: rel, line: i + 1 });
@@ -160,14 +194,18 @@ function bannedTermsCheck(rootDir, cfg) {
  */
 function todoTicketRequiredCheck(rootDir, cfg) {
   const rule = cfg.checks && cfg.checks.todo_ticket_required;
+  // 設定が無ければ本チェックは無効なため早期に空結果を返す
   if (!rule || !rule.regex) return [];
   const files = listAllTsFiles(rootDir);
   const regex = new RegExp(rule.regex, 'i');
   const violations = [];
+  // 全対象ファイルを走査して違反を集計する
   for (const rel of files) {
     const abs = path.join(rootDir, rel);
     const lines = fs.readFileSync(abs, 'utf8').split(/\r?\n/);
+    // 各行を確認してチケットID無しの TODO/FIXME/HACK を検出する
     for (let i = 0; i < lines.length; i += 1) {
+      // チケットIDが無ければ違反として記録する
       if (regex.test(lines[i])) violations.push({ ruleId: 'todo_ticket_required', message: `${rel}:${i + 1} missing ticket for TODO/FIXME/HACK`, file: rel, line: i + 1 });
     }
   }
@@ -184,13 +222,17 @@ function todoTicketRequiredCheck(rootDir, cfg) {
 async function runAll(rootDir) {
   const cfg = readYamlConfig(rootDir);
   const violations = [];
+  // 各チェックの失敗を分離し、片方が落ちてももう片方を継続させるよう try で囲む
   try {
+    // 禁止語チェックの結果を集約する
     for (const v of bannedTermsCheck(rootDir, cfg)) violations.push(v);
   } catch (e) {
     violations.push({ ruleId: 'banned_terms', message: `checker crashed: ${e && e.message ? e.message : String(e)}` });
   }
 
+  // 各チェックの失敗を分離し、片方が落ちてももう片方を継続させるよう try で囲む
   try {
+    // チケットID必須チェックの結果を集約する
     for (const v of todoTicketRequiredCheck(rootDir, cfg)) violations.push(v);
   } catch (e) {
     violations.push({ ruleId: 'todo_ticket_required', message: `checker crashed: ${e && e.message ? e.message : String(e)}` });
@@ -206,7 +248,9 @@ async function runAll(rootDir) {
 async function main() {
   const repoRoot = process.cwd();
   const { ok, violations } = await runAll(repoRoot);
+  // いずれかの違反が存在する場合は詳細を標準エラーへ出力して異常終了させる
   if (!ok) {
+    // 違反一覧を出力する
     for (const v of violations) {
       process.stderr.write(`anti-mvp ❌ ${v.ruleId}: ${v.message}\n`);
     }
@@ -217,6 +261,7 @@ async function main() {
   process.stdout.write('anti-mvp ✅ no violations\n');
 }
 
+// ランナー自体の予期しない失敗を確実に記録してCIへ異常終了を伝える
 main().catch((e) => {
   process.stderr.write(`anti-mvp ❌ runner error: ${e instanceof Error ? e.message : String(e)}\n`);
   process.exit(1);

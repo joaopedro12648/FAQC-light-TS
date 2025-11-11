@@ -42,9 +42,11 @@ describe('ESLint rule (smoke): require-options-typedef', () => {
   it('exports rule meta and user-guiding messages', () => {
     expect(typeof ruleU).toBe('object');
     expect(hasMeta(ruleU)).toBe(true);
+    // meta の公開を確認できた場合のみ次段の詳細検証へ進める
     if (hasMeta(ruleU)) {
       const meta = (ruleU as { meta: unknown }).meta;
       expect(hasMessages(meta)).toBe(true);
+      // messages の存在時にメッセージ契約の整合を検証する
       if (hasMessages(meta)) {
         const msg = (meta as { messages: Record<string, string> }).messages;
         expect(typeof msg.missingTypedef).toBe('string');

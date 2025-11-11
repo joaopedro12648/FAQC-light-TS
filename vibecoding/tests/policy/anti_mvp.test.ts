@@ -23,6 +23,7 @@ import { runNode } from '../framework/runNode';
 describe('policy: anti_mvp', () => {
   it('fails on banned term and passes otherwise', async () => {
     const tmp = createTmpDir();
+    // テスト用の一時環境を確実に片付け結果の独立性を保つ
     try {
       // YAML をコピー
       const srcYaml = path.join(process.cwd(), 'qualities', 'policy', 'anti_mvp', 'anti_mvp_policy.yaml');
@@ -39,6 +40,7 @@ describe('policy: anti_mvp', () => {
 
       // OK: クリア
       // 失敗ファイルを削除してから OK を検証
+      // 失敗ケースの残骸を除去し検証を分離する
       try { fs.rmSync(path.join(tmp, 'ng.ts')); } catch {}
 
       writeTextFile(path.join(tmp, 'ok.ts'), 'export const ok = 1;');

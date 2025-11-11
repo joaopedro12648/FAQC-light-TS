@@ -18,7 +18,6 @@
 /**
  * Lint の対象外パス（成果物・キャッシュ等）
  */
-export const IGNORES = ['dist/**', 'coverage/**', 'node_modules/**', 'tmp/**', 'scripts/tmp/**'];
 
 /**
  * JS 系ファイルのグロブ（ESM/CJS 含む）

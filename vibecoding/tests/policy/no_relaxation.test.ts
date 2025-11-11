@@ -23,6 +23,7 @@ import { runNode } from '../framework/runNode';
 describe('policy: no_relaxation', () => {
   it('detects relaxations and passes when none present', async () => {
     const tmp = createTmpDir();
+    // 一時ディレクトリを確実に片付け検証を独立させる
     try {
       // NG: eslint-disable を含む
       const kw = 'eslint-';
@@ -34,6 +35,7 @@ describe('policy: no_relaxation', () => {
 
       // OK: クリア
       // 失敗ファイルを削除してから OK を検証
+      // 検証を分離する目的で失敗ファイルを先に除去する
       try { fs.rmSync(path.join(tmp, 'ng.ts')); } catch {}
 
       writeTextFile(path.join(tmp, 'ok.ts'), 'export const ok = 1;');

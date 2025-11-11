@@ -48,10 +48,13 @@ function collectViolations(
   ruleId: string
 ): Violation[] {
   const out: Violation[] = [];
+  // 各行を順に確認して禁止語の出現を検知する
   for (let i = 0; i < lines.length; i += 1) {
     const lineText = lines[i];
+    // 未定義行は安全にスキップして誤検知/例外を防ぐ
     if (lineText === undefined) continue;
     const m = regex.exec(lineText);
+    // 正規表現に一致した行のみを違反として記録する
     if (m) {
       const found = m[1] ?? '';
       out.push({ ruleId, message: `${relPath}:${i + 1} contains "${String(found)}"`, file: path.normalize(relPath), line: i + 1 });
@@ -70,11 +73,13 @@ function collectViolations(
 export const run: CheckFn = (rootDir: string, cfg: PolicyConfig) => {
   const ruleId = 'banned_terms';
   const rule = cfg.checks?.banned_terms;
+  // 設定が未定義/空の場合は早期に無処理で終了して無駄を避ける
   if (!rule || !rule.patterns || rule.patterns.length === 0) return [];
   const paths = rule.paths && rule.paths.length > 0 ? rule.paths : ['**/*.{ts,tsx,mts,cts}'];
   const files = globFiles(rootDir, paths);
   const regex = buildPatternRegex(rule.patterns, Boolean(rule.word_boundary));
   let all: Violation[] = [];
+  // 対象ファイル群を走査して各ファイルの違反を集約する
   for (const rel of files) {
     const abs = toAbs(rootDir, rel);
     const lines = readText(abs).split(/\r?\n/);

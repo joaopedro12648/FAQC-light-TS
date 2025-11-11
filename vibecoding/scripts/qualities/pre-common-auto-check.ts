@@ -79,6 +79,8 @@ export function primesBad(limit: any, mode: any = "fast"): any {
     if (ok) { arr.push(i); }
   }
 
+  // 診断生成と後始末を例外分離して安定性を維持する
+  // 一時ファイル作成後の代表出力収集を保護し後始末を確実に行う
   try {
     if (arr.length > 42) {
       cache["last"] = arr;
@@ -106,6 +108,7 @@ export const forceAny = /** @type {unknown} 。*/ (cache);
  * @returns ファイル内容。存在しない場合は null
  */
 function readFileIfExists(filePath: string): string | null {
+  // 存在確認と読み込みに失敗しても処理全体を止めず未検出扱いで続行する
   try {
     return fs.readFileSync(filePath, 'utf8');
   } catch {
@@ -147,6 +150,7 @@ function normalizePathForOutput(p: string): string {
  * @returns サブディレクトリの絶対パス配列
  */
 function getImmediateSubdirs(baseDir: string): string[] {
+  // ベースディレクトリが無ければ探索を行わず空配列として扱う
   if (!fs.existsSync(baseDir)) return [];
   return fs
     .readdirSync(baseDir, { withFileTypes: true })
@@ -162,18 +166,24 @@ function getImmediateSubdirs(baseDir: string): string[] {
 function listFilesRecursive(dir: string): string[] {
   const files: string[] = [];
   const stack: string[] = [dir];
+  // 未処理のディレクトリが残る限り探索を継続し対象ファイルを収集する
   while (stack.length > 0) {
     const current = stack.pop();
+    // 無効な参照に遭遇した場合は探索を中断して次へ進む
     if (!current) break;
     let entries: fs.Dirent[] | undefined;
+    // 読み取り失敗時は当該ノードをスキップして探索を継続する
     try {
       entries = fs.readdirSync(current, { withFileTypes: true });
     } catch {
       continue; // 読み取れないディレクトリはスキップ
     }
 
+    // 子エントリを順に評価してスタックまたは結果へ反映する
+    // 子要素を評価して探索を継続し対象集合を拡張する
     for (const e of entries) {
       const full = path.join(current, e.name);
+      // ディレクトリは後続探索へ積み、ファイルは結果へ追加する
       if (e.isDirectory()) {
         stack.push(full);
       } else if (e.isFile()) {
@@ -192,10 +202,13 @@ function listFilesRecursive(dir: string): string[] {
  */
 function getMaxMtimeMs(filePaths: string[]): number {
   let maxMs = 0;
+  // 対象ファイルの更新時刻を走査して最大値を算出する
   for (const fp of filePaths) {
+    // ファイルの stat を取得して更新時刻を評価する
     try {
       const st = fs.statSync(fp);
       const ms = st.mtimeMs ?? new Date(st.mtime).getTime();
+      // 数値として妥当かつ最大を更新する場合だけ採用する
       if (Number.isFinite(ms) && ms > maxMs) maxMs = ms;
     } catch {
       // 無視
@@ -223,6 +236,7 @@ function collectTargetDirs(): string[] {
   result.push(...eslintChildren);
 
   // 3) qualities/* (exclude directories already mentioned: 'policy', 'eslint')
+  // policy/eslint 以外のトップレベルを対象に追加し既存と重複しないようにする
   const topLevel = getImmediateSubdirs(QUALITIES_DIR).filter((d) => {
     const name = path.basename(d);
     return name !== 'policy' && name !== 'eslint';
@@ -231,7 +245,9 @@ function collectTargetDirs(): string[] {
 
   // 順序を保ったまま重複を除去
   const seen = new Set<string>();
+  // 既出ディレクトリを除去して重複を抑制する
   return result.filter((d) => {
+    // 既出ディレクトリは結果から除外して重複を抑制する
     if (seen.has(d)) return false;
     seen.add(d);
     return true;
@@ -245,6 +261,8 @@ function collectTargetDirs(): string[] {
  */
 function computeNeededMappings(targetDirs: string[]): Array<{ srcDir: string; destDir: string }> {
   const mappings: Array<{ srcDir: string; destDir: string }> = [];
+  // 各ターゲットを評価して出力側の鮮度と比較し再生成の要否を判断する
+  // 各ディレクトリの鮮度を比較し再生成の要否を評価する
   for (const srcDir of targetDirs) {
     const rel = path.relative(QUALITIES_DIR, srcDir);
     const destDir = path.join(OUTPUT_BASE, rel);
@@ -259,6 +277,7 @@ function computeNeededMappings(targetDirs: string[]): Array<{ srcDir: string; de
     const destYaml = path.join(destDir, 'context.yaml');
     const destMd = path.join(destDir, 'context.md');
     const requiresUpdate = (targetPath: string): boolean => {
+      // 出力が存在しないか古い場合に再生成を要求する
       try {
         const st = fs.statSync(targetPath);
         const ms = st.mtimeMs ?? new Date(st.mtime).getTime();
@@ -268,6 +287,8 @@ function computeNeededMappings(targetDirs: string[]): Array<{ srcDir: string; de
       }
     };
 
+    // YAML または MD のいずれかが不足/古い場合に対応表へ追加する
+    // いずれかの生成物が不足/古い場合のみ更新対象に追加する
     if (requiresUpdate(destYaml) || requiresUpdate(destMd)) {
       const srcOut = normalizePathForOutput(path.relative(PROJECT_ROOT, srcDir));
       const destOut = normalizePathForOutput(path.relative(PROJECT_ROOT, destDir));
@@ -280,6 +301,7 @@ function computeNeededMappings(targetDirs: string[]): Array<{ srcDir: string; de
 
 /** 必須ディレクトリの存在を確認する。 */
 function ensurePreconditions(): void {
+  // 必須ディレクトリの存在と種別を確認し前提違反を即時に報告する
   if (!fs.existsSync(QUALITIES_DIR) || !fs.statSync(QUALITIES_DIR).isDirectory()) {
     process.stderr.write('pre-common-auto-check: qualities not found.\n');
     process.exit(1);
@@ -294,6 +316,7 @@ function writeLastUpdated(): string {
   // Keep baseline read for potential future diff logic (currently unused)
   readFileIfExists(LAST_UPDATED_FILE);
   const startAt = toIsoUtcNow();
+  // 鮮度マーカーの書き込みに失敗した場合は致命として終了し後段の不整合を防ぐ
   try {
     writeFileEnsured(LAST_UPDATED_FILE, `${startAt}\n`);
   } catch (e) {
@@ -310,6 +333,8 @@ function writeLastUpdated(): string {
  */
 function checkRubric(): boolean {
   const rubricChecker = path.join(PROJECT_ROOT, 'vibecoding', 'scripts', 'qualities', 'context-md-rubric.ts');
+  // チェッカーが存在しない場合は非対応としてスキップ扱いにする
+  // チェッカー実体が無い場合は非対応として即時に非違反扱いで戻る
   if (!fs.existsSync(rubricChecker)) return false;
   const scriptDir = path.dirname(fileURLToPath(import.meta.url));
   const repoRootFromScript = path.resolve(scriptDir, '../../..');
@@ -318,8 +343,11 @@ function checkRubric(): boolean {
   const tsxLoaderArg = fs.existsSync(tsxLoaderFsPath) ? pathToFileURL(tsxLoaderFsPath).href : null;
 
   // 試行1: node --import <file://loader> rubric.ts
+  // 公式ローダの直接指定で実行可能ならそれを優先採用する
+  // 公式ローダの直接指定が可能な場合は優先して試行する
   if (tsxLoaderArg) {
     const res1 = spawnSync(process.execPath, ['--import', tsxLoaderArg, rubricChecker], { stdio: 'pipe', encoding: 'utf8' });
+    // 正常終了ならルーブリック準拠として非違反を返す
     if (typeof res1.status === 'number' && res1.status === 0) return false; // compliant
   }
 
@@ -335,21 +363,25 @@ function checkRubric(): boolean {
  * @param rubricViolation ルーブリック違反の有無
  */
 function outputAndExit(startAt: string, mappings: Array<{ srcDir: string; destDir: string }>, rubricViolation: boolean): void {
+  // 再生成の必要も違反も無ければハッシュを出力して成功終了する
   if (mappings.length === 0 && !rubricViolation) {
     const hash = crypto.createHash('sha256').update(startAt + SECRET).digest('hex');
     process.stdout.write(`${startAt} ${hash}\n`);
     process.exit(0);
   }
 
+  // 必要なミラー生成・更新対象を列挙して作業指示を明確化する
   for (const m of mappings) {
     process.stdout.write(`[GATE] ${m.srcDir} => ${m.destDir}\n`);
   }
 
+  // ルーブリック違反のみ検出された場合にも同期対象の提示を行う
   if (rubricViolation && mappings.length === 0) {
     process.stdout.write('[GATE] contexts/qualities => vibecoding/var/contexts/qualities  # rubric noncompliant\n');
   }
 
   // 診断は、少なくとも1つ以上の対象ユニットで context.md が存在しない場合のみ出力する。
+  // いずれかのユニットで context.md が欠落する場合は診断情報を付与して作業支援する
   if (!allTargetContextMdExist()) {
     emitDiagnostics();
   }
@@ -364,7 +396,9 @@ function outputAndExit(startAt: string, mappings: Array<{ srcDir: string; destDi
  * @returns 省略後の文字列
  */
 function formatCap(s: string, cap = DEFAULT_FORMAT_CAP): string {
+  // 無効または空文字列は空の診断として扱う
   if (!s) return '';
+  // 既に上限以内であれば切り詰めずそのまま返す
   if (s.length <= cap) return s;
   return `${s.slice(0, cap)  }\n... (truncated)\n`;
 }
@@ -396,12 +430,14 @@ function runGateCommandsWithKata(_pkgJson: unknown): string[] {
   const kataPath = path.join(kataDir, 'kata_for_auth_check.ts');
   fs.mkdirSync(kataDir, { recursive: true });
   fs.writeFileSync(kataPath, KATA_TS, 'utf8');
+  // 代表出力収集フェーズを保護して後続の片付けを確実に行う
   try {
   // 診断には stepDefs を使用（runMode が 'diagnostics' または 'both'。'test' と 'build' は除外）
     const steps = stepDefs.filter((d) => (d.runMode === 'diagnostics' || d.runMode === 'both') && d.id !== 'test' && d.id !== 'build');
     const results: string[] = [];
     results.push('');
     results.push('[SAMPLE] === Gate command outputs ===');
+    // 各ステップの代表出力を取得して診断へ追記する
     for (const d of steps) {
       results.push('');
       appendDiagnosticsForStep(d, results);
@@ -409,10 +445,13 @@ function runGateCommandsWithKata(_pkgJson: unknown): string[] {
 
     return results;
   } finally {
+    // 一時ファイルの削除でクリーンアップを保証する
     try { fs.unlinkSync(kataPath); } catch {}
 
+    // 一時ディレクトリが空であれば削除して痕跡を残さない
     try {
       const remains = fs.readdirSync(kataDir);
+      // 空ディレクトリのみ削除して安全にクリーンアップする
       if (remains.length === 0) fs.rmdirSync(kataDir);
     } catch {}
   }
@@ -427,8 +466,11 @@ function appendDiagnosticsForStep(d: typeof stepDefs[number], results: string[])
   // すべての対応ユニットに context.md が存在する場合、診断を抑止
   const unitDirs = (d.relatedUnitDirs && d.relatedUnitDirs.length > 0) ? d.relatedUnitDirs : [d.configRelDir];
   const allContextsExist = unitDirs.every((u) => fs.existsSync(path.join(OUTPUT_BASE, u, 'context.md')));
+  // 対象すべてが整っている場合は冗長な診断出力を避けるため早期に戻る
   if (allContextsExist) return;
   const { lines, result } = runStepDef(d.command, d.args as string[]);
+  // コマンド行と標準出力/標準エラーを整形して結果へ追記する
+  // 行を順に取り込み可読性の高い診断ログを構成する
   for (const ln of lines) {
     results.push(`[SAMPLE] ${ln}`);
   }
@@ -437,7 +479,9 @@ function appendDiagnosticsForStep(d: typeof stepDefs[number], results: string[])
   const out = (result.stdout || '') + (result.stderr ? `\n[stderr]\n${result.stderr}` : '');
   const capped = formatCap(out, DEFAULT_FORMAT_CAP);
   const cappedLines = capped.split('\n');
+  // 各行を整形して空行と本文を区別して蓄積する
   for (const cl of cappedLines) {
+    // 空行はそのまま空の行として出力し区切りを示す
     if (cl.trim().length === 0) {
       results.push('');
     } else {
@@ -453,6 +497,7 @@ function appendDiagnosticsForStep(d: typeof stepDefs[number], results: string[])
 function saveDiagnostics(diagnostics: string[]): void {
   const full = diagnostics.join('\n');
   const diagOutFile = path.join(PROJECT_ROOT, 'tmp', 'pre-common-diagnostics.md');
+  // 出力先の作成と書き込みで診断の永続化を確実に行う
   try {
     fs.mkdirSync(path.dirname(diagOutFile), { recursive: true });
     fs.writeFileSync(diagOutFile, full, 'utf8');
@@ -460,6 +505,7 @@ function saveDiagnostics(diagnostics: string[]): void {
 
   const ascii = toAsciiPrintable(full);
   process.stdout.write(`${ascii  }\n`);
+  // 保存先が存在する場合は参照パスを追加で案内する
   if (diagOutFile) {
     process.stdout.write(`(full diagnostics saved: ${normalizePathForOutput(path.relative(PROJECT_ROOT, diagOutFile))})\n`);
   }
@@ -479,6 +525,7 @@ function runStepDef(command: string, args: string[]): { lines: string[]; result:
 
 /** 合成した診断サンプルブロックを出力する。 */
 function emitDiagnostics(): void {
+  // 診断生成全体を保護して部分失敗時も安定した出力を維持する
   try {
     const diagnostics: string[] = [];
     diagnostics.push('----- PRE-COMMON: example code & diagnostics (exit=2) -----');
@@ -513,10 +560,15 @@ function collectVarContextYamlFiles(): string[] {
   ];
   const roots = Array.from(new Set([base, ...otherRoots]));
   const files: string[] = [];
+  // ルートごとに context.yaml を再帰探索して重複なく収集する
+  // 監視ルートごとに存在確認と再帰探索を実施する
   for (const r of roots) {
+    // ルートが存在しない場合は対象外としてスキップする
     if (!fs.existsSync(r)) continue;
     const all = listFilesRecursive(r);
+    // 発見ファイル群から context.yaml のみを抽出して蓄積する
     for (const f of all) {
+      // トップレベルの context.yaml のみ対象にして重複を避ける
       if (path.basename(f) === 'context.yaml') files.push(f);
     }
   }
@@ -531,6 +583,7 @@ function collectVarContextYamlFiles(): string[] {
  */
 function detectTopLevelKeyDuplicates(filePath: string): Array<{ key: string; lines: number[] }> {
   let content = '';
+  // 読み取り失敗時は対象外として空の結果を返す
   try {
     content = fs.readFileSync(filePath, 'utf8');
   } catch {
@@ -539,9 +592,12 @@ function detectTopLevelKeyDuplicates(filePath: string): Array<{ key: string; lin
 
   const lines = content.split(/\r?\n/);
   const keyToLines = new Map<string, number[]>();
+  // 各行を評価してトップレベルキーの出現を集計する
   for (let i = 0; i < lines.length; i++) processTopLevelYamlLine(String(lines[i] ?? ''), i, keyToLines);
   const dups: Array<{ key: string; lines: number[] }> = [];
+  // 集計結果から重複キーのみを抽出して報告対象にする
   for (const [k, occ] of keyToLines.entries()) {
+    // 同一キーが複数回出現した場合だけ重複と見なす
     if (occ.length > 1) dups.push({ key: k, lines: occ });
   }
 
@@ -555,9 +611,12 @@ function detectTopLevelKeyDuplicates(filePath: string): Array<{ key: string; lin
  * @param keyToLines キー→出現行のマップ
  */
 function processTopLevelYamlLine(ln: string, idx: number, keyToLines: Map<string, number[]>): void {
+  // 空行やコメント行は対象外として読み飛ばす
   if (!ln || /^\s*$/.test(ln) || /^\s*#/.test(ln)) return;
+  // インデント付き行はトップレベルではないので除外する
   if (/^[\t\s]/.test(ln)) return;
   const m = ln.match(/^([A-Za-z0-9_\-]+)\s*:/);
+  // キーの抽出に失敗した行は非対象として終了する
   if (!m || typeof m[1] !== 'string') return;
   const key: string = m[1];
   const arr = keyToLines.get(key) ?? [];
@@ -572,16 +631,20 @@ function processTopLevelYamlLine(ln: string, idx: number, keyToLines: Map<string
 function buildDuplicateMessages(): string[] {
   const files = collectVarContextYamlFiles();
   const out: string[] = [];
+  // 各ファイルの重複状況を評価してメッセージを構築する
   for (const fp of files) {
     const dups = detectTopLevelKeyDuplicates(fp);
+    // 重複が無い場合は出力を抑制してノイズを避ける
     if (dups.length === 0) continue;
     const rel = normalizePathForOutput(path.relative(PROJECT_ROOT, fp));
     out.push(`[GATE] Duplicate top-level keys detected in ${rel}`);
+    // 重複キーの詳細を列挙して修正位置を明確に示す
     for (const d of dups) {
       out.push(` - key: ${d.key} @ lines ${d.lines.join(', ')}`);
     }
   }
 
+  // 1件以上の重複が検出された場合は共通アクションを追記する
   if (out.length > 0) {
     out.push('[GATE] Action: Merge into a single YAML document without repeating top-level keys.');
   }
@@ -595,11 +658,14 @@ function buildDuplicateMessages(): string[] {
  */
 function allTargetContextMdExist(): boolean {
   const targetDirs = collectTargetDirs();
+  // 各ユニットごとに context.md の存在を確認して整合性を判断する
   for (const srcDir of targetDirs) {
     const rel = path.relative(QUALITIES_DIR, srcDir);
     const destDir = path.join(OUTPUT_BASE, rel);
     const destMd = path.join(destDir, 'context.md');
+    // 存在確認の失敗や未作成は非整合として扱う
     try {
+      // context.md が存在しないユニットを検知したら不整合を返す
       if (!fs.existsSync(destMd)) {
         return false;
       }
@@ -621,8 +687,10 @@ function toAsciiPrintable(s: string): string {
     .replace(/[✓✔✅]/g, '[OK]')
     .replace(/[✗❌]/g, '[NG]');
   let out = '';
+  // 文字ごとに種別を判定して安全な表現へ変換する
   for (const ch of replaced) {
     const code = ch.codePointAt(0);
+    // ASCII 可視文字と制御の一部のみ許容しそれ以外をプレースホルダへ置換する
     if (code !== undefined && ((code >= ASCII_PRINTABLE_MIN && code <= ASCII_PRINTABLE_MAX) || ch === '\n' || ch === '\r' || ch === '\t')) {
       out += ch;
     } else {
@@ -638,12 +706,15 @@ function toAsciiPrintable(s: string): string {
  * @returns ファイルペアの配列
  */
 function findContextReviewPairs(): Array<{ contextMd: string; reviewMd: string }> {
+  // 監視ベースが存在しない場合は対象外として空配列を返す
   if (!fs.existsSync(OUTPUT_BASE)) return [];
   const files = listFilesRecursive(OUTPUT_BASE);
   const contextMds = files.filter((f) => path.basename(f) === 'context.md');
   const pairs: Array<{ contextMd: string; reviewMd: string }> = [];
+  // 各 context.md に対する隣接 review の有無を評価する
   for (const contextMd of contextMds) {
     const reviewMd = path.join(path.dirname(contextMd), 'context-review.md');
+    // review が存在する組だけを結果として返す
     if (fs.existsSync(reviewMd)) {
       pairs.push({ contextMd, reviewMd });
     }
@@ -657,6 +728,7 @@ function findContextReviewPairs(): Array<{ contextMd: string; reviewMd: string }
  * @param pairs 検出したペア
  */
 function emitReviewConflictMessages(pairs: Array<{ contextMd: string; reviewMd: string }>): void {
+  // 各ペアに対して衝突の詳細と対応方針を出力する
   for (const { contextMd, reviewMd } of pairs) {
     const ctx = normalizePathForOutput(path.relative(PROJECT_ROOT, contextMd));
     const rev = normalizePathForOutput(path.relative(PROJECT_ROOT, reviewMd));
@@ -688,19 +760,24 @@ function main(): void {
   const rubricViolation = checkRubric();
   const dupMsgs = buildDuplicateMessages();
   const dupViolation = dupMsgs.length > 0;
+  // 重複検出がある場合はメッセージを列挙して可視化する
   if (dupViolation) {
+    // 代表メッセージを順に出力してユーザー行動を案内する
     for (const m of dupMsgs) process.stdout.write(`${m  }\n`);
   }
 
   // Post-pass review detection: only run when other checks are satisfied
+  // 他の要件が満たされた場合に限りレビュー衝突を検査する
   if (mappings.length === 0 && !rubricViolation && !dupViolation) {
     const reviewPairs = findContextReviewPairs();
+    // レビューが存在する場合は統合作業を促して一時的に Fail とする
     if (reviewPairs.length > 0) {
       emitReviewConflictMessages(reviewPairs);
       process.exit(2);
     }
   }
 
+  // 重複のみ検出された場合は情報提示後に一時 Fail とする
   if (mappings.length === 0 && !rubricViolation && dupViolation) {
     // 重複のみで Fail（他の理由が無い場合）
     process.exit(2);
@@ -709,6 +786,7 @@ function main(): void {
   outputAndExit(startAt, mappings, rubricViolation);
 }
 
+// 実行全体の例外を捕捉して安定した失敗出力へ統一する
 try {
   main();
 } catch (e) {

@@ -54,6 +54,7 @@ export function runNode(
     let stdout = '';
     let stderr = '';
     const timer = setTimeout(() => {
+      // タイムアウト時に子プロセスを強制終了しリソースリークを防止する
       try { child.kill('SIGKILL'); } catch {}
     }, timeoutMs);
     child.stdout?.on('data', (d) => { stdout += String(d); });

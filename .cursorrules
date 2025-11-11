@@ -281,6 +281,11 @@ agent_phase:
         implementation_scope: "承認された SnD が参照するアーティファクト範囲に限定。"
         consent_source: "explicit_phrase"
         output_policy: "『IMPL フェーズに移行しました』等の単独アナウンスは行わず、ツール実行のマイクロ更新のみ許容。"
+  session:
+    # IMPL フェーズ中は承認ガイダンス/再承認プロンプトの再掲を抑止
+    suppress_reapproval_prompt_when: "current_phase == IMPL"
+    # 再承認プロンプトの作用範囲は SnD 単位（同一 SnD セッション中は再承認不要）
+    reapproval_prompt_scope: "per_snd"
 
 guardrails:
   edits:
@@ -425,6 +430,11 @@ chat_output_guards:
     gist_line: "コード出力は承認フェーズ外のため停止しました。"
     approval_hint_line: "承認は別チャットでも可。"
     guidance_line: "コード出力を許可する場合は『OUTPUT=CODE 承認』、実装着手は『PHASE=IMPL 承認: SnD=<path>』をチャット欄に送信してください。"
+  # IMPL 中の通常応答ではガイダンスを再掲しない（実際に中断が発生した場合のみ表示）
+  suppress_guidance_when: "current_phase == IMPL && !aborted"
+  # IMPL 中は再承認プロンプトを抑止（SnD 遷移直前のみ有効）
+  reapproval_prompt:
+    suppress_when_phase: ["IMPL"]
 
   # Sensitive values non-disclosure policy
   sensitive_values:

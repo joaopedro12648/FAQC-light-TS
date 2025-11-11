@@ -42,9 +42,11 @@ describe('ESLint rule (smoke): require-comment-previous-line-for-branches', () =
   it('exports rule meta and user-guiding messages', () => {
     expect(typeof ruleU).toBe('object');
     expect(hasMeta(ruleU)).toBe(true);
+    // meta の公開を確認できた場合のみメッセージ検証へ進める
     if (hasMeta(ruleU)) {
       const meta = (ruleU as { meta: unknown }).meta;
       expect(hasMessages(meta)).toBe(true);
+      // messages の存在時に文言がガイドとして適切かを確認する
       if (hasMessages(meta)) {
         const msg = (meta as { messages: Record<string, string> }).messages;
         expect(typeof msg.missingComment).toBe('string');

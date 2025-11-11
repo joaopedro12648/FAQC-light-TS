@@ -22,6 +22,7 @@ import { runNode } from '../framework/runNode';
 describe('policy: jsdoc_no_duplicate', () => {
   it('detects adjacent duplicates (NG) and passes when no duplicates (OK)', async () => {
     const tmp = createTmpDir();
+    // テスト用の一時ディレクトリを確実に片付け検証の独立性を保つ
     try {
       // 配置: YAML のみ参照されるのでコピー
       const srcYaml = path.join(process.cwd(), 'qualities', 'policy', 'baseline.yaml');

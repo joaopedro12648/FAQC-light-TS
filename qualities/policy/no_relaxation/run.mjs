@@ -21,10 +21,26 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { IGNORES as SOT_IGNORES } from '../../_shared/ignores.mjs';
 
 const PROJECT_ROOT = process.cwd();
 const TS_EXT_RX = /\.(ts|tsx|mts|cts)$/i;
-const SKIP_DIR_NAMES = new Set(['node_modules', 'dist', 'build', 'coverage', '.git']);
+/**
+ * SoT に基づく除外ディレクトリ名集合を生成（末端ディレクトリ名へ正規化）
+ * no_relaxation は tests 系を追加で除外する
+ */
+const SKIP_DIR_NAMES = (() => {
+  const names = new Set(
+    SOT_IGNORES
+      .map((p) => p.replace(/\/\*\*$/, ''))
+      .map((p) => p.replace(/^\.\//, ''))
+      .map((p) => p.split('/').pop())
+      .filter(Boolean)
+  );
+  names.add('tests');
+  names.add('_tests');
+  return names;
+})();
 
 /**
  * ディレクトリ以下のファイルを再帰的に列挙する。
@@ -34,18 +50,26 @@ const SKIP_DIR_NAMES = new Set(['node_modules', 'dist', 'build', 'coverage', '.g
 function listFilesRecursive(dir) {
   const files = [];
   const stack = [dir];
+  // スタックが空になるまでディレクトリを深さ優先で走査する
   while (stack.length) {
     const d = stack.pop();
+    // 無効値に遭遇した場合は探索を中断する
     if (!d) break;
     let entries;
+    // 読み取り失敗時は当該ディレクトリをスキップして継続する
     try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { continue; }
 
+    // エントリを順に評価し、対象のみを次段処理へ回す
     for (const e of entries) {
       const full = path.join(d, e.name);
+      // ディレクトリに遭遇したら子要素の探索を続行する
       if (e.isDirectory()) {
+        // 除外対象のディレクトリは走査から外す
         if (SKIP_DIR_NAMES.has(e.name)) continue;
+        // 次の探索対象としてスタックへ積む
         stack.push(full);
       } else if (e.isFile()) {
+        // 検査対象ファイルとして追加する
         files.push(full);
       }
     }
@@ -69,10 +93,14 @@ const patterns = [
 function scanFile(fp) {
   const content = fs.readFileSync(fp, 'utf8');
   const hits = [];
+  // 禁止ディレクティブのパターン集合を走査して一致した行位置を収集する
   for (const rx of patterns) {
+    // 対象パターンがファイル全体に含まれる場合のみ行単位で精査する
     if (rx.test(content)) {
       const lines = content.split(/\r?\n/g);
+      // 各行を検査して一致箇所を収集する
       lines.forEach((line, i) => {
+        // 該当ディレクティブの一致行を検出し、行番号付きのヒットとして記録する
         if (rx.test(line)) hits.push({ line: i + 1, text: line.trim() });
       });
     }
@@ -88,20 +116,25 @@ function scanFile(fp) {
 function main() {
   const violations = [];
   const files = listFilesRecursive(PROJECT_ROOT).filter((f) => TS_EXT_RX.test(f));
+  // 対象ファイルを順に検査して緩和ディレクティブの出現を収集する
   for (const fp of files) {
     const hits = scanFile(fp);
+    // ヒットが存在するファイルのみ違反として記録する
     if (hits.length > 0) {
       violations.push({ file: path.relative(PROJECT_ROOT, fp), hits });
     }
   }
 
+  // 違反が無ければ正常終了としてメッセージを出力する
   if (violations.length === 0) {
     process.stdout.write('[policy:no_relaxation] OK: no relaxations found in TS/**\n');
     process.exit(0);
   }
 
   process.stderr.write('[policy:no_relaxation] NG: relaxations found in TS/**\n');
+  // 違反ファイルと該当行を列挙して改善箇所を提示する
   for (const v of violations) {
+    // 各ファイル内のヒット行を順に表示する
     for (const h of v.hits) {
       process.stderr.write(`${v.file}:${h.line}: ${h.text}\n`);
     }
@@ -110,6 +143,7 @@ function main() {
   process.exit(1);
 }
 
+// 実行時の想定外例外を捕捉し明示的に異常終了コードを返す
 try { main(); } catch (e) {
   process.stderr.write(`[policy:no_relaxation] fatal: ${String((e?.message) || e)}\n`);
   process.exit(2);

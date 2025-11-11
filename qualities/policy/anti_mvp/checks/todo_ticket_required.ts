@@ -29,19 +29,24 @@ import type { CheckFn, PolicyConfig, Violation } from '../types';
 export const run: CheckFn = (rootDir: string, cfg: PolicyConfig) => {
   const ruleId = 'todo_ticket_required';
   const rule = cfg.checks?.todo_ticket_required;
+  // 設定が無ければ空配列を返す
   if (!rule || !rule.regex) return [];
   const paths = rule.paths && rule.paths.length > 0 ? rule.paths : ['**/*.{ts,tsx,mts,cts}'];
   const files = globFiles(rootDir, paths);
   const regex = new RegExp(rule.regex, 'i');
   const violations: Violation[] = [];
 
+  // すべての対象ファイルを走査する
   for (const rel of files) {
     const abs = toAbs(rootDir, rel);
     const text = readText(abs);
     const lines = text.split(/\r?\n/);
+    // 各行を順に確認する
     for (let i = 0; i < lines.length; i += 1) {
       const lineText = lines[i];
+      // 該当行を違反として記録する
       if (lineText === undefined) continue;
+      // 正規表現に一致した行を違反として記録する
       if (regex.test(lineText)) {
         violations.push({
           ruleId,

@@ -42,10 +42,12 @@ describe('ESLint rule (smoke): header-bullets-min', () => {
   it('exports rule meta and messages', () => {
     expect(typeof ruleU).toBe('object');
     expect(hasMeta(ruleU)).toBe(true);
+    // meta の公開を確認できた場合のみ詳細検証を行う
     if (hasMeta(ruleU)) {
       expect(ruleU.meta).toBeTruthy();
       const meta = (ruleU as { meta: unknown }).meta;
       expect(hasMessages(meta)).toBe(true);
+      // messages の存在時に個別メッセージの内容を検証する
       if (hasMessages(meta)) {
         const msg = (meta as { messages: Record<string, string> }).messages;
         expect(typeof msg.missingSnd).toBe('string');

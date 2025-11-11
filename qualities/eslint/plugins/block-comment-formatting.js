@@ -15,7 +15,6 @@
  */
 
 /**
- 
  * 対象が JSDoc 風のブロックコメントかを判定する。
  * @param {import('eslint').AST.Token | import('estree').Comment} node コメントトークン（または ESTree コメント）
  * @returns {boolean} 先頭が `*` のブロックコメントなら true
@@ -32,6 +31,7 @@ function isJsDocBlock(node) {
 function detectInlineFirstLine(fullText) {
   // fullText は例えば "/** hoge\n * piyo\n 。*/"
   const firstNewline = fullText.indexOf('\n');
+  // 単一行ブロックは整形対象外とし以降の処理を省く
   if (firstNewline === -1) {
     // 1行コメント（単一行）なので対象外
     return { hasInlineFirstLine: false, inlineText: '', beforeInline: '' };
@@ -81,14 +81,18 @@ export const ruleBlockCommentFormatting = {
     return {
       Program() {
         const comments = sourceCode.getAllComments();
+        // 全コメントを走査し JSDoc ブロックのみを整形候補とする
         for (const c of comments) {
+          // JSDoc 風（先頭が *）以外は対象外としてスキップする
           if (!isJsDocBlock(c)) continue;
 
           const full = sourceCode.getText(c);
           const hasNewline = full.includes('\n');
+          // 改行の無い単一行 JSDoc は対象外（整形不要）
           if (!hasNewline) continue; // 単一行は対象外
 
           const { hasInlineFirstLine, inlineText } = detectInlineFirstLine(full);
+          // 開幕行に本文が無い場合は整形不要としてスキップする
           if (!hasInlineFirstLine) continue;
 
           const indent = getIndent(text, c.range[0]).replace(/[^\t ]/g, ''); // 非空白混入防止で保守的に
@@ -101,6 +105,7 @@ export const ruleBlockCommentFormatting = {
               // full = "/**" + afterOpen + remainder
               const openIdx = full.indexOf('/**');
               const firstNewline = full.indexOf('\n');
+              // 想定外の形式（開幕や改行が無い）は安全のため修正を行わない
               if (openIdx !== 0 || firstNewline === -1) return null;
 
               const before = full.slice(0, 3); // "/**"
@@ -140,9 +145,11 @@ export const blockCommentFormattingPlugin = {
         return {
           Program() {
             const comments = sourceCode.getAllComments();
+            // すべてのコメントを調べ、内容の無いものを検出する
             for (const c of comments) {
-              // Line comment: "//   "
+              // 空の行コメントは違反として報告する
               if (c.type === 'Line') {
+                // 空の行コメントを検出して無意味な記述の混入を防ぐ
                 if (typeof c.value === 'string' && c.value.trim().length === 0) {
                   context.report({ loc: c.loc, messageId: 'emptyLine' });
                 }
@@ -151,6 +158,7 @@ export const blockCommentFormattingPlugin = {
               }
 
               // Block comment (/* ... */ or /** ... 。*/)
+              // ブロックコメントが空内容かを正規化して検査する
               if (c.type === 'Block' && typeof c.value === 'string') {
                 const raw = c.value;
                 const isJsdoc = raw.startsWith('*');
@@ -159,6 +167,7 @@ export const blockCommentFormattingPlugin = {
                   .split(/\r?\n/)
                   .map((ln) => ln.replace(/^\s*\*?/, '').trim())
                   .join('');
+                // ブロック/JSdoc が実質的に空なら指摘して理解を妨げないようにする
                 if (normalized.length === 0) {
                   context.report({ loc: c.loc, messageId: isJsdoc ? 'emptyJsdoc' : 'emptyBlock' });
                 }
@@ -202,6 +211,7 @@ export const blockCommentFormattingPlugin = {
  * @returns {boolean} 空でなければ true（装飾を除去して非空か）
  */
         function isMeaningfulComment(c) {
+          // 無効なコメントは非意味として扱う
           if (!c || typeof c.value !== 'string') return false;
           const text = String(c.value).replace(/^\s*\*?\s*/gm, '').trim();
           return text.length > 0;
@@ -230,9 +240,11 @@ export const blockCommentFormattingPlugin = {
 
         return {
           CallExpression(node) {
+            // describe 以外の呼び出しは対象外として早期リターンする
             if (!isDescribeCall(node)) return;
             const last = getLastPrecedingComment(node);
             const ok = last && isAdjacent(last, node) && isMeaningfulComment(last);
+            // 直前に意味のあるコメントが無ければテスト意図の説明不足として報告する
             if (!ok) {
               context.report({ node, messageId: 'missing' });
             }

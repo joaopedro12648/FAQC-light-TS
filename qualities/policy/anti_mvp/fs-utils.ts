@@ -29,17 +29,24 @@ import * as path from 'node:path';
  */
 export const globFiles = (rootDir: string, patterns: readonly string[]): string[] => {
   const results: string[] = [];
+  // 各パターンを順に評価する
   for (const pattern of patterns) {
+    // src 配下の .ts を列挙する
     if (pattern === 'src/**/*.ts') {
+      // 列挙結果を相対パスへ変換して追加する
       for (const rel of listAllTsUnder(path.join(rootDir, 'src'))) {
         results.push(path.relative(rootDir, rel));
       }
+    // どの階層の src 直下でも .ts を列挙する
     } else if (pattern === '**/src/**/*.ts') {
+      // 列挙結果を相対パスへ変換して追加する
       for (const rel of listAllTsUnderAnySrc(rootDir)) {
         results.push(path.relative(rootDir, rel));
       }
+    // 単一ファイル指定に対応する
     } else if (pattern.endsWith('.ts')) {
       const abs = path.join(rootDir, pattern);
+      // 存在しファイルであれば結果へ追加する
       if (fs.existsSync(abs) && fs.statSync(abs).isFile()) {
         results.push(path.relative(rootDir, abs));
       }
@@ -56,12 +63,17 @@ export const globFiles = (rootDir: string, patterns: readonly string[]): string[
  */
 const listAllTsUnder = (dirAbs: string): string[] => {
   const out: string[] = [];
+  // ディレクトリが無ければ空配列を返す
   if (!fs.existsSync(dirAbs)) return out;
   const entries = fs.readdirSync(dirAbs, { withFileTypes: true });
+  // ディレクトリ配下を走査する
   for (const entry of entries) {
     const abs = path.join(dirAbs, entry.name);
+    // サブディレクトリは再帰して収集する
     if (entry.isDirectory()) {
+      // 再帰で得たパスを結果へ追加する
       for (const nested of listAllTsUnder(abs)) out.push(nested);
+    // .ts ファイルを結果へ追加する
     } else if (entry.isFile() && entry.name.endsWith('.ts')) {
       out.push(abs);
     }
@@ -80,18 +92,26 @@ const listAllTsUnderAnySrc = (rootDir: string): string[] => {
   const out: string[] = [];
   const IGNORES = new Set(['node_modules', 'dist', 'build', 'coverage', '.git', 'tmp']);
   const walk = (dirAbs: string) => {
+    // ディレクトリが無ければ終了する
     if (!fs.existsSync(dirAbs)) return;
     const entries = fs.readdirSync(dirAbs, { withFileTypes: true });
+    // すべてのエントリを走査する
     for (const entry of entries) {
       const name = entry.name;
       const abs = path.join(dirAbs, name);
+      // ディレクトリのみを対象に処理する
       if (entry.isDirectory()) {
+        // 無視対象はスキップする
         if (IGNORES.has(name)) continue;
+        // scripts/tmp はスキップする
         if (name === 'scripts' && fs.existsSync(path.join(abs, 'tmp'))) continue;
+        // src 直下の .ts を列挙して追加する
         if (name === 'src') {
+          // src 直下の .ts を巡回して結果へ追加する
           for (const file of listAllTsUnder(abs)) out.push(file);
         }
 
+        // サブディレクトリへ降りる
         walk(abs);
       }
     }

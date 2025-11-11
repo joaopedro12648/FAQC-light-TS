@@ -28,20 +28,27 @@
 function collectTypedefs(sourceCode) {
   const typedefs = [];
   const comments = sourceCode.getAllComments();
+  // 全コメントを調べ typedef 情報を抽出する
   for (const c of comments) {
+    // ブロックコメントのみを解析対象に限定して誤検知を防ぐ
     if (c.type !== 'Block') continue;
     const raw = typeof c.value === 'string' ? c.value : '';
+    // JSDoc形式のコメントに限定して@typedef/@property検出の精度を保つ
     if (!raw.startsWith('*')) continue; // JSDoc 風のみ
     const lines = raw.split(/\r?\n/).map((ln) => ln.replace(/^\s*\*?\s?/, ''));
     // @typedef {Object} NameOptions
     const tdIdx = lines.findIndex((ln) => /@typedef\s+\{Object\}\s+\S+Options\b/.test(ln));
+    // typedef 宣言が無い場合は以降の解析を打ち切って無駄を避ける
     if (tdIdx === -1) continue;
     const m = lines[tdIdx].match(/@typedef\s+\{Object\}\s+(\S+Options)\b/);
+    // 正規表現で名前が取得できない異常ケースはスキップする
     if (!m) continue;
     const name = m[1];
     const properties = new Set();
+    // @property 行からプロパティ名を収集する
     for (const ln of lines.slice(tdIdx + 1)) {
       const pm = ln.match(/@property\s+\{[^}]+\}\s+\[?(\w+)/);
+      // @property が検出された行のみを対象に集合へ登録する
       if (pm) properties.add(pm[1]);
     }
 
@@ -58,8 +65,10 @@ function collectTypedefs(sourceCode) {
  * @returns {Set<string>} properties のキー集合（未検出時は空セット）
  */
 function extractSchemaPropertyKeys(ast) {
+  // エクスポート変数宣言を走査し schema 情報を探索する
   for (const d of getExportedVariableDeclarators(ast)) {
     const keys = extractSchemaKeysFromInit(d.init);
+    // 最初に検出した schema.properties を採用して不要な探索を避ける
     if (keys.size > 0) return keys;
   }
 
@@ -76,6 +85,7 @@ function getObjectPropertyObjectValue(obj, name) {
   const prop = obj.properties.find(
     (p) => p.type === 'Property' && p.key && p.key.type === 'Identifier' && p.key.name === name
   );
+  // 該当プロパティが存在しない/型不一致のときは安全に打ち切る
   if (!prop || prop.type !== 'Property') return null;
   return prop.value && prop.value.type === 'ObjectExpression' ? prop.value : null;
 }
@@ -90,8 +100,10 @@ function getFirstArrayElementObject(obj, name) {
   const prop = obj.properties.find(
     (p) => p.type === 'Property' && p.key && p.key.type === 'Identifier' && p.key.name === name
   );
+  // 配列でない/空配列の場合は解析不能として終了する
   if (!prop || prop.type !== 'Property') return null;
   const arr = prop.value;
+  // 最初の要素が存在しないケースを除外して堅牢性を高める
   if (!arr || arr.type !== 'ArrayExpression' || arr.elements.length === 0) return null;
   const first = arr.elements[0];
   return first && first.type === 'ObjectExpression' ? first : null;
@@ -106,10 +118,14 @@ function extractSchemaKeysFromInit(init) {
   const out = new Set();
 
   const props = resolvePropertiesObjectFromInit(init);
+  // properties オブジェクトが未検出の場合は空集合を返して後段を単純化する
   if (!props) return out;
 
+  // schema.properties のキーを列挙して集合化する
   for (const p of props.properties) {
+    // Property ノードのみを対象にする
     if (p && p.type === 'Property') {
+      // Identifier キーを集合へ追加する
       if (p.key.type === 'Identifier') out.add(p.key.name);
       else if (p.key.type === 'Literal' && typeof p.key.value === 'string') out.add(p.key.value);
     }
@@ -124,12 +140,16 @@ function extractSchemaKeysFromInit(init) {
  * @returns {import('estree').ObjectExpression|null} properties オブジェクト or null
  */
 function resolvePropertiesObjectFromInit(init) {
+  // 期待構造ではない初期化子は早期に除外して安全に探索する
   if (!init || init.type !== 'ObjectExpression') return null;
   const metaObj = getObjectPropertyObjectValue(init, 'meta');
+  // meta セクションが無い場合は探索を終了して想定外構造への誤解析を防ぐ
   if (!metaObj) return null;
   const firstSchemaObj = getFirstArrayElementObject(metaObj, 'schema');
+  // schema 配列の先頭要素が不在のときは打ち切る
   if (!firstSchemaObj) return null;
   const propertiesObj = getObjectPropertyObjectValue(firstSchemaObj, 'properties');
+  // properties が無い場合は探索を終了して以降の処理を単純化する
   if (!propertiesObj) return null;
 
   return propertiesObj;
@@ -143,14 +163,18 @@ function resolvePropertiesObjectFromInit(init) {
 function getExportedVariableDeclarators(program) {
   /** @type {import('estree').VariableDeclarator[]} */
   const out = [];
+  // プログラム直下の宣言からエクスポートされた定数宣言を収集する
   for (const node of program.body) {
+    // エクスポートされた変数宣言に限定して解析対象を抽出する
     if (
       node &&
       node.type === 'ExportNamedDeclaration' &&
       node.declaration &&
       node.declaration.type === 'VariableDeclaration'
     ) {
+      // 変数宣言の各宣言子を走査して対象を抽出する
       for (const d of node.declaration.declarations || []) {
+        // 宣言子が変数宣言である場合のみ収集する
         if (d && d.type === 'VariableDeclarator') out.push(d);
       }
     }
@@ -185,12 +209,18 @@ function requiresOptionsTypedefForGeneralJs(ast) {
    * @returns {boolean} options 形状なら true
    */
   function checkDeclaration(decl) {
+    // 関数宣言の第1引数が options 形状かを判定する
     if (decl.type === 'FunctionDeclaration') return isOptionsLike(decl.params || []);
+    // 変数宣言を対象に関数式/アロー関数の引数形状を確認する
     if (decl.type === 'VariableDeclaration') {
+      // 変数宣言内の関数式/アロー関数の引数形状を確認する
       for (const d of decl.declarations) {
         const init = d.init;
+        // 初期化子が無い宣言は除外して無駄な判定を避ける
         if (!init) continue;
+        // 関数系初期化子に限定し引数が options 形状なら要求対象とする
         if (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression') {
+          // 第1引数が options 形状なら typedef を要求対象とする
           if (isOptionsLike(init.params || [])) return true;
         }
       }
@@ -199,10 +229,15 @@ function requiresOptionsTypedefForGeneralJs(ast) {
     return false;
   }
 
+  // エクスポート宣言のみを対象に走査する
   for (const node of ast.body) {
+    // 未定義ノードは安全にスキップする
     if (!node) continue;
+    // export 以外を除外し不要な解析を避ける
     if (node.type !== 'ExportNamedDeclaration' && node.type !== 'ExportDefaultDeclaration') continue;
+    // 再エクスポート等の宣言不在ケースを除外する
     if (!node.declaration) continue;
+    // 該当宣言が options 形状を受ける場合に typedef 要求を有効化する
     if (checkDeclaration(node.declaration)) return true;
   }
 
@@ -253,8 +288,10 @@ export const ruleRequireOptionsTypedef = {
 
     return {
       'Program:exit'() {
-        // 1) ESLint プラグイン実装: schema.properties があるなら typedef 必須 + keys を包含
+        // ESLint プラグイン実装に対して typedef の厳格な整合性を求める
+        // ローカルプラグイン実装では schema.properties と typedef の整合性を厳密検査する
         if (isPluginFile && schemaKeys.size > 0) {
+          // typedef が無い場合は即時に不足を報告する
           if (typedefs.length === 0) {
             context.report({ loc: { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } }, messageId: 'missingTypedef' });
             return;
@@ -262,6 +299,7 @@ export const ruleRequireOptionsTypedef = {
           // 欠損キーを列挙
 
           const missing = Array.from(schemaKeys).filter((k) => !typedefProps.has(k));
+          // schema キー集合を typedef が包含していない場合に不足を明確化する
           if (missing.length > 0) {
             context.report({
               loc: { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } },
@@ -273,9 +311,10 @@ export const ruleRequireOptionsTypedef = {
           return;
         }
 
-        // 2) 一般 JS/MJS（段階導入用、config で warn/error を選択）
+        // 一般 JS に段階導入する際のモードに応じて検査を有効化する
         if (generalMode !== 'off') {
           const needs = requiresOptionsTypedefForGeneralJs(ast);
+          // options 形状を受けるが typedef が無い一般 JS に対して報告する
           if (needs && typedefs.length === 0) {
             context.report({ loc: { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } }, messageId: 'generalMissing' });
           }

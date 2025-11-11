@@ -22,6 +22,7 @@ import { runNode } from '../framework/runNode';
 describe('policy: comment_locale', () => {
   it('fails on ASCII-only JSDoc with ja locale and passes when non-ASCII present', async () => {
     const tmp = createTmpDir();
+    // 一時環境の作成と破棄を確実に行い副作用を隔離する
     try {
       // NG: ASCII のみの JSDoc（タグ行やパス/URL行ではない本文を用意）
       const asciiOnly = [
@@ -49,6 +50,7 @@ describe('policy: comment_locale', () => {
       expect(ng.stderr).toMatch(/\[policy:comment_locale\] NG/);
 
       // OK 検証前に NG ファイルを削除してクリーンな状態にする
+      // 直前に失敗ファイルを除去し検証条件を独立させる
       try { await runNode('node', ['-e', `"require('node:fs').rmSync('${path.join(tmp, 'ng.ts').replace(/\\/g, '\\\\')}',{force:true})"`]); } catch {}
 
       // OK: 日本語（非ASCII）を含む JSDoc

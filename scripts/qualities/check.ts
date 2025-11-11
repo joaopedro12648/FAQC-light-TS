@@ -40,7 +40,9 @@ function runCommand(command: string, args: readonly string[]): Promise<void> {
 
     child.on('error', (error) => reject(error));
     child.on('exit', (code, signal) => {
+      // シグナル終了はエラーとして扱う
       if (signal) return reject(new Error(`${command} terminated by signal: ${String(signal)}`));
+      // 非0終了はエラーとして扱う
       if (code !== 0) return reject(new Error(`${command} ${args.join(' ')} exited with code ${String(code ?? -1)}`));
       resolve();
     });
@@ -69,11 +71,13 @@ const selectedSteps = isFast
  * @returns {string[]} Lint 対象の変更ファイルパス配列
  */
 function getChangedFilesForLint(): string[] {
+  // Git の変更一覧を取得する
   try {
     const res = spawnSync('git', ['diff', '--name-only', '--diff-filter=ACM', 'HEAD'], {
       shell: true,
       encoding: 'utf8',
     });
+    // 取得に失敗した場合は空配列を返す
     if (res.status !== 0 || !res.stdout) return [];
     const candidates = res.stdout
       .split(/\r?\n/)
@@ -93,11 +97,13 @@ function getChangedFilesForLint(): string[] {
  * @returns {string[] | null} 変更パス一覧（失敗時は null）
  */
 function getChangedPathsRaw(): string[] | null {
+  // Git の変更一覧を取得する
   try {
     const res = spawnSync('git', ['diff', '--name-only', 'HEAD'], {
       shell: true,
       encoding: 'utf8',
     });
+    // 取得に失敗した場合は null を返す
     if (res.status !== 0 || !res.stdout) return null;
     const candidates = res.stdout
       .split(/\r?\n/)
@@ -118,17 +124,22 @@ function getChangedPathsRaw(): string[] | null {
  */
 function traverseUpdatedNewerThan(dir: string, thresholdMs: number): boolean {
   const stat = statSync(dir);
+  // ディレクトリは子要素を走査して更新を探す
   if (stat.isDirectory()) {
     const entries = readdirSync(dir);
+    // すべてのエントリを順に評価する
     for (const name of entries) {
+      // 無視ディレクトリはスキップする
       if (name === 'node_modules' || name.startsWith('.git')) continue;
       const next = path.join(dir, name);
+      // 子に更新があれば直ちに true を返す
       if (traverseUpdatedNewerThan(next, thresholdMs)) return true;
     }
 
     return false;
   }
 
+  // ファイルは更新時刻で判定する
   if (stat.isFile()) {
     return stat.mtime.getTime() > thresholdMs;
   }
@@ -144,9 +155,12 @@ function traverseUpdatedNewerThan(dir: string, thresholdMs: number): boolean {
  * @returns {boolean} 新しいファイルがあれば true
  */
 function hasFilesUpdatedAfter(rootDir: string, thresholdIso: string): boolean {
+  // 日付の解釈や走査で例外が発生しても安全側で false を返して続行する
   try {
     const threshold = new Date(thresholdIso).getTime();
+    // しきい値が不正なら検出なし
     if (Number.isNaN(threshold)) return false;
+    // ルートが存在しなければ検出なし
     if (!existsSync(rootDir)) return false;
     return traverseUpdatedNewerThan(rootDir, threshold);
   } catch {
@@ -170,16 +184,21 @@ export function evaluateShouldRunInternalTests(params: {
   anyUpdatedSince: boolean | null;
 }): boolean {
   const { vibecodingExists, changedPaths, lastUpdatedIso, anyUpdatedSince } = params;
+  // ディレクトリが無ければ実行しない
   if (!vibecodingExists) return false;
+  // Git 差分が取得できていれば優先判定する
   if (Array.isArray(changedPaths)) {
     const hit = changedPaths.some((p) =>
       p.startsWith('vibecoding/scripts/') || p.startsWith('vibecoding/tests/')
     );
+    // 対象変更が含まれる場合は実行する
     if (hit) return true;
   }
 
+  // last_updated が不明なら安全側で実行する
   if (lastUpdatedIso == null) return true; // 無い/読めない → 安全側 true
   if (lastUpdatedIso.trim() === '') return true; // 空 → 安全側 true
+  // 更新有無が不明なら実行しない
   if (anyUpdatedSince == null) return false; // 判定不能は消極的（git なし・last_updated ありのときは別経路で true 測る）
   return anyUpdatedSince;
 }
@@ -196,19 +215,23 @@ export function evaluateShouldRunInternalTests(params: {
 export function shouldRunInternalTests(): boolean {
   // vibecoding ディレクトリが無い場合は実行しない（存在条件）
   const vibecodingExists = existsSync('vibecoding');
+  // ディレクトリ非存在時は内製テストをスキップする
   if (!vibecodingExists) return false;
 
   // 優先1: Git 差分
   const changed = getChangedPathsRaw();
+  // 差分が取得できた場合は対象変更の有無で早期判定する
   if (Array.isArray(changed)) {
     const hit = changed.some((p) =>
       p.startsWith('vibecoding/scripts/') || p.startsWith('vibecoding/tests/')
     );
+    // 対象変更が含まれる場合は内製テストの追加実行を即時に有効化する
     if (hit) return true;
   }
 
   // 優先2: last_updated フォールバック
   const lastUpdatedPath = path.join('vibecoding', 'var', 'contexts', 'qualities', 'last_updated');
+  // 読み取り失敗時はフォールバック判定に切り替える
   try {
     const isoRaw = readFileSync(lastUpdatedPath, { encoding: 'utf8' });
     const iso = isoRaw.trim();
@@ -238,17 +261,23 @@ export function shouldRunInternalTests(): boolean {
  */
 function hasInternalTestFiles(): boolean {
   const base = path.join('vibecoding', 'tests');
+  // テストベースが無ければ探索不要とする
   if (!existsSync(base)) return false;
   const stack: string[] = [base];
+  // 未処理のパスが尽きるまで深さ優先で走査する
   while (stack.length > 0) {
     const current = stack.pop() as string;
     const st = statSync(current);
+    // ディレクトリなら子要素を列挙して走査を継続する
     if (st.isDirectory()) {
+      // 子要素を順に取り出して検査対象のキューへ積む
       for (const name of readdirSync(current)) {
+        // 無視対象のディレクトリは探索から除外する
         if (name === 'node_modules' || name.startsWith('.git')) continue;
         stack.push(path.join(current, name));
       }
     } else if (st.isFile()) {
+      // テストファイルの拡張子に一致する場合のみ存在確認の真を返す
       if (/\.(test|spec)\.(c|m)?[jt]sx?$/.test(current)) {
         return true;
       }
@@ -264,16 +293,23 @@ function hasInternalTestFiles(): boolean {
  * - 内製テスト vibecoding/tests/** は選択的に追加実行
  */
 export async function runQualityGate(): Promise<void> {
+  // 定義されたステップを順に実行する
   for (const step of selectedSteps) {
     const { id, command: cmd, args } = step;
+    // build ステップはインデックスが無い場合にスキップする
     if (id === 'build') {
+      // 静的資産のビルド対象が存在しない場合は build を省略する
       if (!existsSync('index.html')) {
         continue;
       }
     }
 
+    // lint は選択的に処理する
+    // 差分限定 lint を優先して実行し、処理した場合は次ステップへ進む
     if (id === 'lint' && (await handleLintStep(scope))) continue;
+    // test は内製テストの追加入り口を持つ
     if (id === 'test') {
+      // 既定のテスト実行が済んだら内製テストの追加実行要否を判定する
       if (await handleTestStep(cmd, args)) continue;
     }
 
@@ -288,8 +324,10 @@ export async function runQualityGate(): Promise<void> {
  * @returns {Promise<boolean>} 処理した場合は true（ループ側で continue する）
  */
 async function handleLintStep(scope: string): Promise<boolean> {
+  // 差分限定指定以外ではこのハンドラでは処理しない（上位に委ねる）
   if (!(scope === 'changed')) return false;
   const changed = getChangedFilesForLint();
+  // 変更差分が無い場合は full lint にフォールバックする
   if (changed.length === 0) {
     process.stdout.write('[lint] --scope=changed: 対象ファイルが無いため full lint にフォールバック\n');
     await runCommand('npm', ['run', 'lint', '--silent']);
@@ -317,12 +355,16 @@ async function handleLintStep(scope: string): Promise<boolean> {
  */
 async function handleTestStep(cmd: string, args: readonly string[]): Promise<boolean> {
   await runCommand(cmd, args);
+  // 内製テストの追加実行可否を評価して必要なら続けて実行する
   if (shouldRunInternalTests()) {
+    // vibecoding ディレクトリがある場合のみ内製テストの探索を行う
     if (existsSync('vibecoding')) {
+      // テストファイルが存在する場合に限定して実行する
       if (hasInternalTestFiles()) {
         process.stdout.write('[test] vibecoding/ 変更あり: 内製テストを追加実行します\n');
         // 一時的な Vitest 設定で include を vibecoding/** に限定して実行
         const tmpDir = path.join(process.cwd(), 'tmp');
+        // 一時ディレクトリの作成は失敗しても後続に影響しないようにする
         try { mkdirSync(tmpDir, { recursive: true }); } catch {}
 
         const internalCfg = path.join('tmp', 'vitest.internal.config.cjs');
@@ -336,6 +378,7 @@ async function handleTestStep(cmd: string, args: readonly string[]): Promise<boo
           '});',
           '',
         ].join('\n');
+        // 一時設定ファイルの書き込みは失敗しても続行する
         try { writeFileSync(internalCfg, cfgContent, 'utf8'); } catch {}
 
         await runCommand('npx', ['vitest', 'run', '--config', internalCfg, '--silent']);
@@ -354,8 +397,11 @@ async function handleTestStep(cmd: string, args: readonly string[]): Promise<boo
 
 /** このファイルが直接起動されたかの判定（ユニットテストからの import を除外） */
 const isMain = (() => {
+  // 実行判定の決定は失敗しても安全側（false）に倒す
   try {
+    // 呼び出しパスが不明な場合は直接起動ではないと判定して安全側に倒す
     const arg1 = typeof process.argv[1] === 'string' ? process.argv[1] : null;
+    // 直接起動の判定ができない場合は意図的に実行を抑止して安全側へ倒す
     if (!arg1) return false;
     const invokedHref = pathToFileURL(arg1).href;
     return import.meta.url === invokedHref;
@@ -364,6 +410,7 @@ const isMain = (() => {
   }
 })();
 
+// ライブラリとしての import 時は実行せず、直接起動されたときのみゲートを起動する
 if (isMain) {
   // 明示的エントリポイントとして起動されたときのみ実行（ユニットテストの import では実行しない）
   runQualityGate().catch((e) => {

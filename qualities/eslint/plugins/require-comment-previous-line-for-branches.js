@@ -46,9 +46,12 @@ const ENTRY_PAIRS = [
 function buildListeners(targets, ignoreCatch, checkFn) {
   /** @type {import('eslint').Rule.RuleListener} */
   const listeners = {};
+  // 登録対象のノード種別を走査し、各キーワードに対応するリスナーを生成する
   for (const [nodeType, kw] of ENTRY_PAIRS) {
     listeners[nodeType] = (n) => {
+      // 設定で対象外のキーワードは早期リターンして無駄な検査を避ける
       if (!targets.has(kw)) return;
+      // try/catch/finally のうち catch/finally を免除したい場合に try のみ検査対象とする
       if (kw === 'try' && ignoreCatch) {
         // try のみ検査（catch/finally は別ノードで無視される）
       }
@@ -66,6 +69,7 @@ function buildListeners(targets, ignoreCatch, checkFn) {
  * @returns {boolean} ディレクティブなら true
  */
 function isDirectiveComment(c) {
+  // 直前コメントが ESLint/ツール系ディレクティブかを判別し除外対象とする
   const v = typeof c?.value === 'string' ? c.value.trim() : '';
   // eslint, istanbul, ts-nocheck 等の抑止・ツール系を除外
   return /^eslint[-\s]/i.test(v) || /^istanbul\b/i.test(v) || /^ts-(?:check|nocheck)\b/i.test(v);
@@ -78,9 +82,12 @@ function isDirectiveComment(c) {
  * @returns {any|null} コメント or null
  */
 function getLastMeaningfulComment(src, node) {
+  // 対象ノード直前側に存在するコメント列から最後の意味のあるコメントを取得する
   const arr = typeof src.getCommentsBefore === 'function' ? src.getCommentsBefore(node) : [];
+  // 直前側のコメント列を後ろから走査し、最後の意味のあるコメントを特定する
   for (let i = arr.length - 1; i >= 0; i -= 1) {
     const c = arr[i];
+    // ディレクティブ以外の説明的コメントのみを直前コメントとして採用する
     if (!isDirectiveComment(c)) return c;
   }
 
@@ -96,17 +103,20 @@ function getLastMeaningfulComment(src, node) {
  */
 function hasRequiredPreviousComment(src, node, allowBlank) {
   const last = getLastMeaningfulComment(src, node);
+  // 直前コメントが存在しない場合は即不適合とする
   if (!last) return { ok: false, last: null };
 
   const nodeLine = node.loc.start.line;
   const lastEndLine = last.loc.end.line;
 
+  // 空行を不許可とする既定では直前行のみを許す
   if (!allowBlank) {
     return { ok: lastEndLine === nodeLine - 1, last };
   }
 
   // 空行許容だが、コメントとノードの間にコードトークンは不可
   const tokensBetween = src.getTokensBetween(last, node, { includeComments: false });
+  // コメントと対象ノードの間に実コードが存在する場合は不適合とする
   const hasCodeBetween = tokensBetween.some(
     (t) => t.loc.start.line > lastEndLine && t.loc.end.line < nodeLine
   );
@@ -120,6 +130,7 @@ function hasRequiredPreviousComment(src, node, allowBlank) {
  * @returns {boolean} 適合なら true
  */
 function matchesPattern(text, re) {
+  // パターン未指定時は常に適合とみなし、指定時のみ厳密に検査する
   if (!re) return true;
   const s = (text || '').trim();
   return re.test(s);
@@ -183,6 +194,7 @@ export const ruleRequireCommentPreviousLineForBranches = {
      * @returns {boolean} else-if の alternate なら true
      */
     function isElseIfAlternate(node) {
+      // IfStatement の alternate が IfStatement の場合を else-if として判定する
       return (
         node &&
         node.type === 'IfStatement' &&
@@ -200,6 +212,7 @@ export const ruleRequireCommentPreviousLineForBranches = {
      */
     function check(node, kw) {
       // else if の免除
+      // else-if は構造的に直前の if に従属するため本ルールの対象外とする
       if (ignoreElseIf && isElseIfAlternate(node)) {
         return;
       }
@@ -207,13 +220,16 @@ export const ruleRequireCommentPreviousLineForBranches = {
       // catch/finally は免除（try のみ検査）。ここでは try ノードのみ来るようにリスナーを定義
 
       const { ok, last } = hasRequiredPreviousComment(src, node, allowBlank);
+      // 直前コメントが無ければ意図説明不足として報告する
       if (!ok) {
         context.report({ node, messageId: 'missingComment', data: { kw } });
         return;
       }
 
+      // ロケールに応じた本文パターンの適合を確認する
       if (tagRe && last) {
         const text = typeof last.value === 'string' ? last.value : '';
+        // 直前コメントが基準パターンに一致しない場合は改善を促す
         if (!matchesPattern(text, tagRe)) {
           context.report({
             node,

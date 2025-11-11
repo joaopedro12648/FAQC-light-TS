@@ -45,6 +45,8 @@ function sliceBlock(
 ): readonly string[] {
   const norm = (s: string) => s.trimEnd();
   const sIdx = lines.findIndex((l) => start.test(norm(l)));
+  // 開始行が見つからなければ空配列を返す
+  // 該当セクションが無い場合は探索を打ち切るため早期に空配列を返す
   if (sIdx === -1) return [];
   const after = lines.slice(sIdx + 1);
   const baseLine = lines[sIdx] ?? '';
@@ -62,11 +64,17 @@ function sliceBlock(
  * @returns 終了行の相対インデックス（見つからなければ -1）
  */
 function findBlockEnd(after: readonly string[], end: RegExp, baseIndent: number): number {
+  // 終了条件に達するまで行を順に検査する
+  // 先頭から末尾まで走査して終端条件や同レベルの境界を検出する
   for (let i = 0; i < after.length; i += 1) {
     const rawLine = after[i] ?? '';
     const ind = (/^(\s*)/.exec(rawLine)?.[1] ?? '').length;
     const trimmed = rawLine.trimEnd();
+    // 明示的終端に一致したら終了位置とする
+    // 明示的な終端記号に到達した時点でブロックの終わりを確定する
     if (end.test(trimmed)) return i;
+    // 同レベルの別セクション開始を境界とする
+    // 同一インデントで次のセクションが始まったら現在のブロックを終了する
     if (ind <= baseIndent && /^\s*[a-zA-Z0-9_]+:\s*$/.test(trimmed)) return i;
   }
 
@@ -80,19 +88,31 @@ function findBlockEnd(after: readonly string[], end: RegExp, baseIndent: number)
  */
 function parseBannedTerms(lines: readonly string[]): MutableBannedTerms | undefined {
   const block = sliceBlock(lines, /^\s*banned_terms:\s*$/, /^\s*todo_ticket_required:\s*$/);
+  // ブロックが無ければ未定義を返す
+  // 対象セクションが存在しない場合は後続の解析を省略する
   if (block.length === 0) return undefined;
   const out: MutableBannedTerms = {};
   let inPatterns = false;
+  // ブロックの各行を評価して設定を組み立てる
+  // 行を順に評価してパターンやフラグを抽出する
   for (const raw of block) {
     const l = raw.trimEnd();
+    // パターン配列の開始を検出する
+    // patterns セクション開始行を検出して配列を初期化する
     if (/^\s*patterns:\s*$/.test(l)) { inPatterns = true; out.patterns = []; continue; }
 
     const mPat = l.match(/^\s*-\s+"?(.+?)"?\s*$/);
+    // パターン行を配列へ追加する
+    // 配列要素行を検出した場合はパターンを追加して次行へ進む
     if (inPatterns && mPat && mPat[1] !== undefined) { out.patterns!.push(mPat[1]); continue; }
 
     const mWB = l.match(/^\s*word_boundary:\s*(true|false)\s*$/);
+    // 単語境界の有無を反映する
+    // 単語境界フラグの指定を反映して一致条件を厳密化する
   if (mWB) { out.word_boundary = mWB[1] === 'true'; continue; }
 
+  // パス指定を既定値で初期化する
+    // パスの基準行に到達したら既定の対象拡張子で初期化する
   if (/^\s*paths:\s*/.test(l)) { out.paths = ['**/*.{ts,tsx,mts,cts}']; continue; }
   }
 
@@ -106,14 +126,23 @@ function parseBannedTerms(lines: readonly string[]): MutableBannedTerms | undefi
  */
 function parseTodo(lines: readonly string[]): MutableTodo | undefined {
   const block = sliceBlock(lines, /^\s*todo_ticket_required:\s*$/, /^\s*banned_terms:\s*$/);
+  // ブロックが無ければ未定義を返す
+  // 対象セクションが存在しない場合は解析を打ち切って未定義を返す
   if (block.length === 0) return undefined;
   const out: MutableTodo = {};
+  // ブロックの各行を評価して設定を組み立てる
+  // 行を順に評価して正規表現と対象パスを抽出する
   for (const raw of block) {
     const l = raw.trimEnd();
-  const mRegex = l.match(/^\s*regex:\s*"(.+)"\s*$/);
+    // 正規表現の指定を抽出する
+    // regex 行を検出したら値を保持して次の行へ進む
+    const mRegex = l.match(/^\s*regex:\s*"(.+)"\s*$/);
+    // 正規表現の指定に一致した場合は値を反映する
     if (mRegex && mRegex[1] !== undefined) { out.regex = mRegex[1]; continue; }
 
-  if (/^\s*paths:\s*/.test(l)) { out.paths = ['**/*.{ts,tsx,mts,cts}']; continue; }
+    // パス指定を既定値で初期化する
+    // パスの基準行に到達したら既定の対象拡張子で初期化する
+    if (/^\s*paths:\s*/.test(l)) { out.paths = ['**/*.{ts,tsx,mts,cts}']; continue; }
   }
 
   return Object.keys(out).length > 0 ? out : undefined;
@@ -134,10 +163,18 @@ type BannedNode = { readonly patterns?: readonly string[]; readonly paths?: read
 function buildBannedNode(
   banned: MutableBannedTerms | undefined
 ): BannedNode | undefined {
+  // 設定が未定義なら構築は行わず終了する
+  // 入力が無い場合はノード生成を省略して未定義を返す
   if (!banned) return undefined;
   const out: { patterns?: readonly string[]; paths?: readonly string[]; word_boundary?: boolean } = {};
+  // パターン配列があればコピーする
+  // パターン指定が存在する場合は配列を複製して不変化する
   if (banned.patterns && banned.patterns.length) out.patterns = banned.patterns.slice();
+  // パス配列があればコピーする
+  // パス指定が存在する場合は配列を複製して不変化する
   if (banned.paths && banned.paths.length) out.paths = banned.paths.slice();
+  // 単語境界の設定を反映する
+  // フラグが与えられていれば一致条件を反映して厳格さを保つ
   if (banned.word_boundary !== undefined) out.word_boundary = banned.word_boundary;
   return Object.keys(out).length ? (out as BannedNode) : undefined;
 }
@@ -150,6 +187,8 @@ function buildBannedNode(
 function buildTodoNode(
   todo: MutableTodo | undefined
 ): { readonly regex?: string; readonly paths?: readonly string[] } | undefined {
+  // 設定が未定義なら構築は行わず終了する
+  // 入力が無い場合はノード生成を省略して未定義を返す
   if (!todo) return undefined;
   const node: { readonly regex?: string; readonly paths?: readonly string[] } = {
     ...(todo.regex !== undefined ? { regex: todo.regex } : {}),
@@ -197,9 +236,14 @@ export async function runAll(rootDir: string): Promise<RunnerResult> {
   ];
 
   const allViolations: Violation[] = [];
+  // すべてのチェックを順に実行する
+  // 各チェックを順次実行して結果を集約し失敗の有無を判定する
   for (const [ruleId, fn] of checks) {
+    // 個別チェックの失敗を隔離しつつ結果を集約する
+    // チェック実行時の例外を隔離して後続の検査を継続可能にする
     try {
       const vs = await fn(rootDir, cfg);
+      // 取得した違反を集約配列へ追加する
       for (const v of vs) allViolations.push(v);
     } catch (e) {
       allViolations.push({ ruleId, message: `checker crashed: ${e instanceof Error ? e.message : String(e)}` });

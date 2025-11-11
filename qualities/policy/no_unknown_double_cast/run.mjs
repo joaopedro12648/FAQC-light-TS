@@ -30,17 +30,25 @@ const EXCLUDE_DIRS = new Set(['node_modules', 'dist', 'build', 'coverage', '.git
 function listFilesRecursive(dir) {
   const files = [];
   const stack = [dir];
+  // スタックが空になるまでディレクトリを深さ優先で走査する
   while (stack.length) {
     const d = stack.pop();
+    // 無効値に遭遇した場合は探索を中断する
     if (!d) break;
     let entries;
+    // 読み取り失敗時は当該ディレクトリをスキップして継続する
     try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { continue; }
 
+    // エントリを順に評価し、対象のみを次段処理へ回す
     for (const e of entries) {
       const full = path.join(d, e.name);
       const base = path.basename(full);
+      // 除外対象のディレクトリ名は走査から外す
       if (EXCLUDE_DIRS.has(base)) continue;
+      // 子ディレクトリは探索対象としてスタックに積んで深掘りを継続する
+      // ディレクトリはスタックへ積んで再帰探索する
       if (e.isDirectory()) stack.push(full);
+      // ファイルは一覧に追加する
       else if (e.isFile()) files.push(full);
     }
   }
@@ -58,11 +66,13 @@ const RX = /as\s+unknown\s+as/g;
 function scan(content) {
   const hits = [];
   let m;
+  // ファイル全体を走査し二重キャスト表現の出現位置を抽出する
   while ((m = RX.exec(content)) !== null) {
     const before = content.slice(0, m.index);
     const line = (before.match(/\n/g)?.length ?? 0) + 1;
     const snippet = content.slice(m.index, m.index + 40).replace(/\s+/g, ' ').trim();
     hits.push({ line, snippet });
+    // ゼロ幅一致に伴う無限ループを避けるため検索位置を1文字進める
     if (m.index === RX.lastIndex) RX.lastIndex++;
   }
 
@@ -77,24 +87,36 @@ function main() {
   const roots = TARGET_DIRS.map((d) => path.join(PROJECT_ROOT, d));
   const files = roots.flatMap(listFilesRecursive).filter((f) => /\.(ts|tsx|mts|cts)$/.test(f));
   const violations = [];
+  // 対象ファイルを順に検査し二重キャストの発生を収集する
   for (const fp of files) {
     let content = '';
+    // 読み込み失敗時はスキップして処理を継続する
     try { content = fs.readFileSync(fp, 'utf8'); } catch { continue; }
 
     const hits = scan(content);
-    if (hits.length) violations.push({ file: path.relative(PROJECT_ROOT, fp), hits });
+  // 検出結果がある場合のみ違反一覧へ追加して改善対象を明確にする
+  if (hits.length) violations.push({ file: path.relative(PROJECT_ROOT, fp), hits });
   }
 
+  // 違反が無ければ正常終了としてメッセージを出力する
   if (violations.length === 0) {
     process.stdout.write('[policy:no_unknown_double_cast] OK: no "as unknown as" found\n');
     process.exit(0);
   }
 
   process.stderr.write('[policy:no_unknown_double_cast] NG: "as unknown as" double cast detected\n');
-  for (const v of violations) for (const h of v.hits) process.stderr.write(`${v.file}:${h.line}: ${h.snippet}\n`);
+  // 違反の各ファイルを順に取り出し、検出行の抜粋を詳細出力する
+  for (const v of violations) {
+    // 各違反ファイル内の該当箇所を列挙して報告する
+    for (const h of v.hits) {
+      process.stderr.write(`${v.file}:${h.line}: ${h.snippet}\n`);
+    }
+  }
+
   process.exit(1);
 }
 
+// 実行時の想定外例外を捕捉し明示的に異常終了コードを返す
 try { main(); } catch (e) {
   process.stderr.write(`[policy:no_unknown_double_cast] fatal: ${String((e?.message) || e)}\n`);
   process.exit(2);

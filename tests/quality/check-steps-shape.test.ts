@@ -23,6 +23,7 @@ const MIN_STEPS_COUNT = 4;
 test('stepDefs should be >=4 length with id, command, args, configRelDir', () => {
   expect(Array.isArray(stepDefs)).toBe(true);
   expect(stepDefs.length).toBeGreaterThanOrEqual(MIN_STEPS_COUNT);
+  // 仕様逸脱を防ぐ目的で各ステップ要素の必須プロパティを検証する
   for (const d of stepDefs) {
     expect(typeof d.id).toBe('string');
     expect(typeof d.command).toBe('string');

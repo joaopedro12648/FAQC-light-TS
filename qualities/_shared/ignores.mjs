@@ -1,0 +1,29 @@
+/**
+ * @file リポジトリ共通の走査除外（IGNORES）の単一起源（SoT）
+ * 備考: 特記事項なし
+ * - 単一起源を厳守し設定の重複・分散を排し拡張点を一箇所へ集約する
+ * - 静的解析はリポ全体対象とし変更時も緩和に頼らず規範へ適合させる
+ * - 例外や抑止は原則禁止とし必須時は設計へ還元し撤去条件を明記する
+ * - 依存の向きを守り責務境界を越えない参照で修正容易性と安全性を担保
+ * - 入出力を明示し早期リターンで副作用を限定し可読性と予測可能性を確保
+ * - コメントは方針を日本語で簡潔に記し実装との差異や冗長さを避けて維持
+ * - CLI 実行は非対話・非ウォッチで再現性を優先し一発緑の運用を徹底する
+ * - 型安全と失敗経路の明示を重視し曖昧な変換や暗黙のフォールバックを拒否
+ * @see vibecoding/var/contexts/qualities/eslint/03-documentation/context.md
+ * @see vibecoding/var/contexts/qualities/policy/no_relaxation/context.md
+ * @snd vibecoding/var/SPEC-and-DESIGN/202511/20251111/SnD-20251111-unify-ignores-sot.md
+ */
+
+/**
+ * リポジトリ全体の走査除外（グロブ）
+ */
+export const IGNORES = [
+  'dist/**',
+  'coverage/**',
+  'node_modules/**',
+  'tmp/**',
+  'scripts/tmp/**',
+  'build/**',
+  '.git/**'
+];
+

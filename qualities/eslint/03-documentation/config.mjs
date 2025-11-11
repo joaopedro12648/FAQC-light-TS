@@ -93,8 +93,8 @@ export const documentation = [
   },
   // 分岐/ループ直前コメント必須（ロケール整合: ja 系では非ASCIIを要求）
   {
-    // まずはプロダクトコード（src/**）に限定適用し、qualities/** や vibecoding/** は対象外とする
-    files: ['src/**/*.{js,cjs,mjs,ts,tsx,mts,cts}'],
+    // リポジトリ全体へ適用（IGNORES は eslint.config の IGNORES に準拠）
+    files: FILES_ALL_CODE,
     plugins: { branches: branchesPlugin },
     rules: {
       // requireTagPattern は実行環境のロケールに同期（--locale > CHECK_LOCALE > OS）

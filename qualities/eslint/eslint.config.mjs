@@ -14,7 +14,7 @@
  * @see vibecoding/docs/PLAYBOOK/PRE-IMPL.md
  * @snd vibecoding/var/SPEC-and-DESIGN/SnD-creation.md
  */
-import { IGNORES } from './_shared/globs.mjs';
+import { IGNORES } from '../_shared/ignores.mjs';
 import { moduleBoundaries } from './01-module-boundaries/config.mjs';
 import { typeSafety } from './02-type-safety/config.mjs';
 import { documentation } from './03-documentation/config.mjs';

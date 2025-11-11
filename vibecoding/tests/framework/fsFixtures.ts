@@ -64,6 +64,7 @@ export function copyFile(src: string, dest: string): void {
  * @returns {void}。
  */
 export function cleanupDir(dir: string): void {
+  // 後始末失敗を局所化しテスト全体の継続性を確保する
   try {
     // 深い削除
     fs.rmSync(dir, { recursive: true, force: true });

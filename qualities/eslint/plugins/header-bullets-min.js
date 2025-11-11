@@ -33,7 +33,9 @@
 function countBulletLines(commentText) {
   const lines = commentText.split(/\r?\n/);
   let count = 0;
+  // 各行を走査して箇条書きの有無を数える
   for (const line of lines) {
+    // 箇条書き形式の行のみをカウント対象にする
     if (/^\s*\*\s*-\s+/.test(line)) {
       count += 1;
     }
@@ -64,12 +66,19 @@ function parseHeader(text) {
   let seeCount = 0;
   let sndRaw = null;
 
+  // ヘッダJSDocの各行から必要要素を抽出する
   for (const line of lines) {
+    // @file 行の存在を検出してヘッダ要件の充足を判断する
     if (/^\s*\*\s*@file\b/.test(line)) hasFile = true;
+    // 備考セクションの有無を確認し設計意図の明示を促す
     if (/^\s*\*\s*備考\s*:/.test(line)) hasNotes = true;
+    // 箇条書き件数を集計して最低件数要件の検証に用いる
     if (/^\s*\*\s*-\s+/.test(line)) bulletCount += 1;
+    // 参照リンクの本数を確認してナビゲーションの充足を判断する
     if (/^\s*\*\s*@see\s+/.test(line)) seeCount += 1;
+    // @snd の生値を抽出して後段の妥当性検証に供する
     const mSnd = line.match(/^\s*\*\s*@snd\s+(.+?)\s*$/);
+    // 有効な @snd 値があれば取り出す
     if (mSnd && mSnd[1]) {
       sndRaw = mSnd[1].trim();
     }
@@ -85,8 +94,10 @@ function parseHeader(text) {
  * @returns {boolean} 妥当な .md パス または 許容された `"なし"` なら true
  */
 function isValidSnd(value, allowSndNone) {
+  // 未設定は不適合とする
   if (value == null) return false;
   const v = value.trim();
+  // なし/none を許容する設定なら合格とする
   if (allowSndNone && (/^(なし|none)$/i.test(v))) return true;
   // Accept any .md path; recommend (but not require) vibecoding/var/SPEC-and-DESIGN/...
   return /\.md(\s*$)/i.test(v);
@@ -100,14 +111,19 @@ function isValidSnd(value, allowSndNone) {
 function getHeaderComment(sourceCode) {
   const ast = sourceCode.ast;
   const firstToken = sourceCode.getFirstToken(ast);
+  // 先頭トークンがある場合は直前コメントからヘッダJSDocを優先探索する
   if (firstToken) {
     const leading = sourceCode.getCommentsBefore(firstToken);
+    // 候補コメント群から最初のJSDocブロックを見つける
     for (const c of leading) {
+      // JSDoc形式のみをヘッダ候補として採用する
       if (isJsDocBlock(c)) return c;
     }
   } else {
     const all = sourceCode.getAllComments();
+    // ファイル全体のコメントからJSDocブロックを探索する
     for (const c of all) {
+      // JSDoc形式のみをヘッダ候補として採用する
       if (isJsDocBlock(c)) return c;
     }
   }
@@ -139,7 +155,9 @@ function normalizeOptions(raw) {
  */
 function checkBase(summary) {
   const diags = [];
+  // @file 行が無い場合は構造違反として報告する
   if (!summary.hasFile) diags.push({ messageId: 'missingFile' });
+  // 備考の欠落を検知し説明責務を促す
   if (!summary.hasNotes) diags.push({ messageId: 'missingNotes' });
   return diags;
 }
@@ -154,6 +172,7 @@ function checkBase(summary) {
  * @returns {string|null} 不一致時のメッセージ（適合時は null）
  */
 function checkBullets(summary, min, max, customMessage, meta) {
+  // 箇条書き件数が範囲内のときは早期合格として報告を省く
   if (summary.bulletCount >= min && summary.bulletCount <= max) return null;
   return (
     customMessage ||
@@ -172,6 +191,7 @@ function checkBullets(summary, min, max, customMessage, meta) {
  * @returns {string|null} 不足時のメッセージ（適合時は null）
  */
 function checkSee(summary, requireSee, meta) {
+  // 要件が0または件数充足時は報告を省略する
   if (!(requireSee > 0) || summary.seeCount >= requireSee) return null;
   return meta.messages.missingSee.replace('{{requireSee}}', String(requireSee));
 }
@@ -184,8 +204,11 @@ function checkSee(summary, requireSee, meta) {
  * @returns {{messageId:string}|null} 診断（適合時は null）
  */
 function checkSnd(summary, requireSnd, allowSndNone) {
+  // @snd を必須としない設定時は検証を省略して誤検知を防ぐ
   if (!requireSnd) return null;
+  // @snd が欠落している場合は不足を報告する
   if (summary.sndRaw == null) return { messageId: 'missingSnd' };
+  // @snd の値が無効な場合は改善を促す
   if (!isValidSnd(summary.sndRaw, allowSndNone)) return { messageId: 'invalidSnd' };
   return null;
 }
@@ -241,6 +264,7 @@ export const ruleHeaderBulletsMin = {
       'Program:exit'() {
         const headerComment = getHeaderComment(sourceCode);
 
+        // 先頭JSDocが存在しない場合は最小要件不足を即時に伝える
         if (!headerComment) {
           context.report({
             loc: { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } },
@@ -253,6 +277,7 @@ export const ruleHeaderBulletsMin = {
         const summary = parseHeader(headerText);
 
         // Structure validations
+        // 構造違反を網羅的に報告する
         for (const d of checkBase(summary)) {
           context.report({ loc: headerComment.loc, ...d });
         }
@@ -260,18 +285,21 @@ export const ruleHeaderBulletsMin = {
         // Bullet count range
         {
           const msg = checkBullets(summary, min, max, customMessage, ruleHeaderBulletsMin.meta);
+          // 箇条書き件数が不適合のときに具体的な不足を伝える
           if (msg) context.report({ loc: headerComment.loc, message: msg });
         }
 
         // @see requirement
         {
           const msg = checkSee(summary, requireSee, ruleHeaderBulletsMin.meta);
+          // @see の本数不足時に最小要件を通知する
           if (msg) context.report({ loc: headerComment.loc, message: msg });
         }
 
         // @snd requirement
         {
           const d = checkSnd(summary, requireSnd, allowSndNone);
+          // @snd の欠落や無効値を明示し追補を促す
           if (d) context.report({ loc: headerComment.loc, ...d });
         }
       },

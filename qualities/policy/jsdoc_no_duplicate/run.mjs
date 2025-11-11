@@ -34,16 +34,23 @@ const EXCLUDE_DIRS = new Set(['node_modules', 'dist', 'build', 'coverage', '.git
 function listFilesRecursive(dir) {
   const files = [];
   const stack = [dir];
+  // スタックが空になるまで深さ優先で走査し、対象ファイルを列挙する
+  // 未処理ディレクトリが残る間は深さ優先で探索を継続する
   while (stack.length) {
     const d = stack.pop();
+    // 無効な参照は安全側で打ち切る
     if (!d) break;
     let entries;
+    // ディレクトリ読み取り失敗時は当該ノードをスキップして継続する
     try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { continue; }
 
+    // 子要素を評価して探索キューと結果集合を更新する
     for (const e of entries) {
       const full = path.join(d, e.name);
       const base = path.basename(full);
+      // 除外対象ディレクトリは走査から外す
       if (EXCLUDE_DIRS.has(base)) continue;
+      // ディレクトリは探索対象として積み、ファイルは結果に追加する
       if (e.isDirectory()) stack.push(full);
       else if (e.isFile()) files.push(full);
     }
@@ -76,6 +83,7 @@ function findDuplicates(content) {
 function collectBlocks(content) {
   const blocks = [];
   let m;
+  // JSDoc ブロックの一致を順次走査して位置情報を収集する
   while ((m = BLOCK_RX.exec(content)) !== null) {
     const start = m.index;
     const end = BLOCK_RX.lastIndex;
@@ -86,6 +94,7 @@ function collectBlocks(content) {
     const key5 = first5NoSpace(summary);
     const tags = extractTags(raw);
     blocks.push({ start, end, line, key5, tags });
+    // 同位置一致の無限ループを避けるため検索位置を進める
     if (m.index === BLOCK_RX.lastIndex) BLOCK_RX.lastIndex++;
   }
 
@@ -100,13 +109,16 @@ function collectBlocks(content) {
  */
 function collectAdjacentMatches(content, blocks) {
   const hits = [];
+  // 連続する2ブロックを走査して重複候補を抽出する
   for (let i = 0; i + 1 < blocks.length; i++) {
     const a = blocks[i];
     const b = blocks[i + 1];
     const between = content.slice(a.end, b.start);
+    // 間に可視トークンがある場合は重複対象外とする
     if (!/^[\s]*$/.test(between)) continue;
     const key5Dup = Boolean(a.key5 && b.key5 && a.key5 === b.key5);
     const commonTags = intersectTags(a.tags, b.tags);
+    // 要約の一致またはタグ集合の共通がある場合だけ重複候補として扱う
     if (key5Dup || commonTags.length > 0) {
       const snippet = content.slice(a.start, Math.min(b.start + 40, a.start + 120)).replace(/\s+/g, ' ').trim();
       hits.push({ line: a.line, snippet, key5: a.key5, commonTags, key5Dup });
@@ -125,7 +137,9 @@ function extractSummary(raw) {
   // 先頭の /** と末尾の */、および各行先頭の * を除去
   const body = raw.replace(/^\/\*\*/,'').replace(/\*\/$/, '');
   const lines = body.split(/\n/).map((l) => l.replace(/^\s*\*\s?/, '').trim());
+  // 行を順に評価して最初の本文行を要約として抽出する
   for (const l of lines) {
+    // 空行はスキップして有効な本文のみを対象にする
     if (l.length === 0) continue;
     // @tag 行に到達したら終了
     if (l.startsWith('@')) break;
@@ -141,6 +155,7 @@ function extractSummary(raw) {
  * @returns {string} 先頭5文字（足りなければ短い文字列）
  */
 function first5NoSpace(s) {
+  // 空文字は要約不可なので空のキーを返す
   if (!s) return '';
   const normalized = s.replace(/\s+/g, '');
   return normalized.slice(0, 5);
@@ -156,9 +171,12 @@ function extractTags(raw) {
   const body = raw.replace(/^\/\*\*/,'').replace(/\*\/$/, '');
   const lines = body.split(/\n/).map((l) => l.replace(/^\s*\*\s?/, '').trim());
   const tags = new Set();
+  // 各行を走査してタグ行のみを収集する
   for (const l of lines) {
+    // タグ行以外は対象外として読み飛ばす
     if (!l.startsWith('@')) continue;
     const m = l.match(/^@([A-Za-z][\w-]*)/);
+    // 抽出に成功したタグ名のみ集合へ追加する
     if (m && m[1]) tags.add(m[1].toLowerCase());
   }
 
@@ -172,10 +190,16 @@ function extractTags(raw) {
  * @returns {string[]} 共通タグの昇順ユニーク配列
  */
 function intersectTags(a, b) {
+  // いずれかが空集合なら共通要素は存在しない
   if (!a?.length || !b?.length) return [];
   const sb = new Set(b);
   const out = [];
-  for (const t of a) if (sb.has(t)) out.push(t);
+  // 片方の集合を走査して共通するタグのみを収集する
+  for (const t of a) {
+    // 集合に存在する場合だけ結果へ追加する
+    if (sb.has(t)) out.push(t);
+  }
+
   out.sort();
   return Array.from(new Set(out));
 }
@@ -188,23 +212,32 @@ function main() {
   const targets = TARGET_DIRS.map((d) => path.join(PROJECT_ROOT, d));
   const files = targets.flatMap(listFilesRecursive).filter((f) => /\.(ts|tsx|mts|cts)$/i.test(f));
   const violations = [];
+
+  // 各ファイルを読み込み重複候補の検査結果を集約する
+  // 対象ファイルを順に検査して違反の有無を集約する
   for (const fp of files) {
     let content = '';
+
+    // 読み取り失敗時は当該ファイルをスキップして処理を継続する
     try { content = fs.readFileSync(fp, 'utf8'); } catch { continue; }
 
     const hits = findDuplicates(content);
+    // 重複候補が見つかった場合のみ違反リストへ追加する
     if (hits.length > 0) {
       violations.push({ file: path.relative(PROJECT_ROOT, fp), hits });
     }
   }
 
+  // 違反が一件も無い場合は成功として即時に終了する
   if (violations.length === 0) {
     process.stdout.write('[policy:jsdoc_no_duplicate] OK: no adjacent JSDoc duplicates (no key5 match and no tag overlap)\n');
     process.exit(0);
   }
 
   process.stderr.write('[policy:jsdoc_no_duplicate] NG: adjacent JSDoc duplicates detected (key5 match or tag overlap)\n');
+  // 収集した違反をファイル単位・候補単位で報告する
   for (const v of violations) {
+    // 各候補の概要を整形してstderrへ出力する
     for (const h of v.hits) {
       const reason = h.key5Dup ? `key5='${h.key5}'` : `tags=[${h.commonTags.join(',')}]`;
       process.stderr.write(`${v.file}:${h.line}: duplicate JSDoc (${reason}) -> ${h.snippet}\n`);
@@ -214,6 +247,7 @@ function main() {
   process.exit(1);
 }
 
+// エントリポイント実行時の致命エラーを捕捉して終了コードを明確化する
 try { main(); } catch (e) {
   process.stderr.write(`[policy:jsdoc_no_duplicate] fatal: ${String((e?.message) || e)}\n`);
   process.exit(2);
