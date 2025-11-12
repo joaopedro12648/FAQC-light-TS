@@ -52,7 +52,7 @@
     "../**/*.mts",
     "../**/*.cts",
     "../../scripts/**/*.ts",
-    "../../vibecoding/scripts/**/*.ts"
+    "../../vibecoding/scripts/**/*.ts",
   ],
   "exclude": ["node_modules", "../../dist", "../../build", "../../coverage"]
 }
