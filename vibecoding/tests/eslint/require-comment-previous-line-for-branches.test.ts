@@ -14,9 +14,10 @@
  * @snd vibecoding/var/SPEC-and-DESIGN/202511/20251111/SnD-20251111-eslint-require-comment-before-branches.md
  */
 import { describe, expect, it } from 'vitest';
-import { ruleRequireCommentPreviousLineForBranches } from '../../../qualities/eslint/plugins/require-comment-previous-line-for-branches.js';
+// @ts-expect-error: importing named export from JS file for test purposes
+import { controlStructuresPlugin } from '../../../qualities/eslint/plugins/require-comments-on-control-structures.js';
 
-const ruleU: unknown = ruleRequireCommentPreviousLineForBranches;
+const ruleU: unknown = (controlStructuresPlugin as { rules: Record<string, unknown> }).rules['require-comments-on-control-structures'];
 
 /**
  * 対象が meta を持つかを判定する。
@@ -42,11 +43,11 @@ describe('ESLint rule (smoke): require-comment-previous-line-for-branches', () =
   it('exports rule meta and user-guiding messages', () => {
     expect(typeof ruleU).toBe('object');
     expect(hasMeta(ruleU)).toBe(true);
-    // meta の公開を確認できた場合のみメッセージ検証へ進める
+    // meta公開時のみ詳細検証へ進めて契約の健全性を確認する
     if (hasMeta(ruleU)) {
       const meta = (ruleU as { meta: unknown }).meta;
       expect(hasMessages(meta)).toBe(true);
-      // messages の存在時に文言がガイドとして適切かを確認する
+      // メッセージ公開時のみ代表キーの妥当性を点検する
       if (hasMessages(meta)) {
         const msg = (meta as { messages: Record<string, string> }).messages;
         expect(typeof msg.missingComment).toBe('string');

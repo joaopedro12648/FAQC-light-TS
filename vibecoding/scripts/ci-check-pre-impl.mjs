@@ -50,7 +50,7 @@ function getChangedFiles() {
   for (const cmd of attempts) {
     const out = run(cmd);
     // 最初に成功した差分範囲の結果を採用して余計な走査を避ける
-    if (out) return Array.from(new Set(out.split('\n').filter(Boolean)));
+  if (out) return Array.from(new Set(out.split('\n').filter(Boolean)));
   }
 
   // 最後の手段として、作業ツリーの変更を確認する（CI では空の可能性あり）
@@ -117,6 +117,7 @@ function main() {
 
   // アプリコードが変更された場合、少なくとも 1 つの SPEC ファイルの更新を要求する
   if (codeChanged.length > 0 && specChanged.length === 0) {
+
     errors.push(
       'App code changed without SPEC update. Update the relevant SPEC-and-DESIGN and record pre_impl.'
     );
@@ -138,6 +139,7 @@ function main() {
 
   // 収集したエラーが存在する場合は失敗として詳細を出力する
   if (errors.length > 0) {
+
     process.stderr.write(`\nPRE-IMPL check failed:\n- ${  errors.join('\n- ')  }\n`);
     process.stderr.write('\nSee vibecoding/docs/PLAYBOOK/PRE-IMPL.md\n');
     process.exit(1);

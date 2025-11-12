@@ -34,23 +34,25 @@ function findContextMdFiles(dir: string): string[] {
   // 未処理のディレクトリが残る間は探索を継続して対象を収集する
   while (stack.length > 0) {
     const current = stack.pop();
-    // 無効な参照を早期に弾き探索の健全性を保つ
+    // 無効参照を検出した場合は探索を打ち切る
     if (!current) break;
     
     let entries;
-    // 読み取り失敗時は当該ノードをスキップして探索を継続する
+    // 読み取り失敗時は当該ディレクトリをスキップして継続する
     try {
       entries = fs.readdirSync(current, { withFileTypes: true });
     } catch {
       continue;
     }
     
-    // 子要素を評価して探索キューと結果集合を更新する
+    // 子要素を順に評価して次段処理へ回す
     for (const entry of entries) {
       const fullPath = path.join(current, entry.name);
-      // ディレクトリは後続探索へ積み、context.md は結果へ追加する
+      // ディレクトリは再帰探索へ回す（スタックへ積む）
       if (entry.isDirectory()) {
+        // 下位ディレクトリを後続探索に回す
         stack.push(fullPath);
+      // context.md を検出した場合は結果へ追加する
       } else if (entry.isFile() && entry.name === 'context.md') {
         files.push(fullPath);
       }
@@ -63,34 +65,33 @@ function findContextMdFiles(dir: string): string[] {
 // 概要: 各 context.md に対応する context-review.md の存在を保証する
 describe('context-review.md existence', () => {
   it('each context.md should have a corresponding context-review.md', () => {
-    // 対象ディレクトリが無ければ非該当として中断する
+    // ベースが無い環境では対象外としてスキップする
     if (!fs.existsSync(CONTEXTS_BASE)) {
-      // contexts ディレクトリが存在しない場合はスキップ
       return;
     }
 
     const contextMdFiles = findContextMdFiles(CONTEXTS_BASE);
     
-    // context.md が存在しない場合は非該当として扱い失敗にしない
+    // 対象が無い場合は非該当として終了する
     if (contextMdFiles.length === 0) {
       return;
     }
     
     const missingReviews: string[] = [];
     
-    // 各 context.md に隣接する review の有無を点検する
+    // 各 context.md に隣接する review の存在を確認する
     for (const contextMdPath of contextMdFiles) {
       const dir = path.dirname(contextMdPath);
       const reviewPath = path.join(dir, 'context-review.md');
       
-      // レビューが見つからない場合だけ不足リストへ追加する
+      // 対応する review が無い場合のみ不足リストへ追加する
       if (!fs.existsSync(reviewPath)) {
         const relativePath = path.relative(process.cwd(), contextMdPath).replace(/\\/g, '/');
         missingReviews.push(relativePath);
       }
     }
     
-    // 不足が存在する場合に限り詳細メッセージ付きで失敗させる
+    // 不足がある場合は詳細メッセージ付きで失敗させる
     if (missingReviews.length > 0) {
       const message = [
         'context-review.md is missing for the following quality gate context(s).',

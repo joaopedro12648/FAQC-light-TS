@@ -33,6 +33,7 @@ function detectInlineFirstLine(fullText) {
   const firstNewline = fullText.indexOf('\n');
   // 単一行ブロックは整形対象外とし以降の処理を省く
   if (firstNewline === -1) {
+
     // 1行コメント（単一行）なので対象外
     return { hasInlineFirstLine: false, inlineText: '', beforeInline: '' };
   }
@@ -89,7 +90,7 @@ export const ruleBlockCommentFormatting = {
           const full = sourceCode.getText(c);
           const hasNewline = full.includes('\n');
           // 改行の無い単一行 JSDoc は対象外（整形不要）
-          if (!hasNewline) continue; // 単一行は対象外
+          if (!hasNewline) continue;
 
           const { hasInlineFirstLine, inlineText } = detectInlineFirstLine(full);
           // 開幕行に本文が無い場合は整形不要としてスキップする
@@ -149,6 +150,7 @@ export const blockCommentFormattingPlugin = {
             for (const c of comments) {
               // 空の行コメントは違反として報告する
               if (c.type === 'Line') {
+
                 // 空の行コメントを検出して無意味な記述の混入を防ぐ
                 if (typeof c.value === 'string' && c.value.trim().length === 0) {
                   context.report({ loc: c.loc, messageId: 'emptyLine' });
@@ -160,6 +162,7 @@ export const blockCommentFormattingPlugin = {
               // Block comment (/* ... */ or /** ... 。*/)
               // ブロックコメントが空内容かを正規化して検査する
               if (c.type === 'Block' && typeof c.value === 'string') {
+
                 const raw = c.value;
                 const isJsdoc = raw.startsWith('*');
                 // Remove leading "*" on each line and whitespace, then check if anything remains
@@ -169,6 +172,7 @@ export const blockCommentFormattingPlugin = {
                   .join('');
                 // ブロック/JSdoc が実質的に空なら指摘して理解を妨げないようにする
                 if (normalized.length === 0) {
+
                   context.report({ loc: c.loc, messageId: isJsdoc ? 'emptyJsdoc' : 'emptyBlock' });
                 }
               }
@@ -246,6 +250,7 @@ export const blockCommentFormattingPlugin = {
             const ok = last && isAdjacent(last, node) && isMeaningfulComment(last);
             // 直前に意味のあるコメントが無ければテスト意図の説明不足として報告する
             if (!ok) {
+
               context.report({ node, messageId: 'missing' });
             }
           }

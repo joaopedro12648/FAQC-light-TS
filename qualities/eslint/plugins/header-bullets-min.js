@@ -80,6 +80,7 @@ function parseHeader(text) {
     const mSnd = line.match(/^\s*\*\s*@snd\s+(.+?)\s*$/);
     // 有効な @snd 値があれば取り出す
     if (mSnd && mSnd[1]) {
+
       sndRaw = mSnd[1].trim();
     }
   }
@@ -113,6 +114,8 @@ function getHeaderComment(sourceCode) {
   const firstToken = sourceCode.getFirstToken(ast);
   // 先頭トークンがある場合は直前コメントからヘッダJSDocを優先探索する
   if (firstToken) {
+    // 先頭トークン直前のコメント列からJSDocブロックを最優先で抽出する
+
     const leading = sourceCode.getCommentsBefore(firstToken);
     // 候補コメント群から最初のJSDocブロックを見つける
     for (const c of leading) {
@@ -120,6 +123,7 @@ function getHeaderComment(sourceCode) {
       if (isJsDocBlock(c)) return c;
     }
   } else {
+    // 先頭トークンが無い場合は全コメントから最初のJSDocブロックを探索する
     const all = sourceCode.getAllComments();
     // ファイル全体のコメントからJSDocブロックを探索する
     for (const c of all) {
@@ -266,6 +270,7 @@ export const ruleHeaderBulletsMin = {
 
         // 先頭JSDocが存在しない場合は最小要件不足を即時に伝える
         if (!headerComment) {
+
           context.report({
             loc: { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } },
             messageId: 'missingFile',

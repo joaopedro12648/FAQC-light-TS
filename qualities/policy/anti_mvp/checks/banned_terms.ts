@@ -52,10 +52,11 @@ function collectViolations(
   for (let i = 0; i < lines.length; i += 1) {
     const lineText = lines[i];
     // 未定義行は安全にスキップして誤検知/例外を防ぐ
-    if (lineText === undefined) continue;
+  if (lineText === undefined) continue;
     const m = regex.exec(lineText);
     // 正規表現に一致した行のみを違反として記録する
     if (m) {
+
       const found = m[1] ?? '';
       out.push({ ruleId, message: `${relPath}:${i + 1} contains "${String(found)}"`, file: path.normalize(relPath), line: i + 1 });
     }

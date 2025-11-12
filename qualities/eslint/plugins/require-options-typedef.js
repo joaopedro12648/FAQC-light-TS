@@ -34,7 +34,7 @@ function collectTypedefs(sourceCode) {
     if (c.type !== 'Block') continue;
     const raw = typeof c.value === 'string' ? c.value : '';
     // JSDoc形式のコメントに限定して@typedef/@property検出の精度を保つ
-    if (!raw.startsWith('*')) continue; // JSDoc 風のみ
+    if (!raw.startsWith('*')) continue;
     const lines = raw.split(/\r?\n/).map((ln) => ln.replace(/^\s*\*?\s?/, ''));
     // @typedef {Object} NameOptions
     const tdIdx = lines.findIndex((ln) => /@typedef\s+\{Object\}\s+\S+Options\b/.test(ln));
@@ -69,7 +69,7 @@ function extractSchemaPropertyKeys(ast) {
   for (const d of getExportedVariableDeclarators(ast)) {
     const keys = extractSchemaKeysFromInit(d.init);
     // 最初に検出した schema.properties を採用して不要な探索を避ける
-    if (keys.size > 0) return keys;
+  if (keys.size > 0) return keys;
   }
 
   return new Set();
@@ -125,8 +125,9 @@ function extractSchemaKeysFromInit(init) {
   for (const p of props.properties) {
     // Property ノードのみを対象にする
     if (p && p.type === 'Property') {
+
       // Identifier キーを集合へ追加する
-      if (p.key.type === 'Identifier') out.add(p.key.name);
+      if (p.key.type === 'Identifier') out.add(p.key.name); // schema キーを集合へ追加する
       else if (p.key.type === 'Literal' && typeof p.key.value === 'string') out.add(p.key.value);
     }
   }
@@ -172,10 +173,13 @@ function getExportedVariableDeclarators(program) {
       node.declaration &&
       node.declaration.type === 'VariableDeclaration'
     ) {
-      // 変数宣言の各宣言子を走査して対象を抽出する
+      
+      // 宣言子を走査し、対象となる VariableDeclarator のみを抽出する
       for (const d of node.declaration.declarations || []) {
-        // 宣言子が変数宣言である場合のみ収集する
-        if (d && d.type === 'VariableDeclarator') out.push(d);
+        // VariableDeclarator のみを対象として選別する
+        if (d && d.type === 'VariableDeclarator') {
+          out.push(d);
+        }
       }
     }
   }
@@ -213,13 +217,15 @@ function requiresOptionsTypedefForGeneralJs(ast) {
     if (decl.type === 'FunctionDeclaration') return isOptionsLike(decl.params || []);
     // 変数宣言を対象に関数式/アロー関数の引数形状を確認する
     if (decl.type === 'VariableDeclaration') {
-      // 変数宣言内の関数式/アロー関数の引数形状を確認する
+
+      // 変数宣言の各宣言子を検査し、関数初期化子の引数形状を確認する
       for (const d of decl.declarations) {
         const init = d.init;
-        // 初期化子が無い宣言は除外して無駄な判定を避ける
+        // 初期化子が無い宣言は対象外とする
         if (!init) continue;
         // 関数系初期化子に限定し引数が options 形状なら要求対象とする
         if (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression') {
+
           // 第1引数が options 形状なら typedef を要求対象とする
           if (isOptionsLike(init.params || [])) return true;
         }
@@ -291,8 +297,10 @@ export const ruleRequireOptionsTypedef = {
         // ESLint プラグイン実装に対して typedef の厳格な整合性を求める
         // ローカルプラグイン実装では schema.properties と typedef の整合性を厳密検査する
         if (isPluginFile && schemaKeys.size > 0) {
+
           // typedef が無い場合は即時に不足を報告する
           if (typedefs.length === 0) {
+
             context.report({ loc: { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } }, messageId: 'missingTypedef' });
             return;
           }
@@ -301,6 +309,7 @@ export const ruleRequireOptionsTypedef = {
           const missing = Array.from(schemaKeys).filter((k) => !typedefProps.has(k));
           // schema キー集合を typedef が包含していない場合に不足を明確化する
           if (missing.length > 0) {
+
             context.report({
               loc: { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } },
               messageId: 'propertiesMismatch',
@@ -313,9 +322,11 @@ export const ruleRequireOptionsTypedef = {
 
         // 一般 JS に段階導入する際のモードに応じて検査を有効化する
         if (generalMode !== 'off') {
+
           const needs = requiresOptionsTypedefForGeneralJs(ast);
           // options 形状を受けるが typedef が無い一般 JS に対して報告する
           if (needs && typedefs.length === 0) {
+
             context.report({ loc: { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } }, messageId: 'generalMissing' });
           }
         }

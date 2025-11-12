@@ -33,20 +33,18 @@ export const globFiles = (rootDir: string, patterns: readonly string[]): string[
   for (const pattern of patterns) {
     // src 配下の .ts を列挙する
     if (pattern === 'src/**/*.ts') {
-      // 列挙結果を相対パスへ変換して追加する
+      // src 配下専用パターンの処理で走査対象を限定する
       for (const rel of listAllTsUnder(path.join(rootDir, 'src'))) {
         results.push(path.relative(rootDir, rel));
       }
-    // どの階層の src 直下でも .ts を列挙する
     } else if (pattern === '**/src/**/*.ts') {
-      // 列挙結果を相対パスへ変換して追加する
+      // 任意の src 直下から走査して対象の網羅性を確保する
       for (const rel of listAllTsUnderAnySrc(rootDir)) {
         results.push(path.relative(rootDir, rel));
       }
-    // 単一ファイル指定に対応する
     } else if (pattern.endsWith('.ts')) {
       const abs = path.join(rootDir, pattern);
-      // 存在しファイルであれば結果へ追加する
+      // 明示的に指定された .ts パスのみを対象に安全に追加する
       if (fs.existsSync(abs) && fs.statSync(abs).isFile()) {
         results.push(path.relative(rootDir, abs));
       }
@@ -73,7 +71,6 @@ const listAllTsUnder = (dirAbs: string): string[] => {
     if (entry.isDirectory()) {
       // 再帰で得たパスを結果へ追加する
       for (const nested of listAllTsUnder(abs)) out.push(nested);
-    // .ts ファイルを結果へ追加する
     } else if (entry.isFile() && entry.name.endsWith('.ts')) {
       out.push(abs);
     }
@@ -92,28 +89,28 @@ const listAllTsUnderAnySrc = (rootDir: string): string[] => {
   const out: string[] = [];
   const IGNORES = new Set(['node_modules', 'dist', 'build', 'coverage', '.git', 'tmp']);
   const walk = (dirAbs: string) => {
-    // ディレクトリが無ければ終了する
+    // 対象ディレクトリが存在しない場合は探索を打ち切る
     if (!fs.existsSync(dirAbs)) return;
     const entries = fs.readdirSync(dirAbs, { withFileTypes: true });
-    // すべてのエントリを走査する
+    // すべてのエントリを走査して対象を抽出する
     for (const entry of entries) {
       const name = entry.name;
       const abs = path.join(dirAbs, name);
-      // ディレクトリのみを対象に処理する
-      if (entry.isDirectory()) {
-        // 無視対象はスキップする
-        if (IGNORES.has(name)) continue;
-        // scripts/tmp はスキップする
-        if (name === 'scripts' && fs.existsSync(path.join(abs, 'tmp'))) continue;
-        // src 直下の .ts を列挙して追加する
-        if (name === 'src') {
-          // src 直下の .ts を巡回して結果へ追加する
-          for (const file of listAllTsUnder(abs)) out.push(file);
-        }
-
-        // サブディレクトリへ降りる
-        walk(abs);
+      // ディレクトリ以外は対象外
+      if (!entry.isDirectory()) continue;
+      // 既知の無視対象は除外して走査対象を絞る
+      if (IGNORES.has(name)) continue;
+      // 一時スクリプト配下は対象外として走査コストを抑える
+      if (name === 'scripts' && fs.existsSync(path.join(abs, 'tmp'))) continue;
+      // src 配下の .ts を列挙して収集する
+      if (name === 'src') {
+        
+        // src 配下の .ts を列挙して結果へ追加する
+        for (const file of listAllTsUnder(abs)) out.push(file);
       }
+      
+      // 残りの下位ディレクトリも再帰的に探索する
+      walk(abs);
     }
   };
 

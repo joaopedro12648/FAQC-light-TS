@@ -54,7 +54,7 @@ function listFilesRecursive(dir) {
   while (stack.length) {
     const d = stack.pop();
     // 無効値に遭遇した場合は探索を中断する
-    if (!d) break;
+  if (!d) break;
     let entries;
     // 読み取り失敗時は当該ディレクトリをスキップして継続する
     try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { continue; }
@@ -69,7 +69,6 @@ function listFilesRecursive(dir) {
         // 次の探索対象としてスタックへ積む
         stack.push(full);
       } else if (e.isFile()) {
-        // 検査対象ファイルとして追加する
         files.push(full);
       }
     }
@@ -121,12 +120,14 @@ function main() {
     const hits = scanFile(fp);
     // ヒットが存在するファイルのみ違反として記録する
     if (hits.length > 0) {
+
       violations.push({ file: path.relative(PROJECT_ROOT, fp), hits });
     }
   }
 
   // 違反が無ければ正常終了としてメッセージを出力する
   if (violations.length === 0) {
+
     process.stdout.write('[policy:no_relaxation] OK: no relaxations found in TS/**\n');
     process.exit(0);
   }

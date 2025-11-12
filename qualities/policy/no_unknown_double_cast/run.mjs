@@ -34,7 +34,7 @@ function listFilesRecursive(dir) {
   while (stack.length) {
     const d = stack.pop();
     // 無効値に遭遇した場合は探索を中断する
-    if (!d) break;
+  if (!d) break;
     let entries;
     // 読み取り失敗時は当該ディレクトリをスキップして継続する
     try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { continue; }
@@ -47,7 +47,7 @@ function listFilesRecursive(dir) {
       if (EXCLUDE_DIRS.has(base)) continue;
       // 子ディレクトリは探索対象としてスタックに積んで深掘りを継続する
       // ディレクトリはスタックへ積んで再帰探索する
-      if (e.isDirectory()) stack.push(full);
+      if (e.isDirectory()) stack.push(full); // 下位ディレクトリを後続探索のためキューへ積む
       // ファイルは一覧に追加する
       else if (e.isFile()) files.push(full);
     }
@@ -100,6 +100,7 @@ function main() {
 
   // 違反が無ければ正常終了としてメッセージを出力する
   if (violations.length === 0) {
+
     process.stdout.write('[policy:no_unknown_double_cast] OK: no "as unknown as" found\n');
     process.exit(0);
   }

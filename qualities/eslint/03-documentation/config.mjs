@@ -19,7 +19,7 @@ import jsdoc from 'eslint-plugin-jsdoc';
 import { FILES_ALL_CODE, FILES_JS, FILES_TS } from '../_shared/globs.mjs';
 import { blockCommentFormattingPlugin } from '../plugins/block-comment-formatting.js';
 import { headerPlugin } from '../plugins/header-bullets-min.js';
-import { branchesPlugin } from '../plugins/require-comment-previous-line-for-branches.js';
+import { controlStructuresPlugin } from '../plugins/require-comments-on-control-structures.js';
 import { typedefPlugin } from '../plugins/require-options-typedef.js';
 
 /**
@@ -91,19 +91,21 @@ export const documentation = [
       'blockfmt/no-empty-comment': 'error'
     }
   },
-  // 分岐/ループ直前コメント必須（ロケール整合: ja 系では非ASCIIを要求）
+  // 制御構造でのコメントチェック（ロケール整合: ja 系では非ASCIIを要求）
   {
     // リポジトリ全体へ適用（IGNORES は eslint.config の IGNORES に準拠）
     files: FILES_ALL_CODE,
-    plugins: { branches: branchesPlugin },
+    plugins: { control: controlStructuresPlugin },
     rules: {
       // requireTagPattern は実行環境のロケールに同期（--locale > CHECK_LOCALE > OS）
-      'branches/require-comment-previous-line-for-branches': [
+      'control/require-comments-on-control-structures': [
         'error',
         {
           allowBlankLine: false,
           ignoreElseIf: true,
           ignoreCatch: true,
+          treatChainHeadAs: 'non-dangling',
+          fixMode: true,
           // ja 系なら少なくとも1文字の非ASCIIを要求。それ以外は未設定（無効化）が望ましいが、ここでは動的に切替。
           requireTagPattern: (() => {
             const envLocale = (process.env.CHECK_LOCALE || '').trim();

@@ -111,7 +111,7 @@ function listFilesRecursive(dir) {
   while (stack.length) {
     const d = stack.pop();
     // 無効なエントリに遭遇した場合は走査を中断する
-    if (!d) break;
+  if (!d) break;
     let entries;
     // ディレクトリ読み取りに失敗した場合は当該ディレクトリをスキップする
     try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { continue; }
@@ -123,7 +123,7 @@ function listFilesRecursive(dir) {
       // 除外対象のディレクトリ名は走査から外す
       if (EXCLUDE_DIRS.has(base)) continue;
       // ディレクトリはスタックに積んで再帰的に探索する
-      if (e.isDirectory()) stack.push(full);
+      if (e.isDirectory()) stack.push(full); // 下位ディレクトリを後続探索のためキューへ積む
       // ファイルは一覧に追加する
       else if (e.isFile()) files.push(full);
     }
@@ -162,12 +162,14 @@ function consumeQuoted(content, i, quote) {
     const ch = content[i];
     // エスケープシーケンスは2文字進める
     if (ch === '\\') {
+
       i += 2;
       continue;
     }
 
     // 対応するクォートに到達したら終了する
     if (ch === quote) {
+
       i += 1;
       break;
     }
@@ -193,12 +195,14 @@ function consumeTemplate(content, i) {
     const ch = content[i];
     // エスケープは2文字進める
     if (ch === '\\') {
+
       i += 2;
       continue;
     }
 
     // 閉じバッククォートに到達したら終了する
     if (ch === '`') {
+
       i += 1;
       break;
     }
@@ -226,6 +230,7 @@ function consumeBlock(content, i) {
     const next = i + 1 < n ? content[i + 1] : '';
     // */ を検出したらブロックコメントの終端として確定する
     if (ch === '*' && next === '/') {
+
       const end = i + 2;
       return { end, raw: content.slice(start, end) };
     }
@@ -254,12 +259,14 @@ function collectAllBlockComments(content) {
 
     // 行コメントを検出したら次の改行まで読み飛ばしてスキップする
     if (ch === '/' && next === '/') {
+
       i = consumeLine(content, i + 2);
       continue;
     }
 
     // ブロックコメントを検出したら終端まで読み進めて収集する
     if (ch === '/' && next === '*') {
+
       const { end, raw } = consumeBlock(content, i);
       out.push({ raw, start: i, end });
       i = end;
@@ -269,18 +276,21 @@ function collectAllBlockComments(content) {
     // 文字列リテラルは検査対象外とし内容の解析を省く
     // 単一引用符の文字列リテラルを終端まで読み飛ばす
     if (ch === '\'') {
+
       i = consumeQuoted(content, i, '\'');
       continue;
     }
 
     // 二重引用符の文字列リテラルを終端まで読み飛ばす
     if (ch === '"') {
+
       i = consumeQuoted(content, i, '"');
       continue;
     }
 
     // テンプレートリテラルを終端まで読み飛ばす
     if (ch === '`') {
+
       i = consumeTemplate(content, i);
       continue;
     }
@@ -343,69 +353,135 @@ function isPathOrUrl(s) {
 }
 
 /**
- * エントリポイント。
+ * 対象ファイル一覧を取得する。
+ * @returns {string[]} 検査対象ファイルパス
  */
-function main() {
-  const { lang } = resolveEffectiveLocale();
-  const strictness = resolveStrictness();
-  // ja 系以外は何もしない（成功扱い）
-  if (lang.toLowerCase() !== 'ja') {
-    process.stdout.write('[policy:comment_locale] SKIP: non-ja locale\n');
-    process.exit(0);
+function enumerateTargetFiles() {
+  const roots = TARGET_DIRS.map((d) => path.join(PROJECT_ROOT, d));
+  return roots.flatMap(listFilesRecursive).filter((f) => EXT_RX.test(f));
+}
+
+/**
+ * ブロック内の ASCII のみ候補行インデックスを収集する。
+ * - '/**' と '*\/' の行、空行、JSDocタグ行（@〜）、パス/URL行は除外
+ * @param {string[]} rawLines ブロックコメントの生行配列
+ * @returns {number[]} ASCII のみ候補行のインデックス配列
+ */
+function collectAsciiOnlyLineIndexes(rawLines) {
+  const indexes = [];
+  // 各行を走査し、規則により除外した上で ASCII のみの候補行を収集する
+  for (let i = 0; i < rawLines.length; i += 1) {
+    const rawLn = rawLines[i] || '';
+    // 開始/終端行は候補外（JSDoc の枠）
+    if (/\/\*\*/.test(rawLn) || /^\s*\*\/\s*$/.test(rawLn)) continue;
+    const norm = rawLn.replace(/^\s*\*?\s?/, '').trim();
+    // 内容がない行は評価対象外
+    if (norm.length === 0) continue;
+    // JSDoc のタグ行（@param 等）は対象外
+    if (/^@/.test(norm)) continue;
+    // パス/URL 行は対象外（可読性ガイドの例外）
+    if (isPathOrUrl(norm)) continue;
+    // 実質的に ASCII のみで構成される行を候補として記録
+    if (isAsciiOnly(norm)) indexes.push(i);
   }
 
-  const roots = TARGET_DIRS.map((d) => path.join(PROJECT_ROOT, d));
-  const files = roots.flatMap(listFilesRecursive).filter((f) => EXT_RX.test(f));
+  return indexes;
+}
 
-  const violations = [];
-  // 対象ファイルを順に検査し違反を収集する
-  for (const fp of files) {
-    let content = '';
-    // 失敗時に処理継続するため読み込みエラーは握り潰してスキップする
-    try { content = fs.readFileSync(fp, 'utf8'); } catch { continue; }
+/**
+ * 厳格度に応じて違反とみなすかを判定する。
+ * @param {'all'|'any'} strictness 厳格度
+ * @param {string[]} rawLines ブロックの生行配列
+ * @param {number[]} asciiOnlyLineIndexes ASCII のみ候補行のインデックス配列
+ * @returns {boolean} 報告対象なら true
+ */
+function isBlockViolation(strictness, rawLines, asciiOnlyLineIndexes) {
+  // any: 候補が1つでもあれば違反
+  if (strictness === 'any') return asciiOnlyLineIndexes.length > 0;
+  // all: 候補が無ければ違反ではない
+  if (asciiOnlyLineIndexes.length === 0) return false;
+  const normalizedContentLines = rawLines
+    .map((rawLn) => (rawLn || '').replace(/^\s*\*?\s?/, '').trim())
+    .filter((norm) => norm.length > 0 && !/^@/.test(norm) && !isPathOrUrl(norm));
+  return normalizedContentLines.every((norm) => isAsciiOnly(norm));
+}
 
-    const blocks = collectAllBlockComments(content);
-    // 対象は JSDoc 風（/** で開始）のみ
-    const jsdocBlocks = blocks.filter((b) => b.raw.startsWith('/**'));
-    // JSDoc ブロックが無いファイルは検査対象外として次へ進む
-    if (jsdocBlocks.length === 0) continue;
+/**
+ * 単一ファイルを解析し、違反（file:line）を収集する。
+ * @param {string} fp 対象ファイルパス
+ * @param {'all'|'any'} strictness 厳格度
+ * @returns {Array<{file:string,line:number}>} 違反の配列
+ */
+function analyzeFileForViolations(fp, strictness) {
+  let content = '';
+  // 目的: 読み取りに失敗したファイルは検査不能として安全にスキップする
+  try {
+    content = fs.readFileSync(fp, 'utf8');
+  } catch {
+    return [];
+  }
 
-    // 行単位チェック: JSDoc 内の任意の行が ASCII のみ（可視文字に非ASCIIを含まない）なら違反とする
-    // 厳格度:
-    //  - 'any': 1つでも ASCII-only 行があれば違反
-    //  - 'all': すべての行が ASCII-only の場合に違反（例外的運用だが互換維持）
-    const lines = jsdocBlocks.flatMap((b) => normalizeBlockText(b.raw).split('\n'));
-    const lineAsciiOnly = lines
-      .map((ln) => ln.trim())
-      // 例外: JSDocタグ行、およびパス/URLのみの行は対象外
-      .filter((ln) => ln.length > 0 && !/^@/.test(ln) && !isPathOrUrl(ln))
-      .map((ln) => isAsciiOnly(ln));
+  const blocks = collectAllBlockComments(content);
+  const jsdocBlocks = blocks.filter((b) => b.raw.startsWith('/**'));
+  // ヘッダJSDocが無いファイルは本ポリシーの対象外
+  if (jsdocBlocks.length === 0) return [];
 
-    // 判定: 厳格度に応じて違反条件を切り替える
-    const violate =
-      strictness === 'all'
-        ? lineAsciiOnly.length > 0 && lineAsciiOnly.every((f) => f === true)
-        : lineAsciiOnly.some((f) => f === true);
-
-    // 違反があるファイルのみ一覧へ追加し改善対象を明確にする
-    if (violate) {
-      violations.push({ file: path.relative(PROJECT_ROOT, fp) });
+  const out = [];
+  // 各 JSDoc ブロックを評価し、違反候補の行番号を抽出する
+  for (const b of jsdocBlocks) {
+    const startLine = (content.slice(0, b.start).match(/\r?\n/g) || []).length + 1;
+    const rawLines = b.raw.split(/\r?\n/);
+    const asciiOnlyLineIndexes = collectAsciiOnlyLineIndexes(rawLines);
+    const shouldReport = isBlockViolation(strictness, rawLines, asciiOnlyLineIndexes);
+    // 違反なしのブロックは次へ
+    if (!shouldReport) continue;
+    // 違反の各行を file:line 形式で収集する
+    for (const idx of asciiOnlyLineIndexes) {
+      out.push({ file: path.relative(PROJECT_ROOT, fp), line: startLine + idx });
     }
   }
 
-  // 違反が無ければ正常終了としてメッセージを出力する
+  return out;
+}
+
+/**
+ * 検査結果を出力し、適切な終了コードで終了する。
+ * @param {Array<{file:string,line:number}>} violations 違反配列
+ */
+function reportResult(violations) {
+  // 違反ゼロなら成功として終了
   if (violations.length === 0) {
     process.stdout.write('[policy:comment_locale] OK: ASCIIのみのJSDoc行は検出されませんでした\n');
     process.exit(0);
   }
 
   process.stderr.write('[policy:comment_locale] NG: 日本語ロケールでは「ASCIIのみ」のJSDoc行は禁止です。品質コンテキストのルールに従った言語でのコメントを書くべきであり、文末にマルチバイト文字を追加するなどではなく、全体を該当言語に翻訳してください。\n');
-  // 違反ファイルを列挙して具体的な改善箇所を利用者に伝える
+  // 具体的な修正箇所を file:line で列挙し、利用者に明示する
   for (const v of violations) {
-    process.stderr.write(`${v.file}: ASCIIのみのJSDoc行を避け、各行に非ASCII（例: 日本語）を含めてください。品質コンテキストのルールに従った言語でのコメントを書くべきであり、文末にマルチバイト文字を追加するなどではなく、全体を該当言語に翻訳してください。\n`);
+    const loc = typeof v.line === 'number' ? `${v.file}:${v.line}` : v.file;
+    process.stderr.write(`${loc}: ASCIIのみのJSDoc行を避け、各行に非ASCII（例: 日本語）を含めてください。品質コンテキストのルールに従った言語でのコメントを書くべきであり、文末にマルチバイト文字を追加するなどではなく、全体を該当言語に翻訳してください。\n`);
   }
 
   process.exit(1);
+}
+
+/**
+ * エントリポイント。小さなステップの合成に限定し、関数の複雑度を抑制する。
+ */
+function main() {
+  const { lang } = resolveEffectiveLocale();
+  const strictness = resolveStrictness();
+  // ja 系以外は何もしない（成功扱い）
+  // 目的: ja 系ロケールのときのみ本ポリシーを適用する
+  if (lang.toLowerCase() !== 'ja') {
+    process.stdout.write('[policy:comment_locale] SKIP: non-ja locale\n');
+    process.exit(0);
+  }
+
+  // 対象ファイルを列挙し、違反を集計して結果を出力する
+  const files = enumerateTargetFiles();
+  const violations = files.flatMap((fp) => analyzeFileForViolations(fp, strictness));
+  reportResult(violations);
 }
 
 // 実行時の想定外例外を捕捉し明示的に異常終了コードを返す

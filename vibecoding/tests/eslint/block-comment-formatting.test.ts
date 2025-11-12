@@ -42,12 +42,12 @@ describe('ESLint rule (smoke): block-comment-formatting', () => {
   it('exports rule meta and messages', () => {
     expect(typeof ruleU).toBe('object');
     expect(hasMeta(ruleU)).toBe(true);
-    // meta の公開を確認できた場合のみ詳細検証へ進める
+    // meta公開時のみ詳細検証へ進めて契約の健全性を確認する
     if (hasMeta(ruleU)) {
       expect(ruleU.meta).toBeTruthy();
       const meta = (ruleU as { meta: unknown }).meta;
       expect(hasMessages(meta)).toBe(true);
-      // messages の存在時のみ個別メッセージの妥当性を確認する
+      // メッセージ公開時のみ代表キーの妥当性を点検する
       if (hasMessages(meta)) {
         const msg = (meta as { messages: Record<string, string> }).messages;
         expect(typeof msg.moveToNextLine).toBe('string');

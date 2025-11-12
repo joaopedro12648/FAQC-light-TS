@@ -33,9 +33,8 @@ describe('orchestrator: check-steps (E2E-lite)', () => {
     expect(ids).toContain('lint');
     expect(ids).toContain('test');
     // configRelDir の存在（空文字は対象外）
-    // ステップごとに参照ディレクトリの存在性を確認して設定不整合を検出する
     for (const g of gates) {
-      // 設定が未定義のステップは対象外として誤検出を避ける
+      // 設定未定義のステップは対象外として誤検出を避ける
       if (!g.configRelDir) continue;
       const dir = path.join(process.cwd(), 'qualities', g.configRelDir);
       expect(fs.existsSync(dir)).toBe(true);

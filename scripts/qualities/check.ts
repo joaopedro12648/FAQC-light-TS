@@ -196,10 +196,13 @@ export function evaluateShouldRunInternalTests(params: {
   }
 
   // last_updated が不明なら安全側で実行する
-  if (lastUpdatedIso == null) return true; // 無い/読めない → 安全側 true
-  if (lastUpdatedIso.trim() === '') return true; // 空 → 安全側 true
+  // last_updated が無い/読めない場合は安全側で追加実行する
+  if (lastUpdatedIso == null) return true;
+  // last_updated が空の場合も安全側で追加実行する
+  if (lastUpdatedIso.trim() === '') return true;
   // 更新有無が不明なら実行しない
-  if (anyUpdatedSince == null) return false; // 判定不能は消極的（git なし・last_updated ありのときは別経路で true 測る）
+  // 追加の更新有無が判定不能な場合は実行しない
+  if (anyUpdatedSince == null) return false;
   return anyUpdatedSince;
 }
 
@@ -276,11 +279,8 @@ function hasInternalTestFiles(): boolean {
         if (name === 'node_modules' || name.startsWith('.git')) continue;
         stack.push(path.join(current, name));
       }
-    } else if (st.isFile()) {
-      // テストファイルの拡張子に一致する場合のみ存在確認の真を返す
-      if (/\.(test|spec)\.(c|m)?[jt]sx?$/.test(current)) {
-        return true;
-      }
+    } else if (st.isFile() && /\.(test|spec)\.(c|m)?[jt]sx?$/.test(current)) {
+      return true;
     }
   }
 
@@ -298,6 +298,7 @@ export async function runQualityGate(): Promise<void> {
     const { id, command: cmd, args } = step;
     // build ステップはインデックスが無い場合にスキップする
     if (id === 'build') {
+
       // 静的資産のビルド対象が存在しない場合は build を省略する
       if (!existsSync('index.html')) {
         continue;
@@ -309,6 +310,7 @@ export async function runQualityGate(): Promise<void> {
     if (id === 'lint' && (await handleLintStep(scope))) continue;
     // test は内製テストの追加入り口を持つ
     if (id === 'test') {
+
       // 既定のテスト実行が済んだら内製テストの追加実行要否を判定する
       if (await handleTestStep(cmd, args)) continue;
     }
@@ -329,6 +331,7 @@ async function handleLintStep(scope: string): Promise<boolean> {
   const changed = getChangedFilesForLint();
   // 変更差分が無い場合は full lint にフォールバックする
   if (changed.length === 0) {
+
     process.stdout.write('[lint] --scope=changed: 対象ファイルが無いため full lint にフォールバック\n');
     await runCommand('npm', ['run', 'lint', '--silent']);
     return true;
@@ -359,8 +362,11 @@ async function handleTestStep(cmd: string, args: readonly string[]): Promise<boo
   if (shouldRunInternalTests()) {
     // vibecoding ディレクトリがある場合のみ内製テストの探索を行う
     if (existsSync('vibecoding')) {
-      // テストファイルが存在する場合に限定して実行する
+      // 内製テストの追加実行を有効化する（対象の探索と限定実行）
+      // vibecoding ディレクトリが存在する環境に限定して探索・実行対象とする
+      // 内製テストファイルが存在する場合のみ限定実行する
       if (hasInternalTestFiles()) {
+        // 内製テストを限定構成で追加実行し、ゲートの網羅性を補完する
         process.stdout.write('[test] vibecoding/ 変更あり: 内製テストを追加実行します\n');
         // 一時的な Vitest 設定で include を vibecoding/** に限定して実行
         const tmpDir = path.join(process.cwd(), 'tmp');
@@ -383,12 +389,15 @@ async function handleTestStep(cmd: string, args: readonly string[]): Promise<boo
 
         await runCommand('npx', ['vitest', 'run', '--config', internalCfg, '--silent']);
       } else {
+        // 内製テストが存在しない場合は追加実行せず案内のみ出す
         process.stdout.write('[test] 内製テストファイルなし: 追加実行をスキップ\n');
       }
     } else {
+      // vibecoding ディレクトリが無い環境では内製テストをスキップする
       process.stdout.write('[test] vibecoding/ ディレクトリなし: 内製テストはスキップ\n');
     }
   } else {
+    // 変更・条件未充足のため追加の内製テストは実行しない
     process.stdout.write('[test] 変更なし判定: 内製テストはスキップ\n');
   }
 
@@ -412,6 +421,7 @@ const isMain = (() => {
 
 // ライブラリとしての import 時は実行せず、直接起動されたときのみゲートを起動する
 if (isMain) {
+
   // 明示的エントリポイントとして起動されたときのみ実行（ユニットテストの import では実行しない）
   runQualityGate().catch((e) => {
     // 例外を標準エラーで明確化して終了コードを非0にする

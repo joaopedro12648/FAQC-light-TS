@@ -50,8 +50,8 @@ function listFilesRecursive(dir) {
       const base = path.basename(full);
       // 除外対象ディレクトリは走査から外す
       if (EXCLUDE_DIRS.has(base)) continue;
-      // ディレクトリは探索対象として積み、ファイルは結果に追加する
-      if (e.isDirectory()) stack.push(full);
+      // 下位ディレクトリは後続探索へ積む
+      if (e.isDirectory()) stack.push(full); // 下位ディレクトリを後続探索へ積む
       else if (e.isFile()) files.push(full);
     }
   }
@@ -89,7 +89,7 @@ function collectBlocks(content) {
     const end = BLOCK_RX.lastIndex;
     const before = content.slice(0, start);
     const line = (before.match(/\n/g)?.length ?? 0) + 1;
-    const raw = m[0] || '';
+    const raw = m[0] || ''; // 一致しなかった場合の安全な代替を確保する
     const summary = extractSummary(raw);
     const key5 = first5NoSpace(summary);
     const tags = extractTags(raw);
@@ -120,6 +120,7 @@ function collectAdjacentMatches(content, blocks) {
     const commonTags = intersectTags(a.tags, b.tags);
     // 要約の一致またはタグ集合の共通がある場合だけ重複候補として扱う
     if (key5Dup || commonTags.length > 0) {
+
       const snippet = content.slice(a.start, Math.min(b.start + 40, a.start + 120)).replace(/\s+/g, ' ').trim();
       hits.push({ line: a.line, snippet, key5: a.key5, commonTags, key5Dup });
     }
@@ -219,17 +220,19 @@ function main() {
     let content = '';
 
     // 読み取り失敗時は当該ファイルをスキップして処理を継続する
-    try { content = fs.readFileSync(fp, 'utf8'); } catch { continue; }
+    try { content = fs.readFileSync(fp, 'utf8'); } catch { continue; } // 読み取り不能なファイルは検査対象から除外する
 
     const hits = findDuplicates(content);
     // 重複候補が見つかった場合のみ違反リストへ追加する
     if (hits.length > 0) {
+
       violations.push({ file: path.relative(PROJECT_ROOT, fp), hits });
     }
   }
 
   // 違反が一件も無い場合は成功として即時に終了する
   if (violations.length === 0) {
+
     process.stdout.write('[policy:jsdoc_no_duplicate] OK: no adjacent JSDoc duplicates (no key5 match and no tag overlap)\n');
     process.exit(0);
   }

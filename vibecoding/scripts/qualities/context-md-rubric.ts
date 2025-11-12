@@ -79,7 +79,7 @@ function listFilesRecursive(dir: string): string[] {
   while (stack.length) {
     const cur = stack.pop();
     // 無効なパスに遭遇した場合は探索を中断して次の要素へ進む
-    if (!cur) break;
+  if (!cur) break;
     let entries: fs.Dirent[] | undefined;
     // ディレクトリの列挙に失敗しても処理全体を止めず次のノードへ進む
     try {
@@ -92,7 +92,7 @@ function listFilesRecursive(dir: string): string[] {
     for (const e of entries) {
       const full = path.join(cur, e.name);
       // ディレクトリは後続の走査対象としてスタックへ積む
-      if (e.isDirectory()) stack.push(full);
+      if (e.isDirectory()) stack.push(full); // 下位ディレクトリを後続探索のためキューへ積む
       else if (e.isFile()) files.push(full);
     }
   }
@@ -124,7 +124,7 @@ function globToRegex(glob: string): RegExp {
   const withSingles = escaped.replace(/\*/g, '[^/]*');
   // 退避した ** をディレクトリ横断ワイルドカードへ
   const finalBody = withSingles.replace(/§DOUBLESTAR§/g, '.*');
-  return new RegExp(`^${finalBody}$`, 'i');
+  return new RegExp(`^${finalBody}$`, 'i'); // グロブ相当の包括的パターンを構築する
 }
 
 /**
@@ -145,7 +145,7 @@ function parseIncludeArgs(argv: string[]): string[] {
     // 1トークン形式（--include=...）を優先認識して分割する
     if (a.startsWith('--include=')) {
       const body = a.slice('--include='.length).trim();
-    // 空文字を除外して有効な指定のみ取り込む
+      // 空文字を除外して有効な指定のみ取り込む
       if (body) out.push(...body.split(',').map((s) => s.trim()).filter(Boolean));
       continue;
     }
@@ -153,11 +153,12 @@ function parseIncludeArgs(argv: string[]): string[] {
     // --include <patterns> の2トークン形式を解釈して取り込む
     // 次トークンにパターンを取る形式を解釈して取り込む
     if (a === '--include') {
+
       const nxt = argv[i + 1] ?? '';
-    // 次トークンがオプションでなければパターン指定として取り込む
+      // 次トークンがオプションでなければパターン指定として取り込む
       // 候補がオプションでない場合だけパターンとして採用する
       if (nxt && !nxt.startsWith('-')) {
-        out.push(...nxt.split(',').map((s) => s.trim()).filter(Boolean));
+        out.push(...nxt.split(',').map((s) => s.trim()).filter(Boolean)); // カンマ区切りを展開して収集する
         i += 1;
       }
 
@@ -232,6 +233,7 @@ function extractSection(content: string, headingPatterns: RegExp[]): string {
       sectionLevel = getHeadingLevel(line);
       // 見出しレベルが取得できない場合は既定レベルでフェイルセーフにする
       if (sectionLevel === 0) {
+
         sectionLevel = 2;
       }
 
@@ -240,9 +242,11 @@ function extractSection(content: string, headingPatterns: RegExp[]): string {
     
     // セクション内に入っている間のみ本文を収集する
     if (inSection) {
+
       const currentLevel = getHeadingLevel(line);
       // 同レベル以下の新しい見出しが現れたら抽出を終了する
       if (currentLevel > 0 && currentLevel <= sectionLevel) {
+
         break;
       }
 
@@ -264,7 +268,7 @@ function checkWhySection(text: string): string[] {
   // Why セクションの見出しが欠落している場合は直ちに不足として返す
   if (!hasHeading(text, whyPatterns)) {
     errs.push('Why: missing heading');
-    return errs;
+    return errs; // 見出し欠落時点で残検査は無意味なため即返す
   }
 
   const whySection = extractSection(text, whyPatterns);
@@ -288,7 +292,7 @@ function checkWhereSection(text: string): string[] {
   // Where セクションの見出しが無ければ直ちに不足として返す
   if (!hasHeading(text, wherePatterns)) {
     errs.push('Where: missing heading');
-    return errs;
+    return errs; // 見出し欠落時点で残検査は無意味なため即返す
   }
 
   const whereSection = extractSection(text, wherePatterns);
@@ -309,7 +313,7 @@ function checkWhatSection(text: string): string[] {
   // What セクションの見出しが無ければ直ちに不足として返す
   if (!hasHeading(text, whatPatterns)) {
     errs.push('What: missing heading');
-    return errs;
+    return errs; // 見出し欠落時点で残検査は無意味なため即返す
   }
 
   const whatSection = extractSection(text, whatPatterns);
@@ -332,6 +336,7 @@ function checkLineCount(text: string): string[] {
   // 下限チェックのみ（GPT対策：詳細度不足を防止）
   // 本文の行数がしきい値未満の場合は詳細度不足として指摘する
   if (lines < MIN_LINES) {
+
     errs.push(`Line count: ${lines} lines (MUST be ≥${MIN_LINES} for sufficient detail)`);
   }
   
@@ -364,6 +369,8 @@ function checkHowSection(text: string): string[] {
   const ngSectionMatch = howSection.match(/###\s*(LLM典型NG|典型.*NG|NG.*パターン)/i);
   // 典型NGセクションが存在する場合のみ詳細計数に進む
   if (ngSectionMatch) {
+    // 典型NGセクションの範囲を抽出し番号付き項目数を数える
+
     const ngSectionStart = howSection.indexOf(ngSectionMatch[0]);
     const nextHeadingMatch = howSection.slice(ngSectionStart + ngSectionMatch[0].length).match(/^###\s/m);
     const ngSectionEnd = nextHeadingMatch 
@@ -374,6 +381,7 @@ function checkHowSection(text: string): string[] {
     // 典型NGの列挙がしきい値未満の場合は不足として報告する
     if (ngCount < MIN_NG_PATTERNS) errs.push(`How: need >= 5 NG patterns (found ${ngCount})`);
   } else {
+    // 典型NGセクションが無い場合は不足として記録する
     errs.push('How: missing LLM典型NG section');
   }
   
@@ -420,6 +428,7 @@ function main(): void {
   let files = listFilesRecursive(VAR_BASE).filter((f) => /context\.md$/i.test(f));
   // 絞り込み指定がある場合は対象ファイル集合をフィルタする
   if (includeGlobs.length > 0) {
+
     const relToRepo = (abs: string) => toPosix(path.relative(repoRoot, abs));
     const regs = includeGlobs.map(globToRegex);
     // include パターンに一致するファイルのみを残して走査対象を絞り込む
@@ -430,6 +439,7 @@ function main(): void {
     // 一致が 0 件ならスキップとして即時終了する
     // マッチ0件ならスキップとして終了し不要な走査を避ける
     if (files.length === 0) {
+
       process.stdout.write('context-md-rubric: no files matched by --include\n');
       process.exit(0);
     }
@@ -442,6 +452,7 @@ function main(): void {
     // 対象ファイルに違反がある場合のみ結果へ追加して報告対象を明確化する
     // 違反の無いファイルはノイズ削減のためスキップする
     if (errs.length) {
+
       allErrors.push({ file: path.relative(repoRoot, f).replace(/\\/g, '/'), errs });
     }
   }
@@ -449,6 +460,7 @@ function main(): void {
   // すべての対象が基準を満たしていれば成功として終了する
   // 全件合格なら成功終了してルーブリック準拠を示す
   if (allErrors.length === 0) {
+
     process.stdout.write(`context-md-rubric ✅ all ${files.length} file(s) compliant\n`);
     process.exit(0);
   }

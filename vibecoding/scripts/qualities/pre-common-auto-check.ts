@@ -67,6 +67,7 @@ export function primesBad(limit: any, mode: any = "fast"): any {
     let ok = true;
     if (i < 2) { ok = false; }
     else {
+
       for (let j = 2; j * j <= i; j++) {
         if (i % j === 0) { ok = false; break; }
         else if (mode === "slow") {
@@ -83,6 +84,7 @@ export function primesBad(limit: any, mode: any = "fast"): any {
   // 一時ファイル作成後の代表出力収集を保護し後始末を確実に行う
   try {
     if (arr.length > 42) {
+
       cache["last"] = arr;
       JSON.parse("{not: 'json'}");
     }
@@ -176,7 +178,7 @@ function listFilesRecursive(dir: string): string[] {
     try {
       entries = fs.readdirSync(current, { withFileTypes: true });
     } catch {
-      continue; // 読み取れないディレクトリはスキップ
+      continue;
     }
 
     // 子エントリを順に評価してスタックまたは結果へ反映する
@@ -185,6 +187,7 @@ function listFilesRecursive(dir: string): string[] {
       const full = path.join(current, e.name);
       // ディレクトリは後続探索へ積み、ファイルは結果へ追加する
       if (e.isDirectory()) {
+        // サブディレクトリは後続探索のためスタックへ積む
         stack.push(full);
       } else if (e.isFile()) {
         files.push(full);
@@ -224,22 +227,23 @@ function getMaxMtimeMs(filePaths: string[]): number {
  */
 function collectTargetDirs(): string[] {
   const result: string[] = [];
+  const isUnderscoreDir = (p: string): boolean => path.basename(p).startsWith('_');
 
   // 1) qualities/policy/*
   const policyDir = path.join(QUALITIES_DIR, 'policy');
-  const policyChildren = getImmediateSubdirs(policyDir);
+  const policyChildren = getImmediateSubdirs(policyDir).filter((d) => !isUnderscoreDir(d));
   result.push(...policyChildren);
 
   // 2) qualities/eslint/* (exclude _shared)
   const eslintDir = path.join(QUALITIES_DIR, 'eslint');
-  const eslintChildren = getImmediateSubdirs(eslintDir).filter((d) => path.basename(d) !== '_shared');
+  const eslintChildren = getImmediateSubdirs(eslintDir).filter((d) => !isUnderscoreDir(d));
   result.push(...eslintChildren);
 
   // 3) qualities/* (exclude directories already mentioned: 'policy', 'eslint')
   // policy/eslint 以外のトップレベルを対象に追加し既存と重複しないようにする
   const topLevel = getImmediateSubdirs(QUALITIES_DIR).filter((d) => {
     const name = path.basename(d);
-    return name !== 'policy' && name !== 'eslint';
+    return name !== 'policy' && name !== 'eslint' && !name.startsWith('_');
   });
   result.push(...topLevel);
 
@@ -342,13 +346,13 @@ function checkRubric(): boolean {
   // Windows の Node >=20 では file:// URL を優先
   const tsxLoaderArg = fs.existsSync(tsxLoaderFsPath) ? pathToFileURL(tsxLoaderFsPath).href : null;
 
-  // 試行1: node --import <file://loader> rubric.ts
-  // 公式ローダの直接指定で実行可能ならそれを優先採用する
-  // 公式ローダの直接指定が可能な場合は優先して試行する
+  // 公式ローダが利用可能なら rubric を直接実行し、成功なら即時に準拠として戻る
   if (tsxLoaderArg) {
+
+    // ローダ経由の rubric 実行結果を評価して準拠を判定する
     const res1 = spawnSync(process.execPath, ['--import', tsxLoaderArg, rubricChecker], { stdio: 'pipe', encoding: 'utf8' });
-    // 正常終了ならルーブリック準拠として非違反を返す
-    if (typeof res1.status === 'number' && res1.status === 0) return false; // compliant
+    // 公式ローダ経由で rubric が成功した場合は非違反として即時に成功を返す
+    if (typeof res1.status === 'number' && res1.status === 0) return false;
   }
 
   // 試行2: npx -y tsx rubric.ts（クロスプラットフォーム代替）
@@ -365,6 +369,8 @@ function checkRubric(): boolean {
 function outputAndExit(startAt: string, mappings: Array<{ srcDir: string; destDir: string }>, rubricViolation: boolean): void {
   // 再生成の必要も違反も無ければハッシュを出力して成功終了する
   if (mappings.length === 0 && !rubricViolation) {
+
+    // ミラー生成も違反も無い状態のため、開始時刻から導出したハッシュを出力して終了する
     const hash = crypto.createHash('sha256').update(startAt + SECRET).digest('hex');
     process.stdout.write(`${startAt} ${hash}\n`);
     process.exit(0);
@@ -377,13 +383,15 @@ function outputAndExit(startAt: string, mappings: Array<{ srcDir: string; destDi
 
   // ルーブリック違反のみ検出された場合にも同期対象の提示を行う
   if (rubricViolation && mappings.length === 0) {
+
+    // ルーブリックの不足に対する修正アクションを明示して利用者を誘導する
     process.stdout.write('[GATE] contexts/qualities => vibecoding/var/contexts/qualities  # rubric noncompliant\n');
   }
 
   // 診断は、少なくとも1つ以上の対象ユニットで context.md が存在しない場合のみ出力する。
   // いずれかのユニットで context.md が欠落する場合は診断情報を付与して作業支援する
   if (!allTargetContextMdExist()) {
-    emitDiagnostics();
+    emitDiagnostics(); // 対象ユニットの不足を可視化し自己修復のための診断を出力する
   }
 
   process.exit(2);
@@ -483,8 +491,10 @@ function appendDiagnosticsForStep(d: typeof stepDefs[number], results: string[])
   for (const cl of cappedLines) {
     // 空行はそのまま空の行として出力し区切りを示す
     if (cl.trim().length === 0) {
+      // 空行は区切りとして保持し可読性を高める
       results.push('');
     } else {
+      // 非空行はサンプル出力として整形し記録する
       results.push(`[SAMPLE] ${cl}`);
     }
   }
@@ -507,6 +517,8 @@ function saveDiagnostics(diagnostics: string[]): void {
   process.stdout.write(`${ascii  }\n`);
   // 保存先が存在する場合は参照パスを追加で案内する
   if (diagOutFile) {
+
+    // 保存先の相対パスをユーザーへ案内する
     process.stdout.write(`(full diagnostics saved: ${normalizePathForOutput(path.relative(PROJECT_ROOT, diagOutFile))})\n`);
   }
 }
@@ -646,6 +658,8 @@ function buildDuplicateMessages(): string[] {
 
   // 1件以上の重複が検出された場合は共通アクションを追記する
   if (out.length > 0) {
+
+    // 重複キーの統合を促し、単一 YAML へ集約する指針を提示する
     out.push('[GATE] Action: Merge into a single YAML document without repeating top-level keys.');
   }
 
@@ -692,8 +706,10 @@ function toAsciiPrintable(s: string): string {
     const code = ch.codePointAt(0);
     // ASCII 可視文字と制御の一部のみ許容しそれ以外をプレースホルダへ置換する
     if (code !== undefined && ((code >= ASCII_PRINTABLE_MIN && code <= ASCII_PRINTABLE_MAX) || ch === '\n' || ch === '\r' || ch === '\t')) {
+      // 許容された可視/制御文字はそのまま保持して可読性を維持する
       out += ch;
     } else {
+      // 非許容文字は安全なプレースホルダで代替してログ崩れを防ぐ
       out += '?';
     }
   }
@@ -707,7 +723,7 @@ function toAsciiPrintable(s: string): string {
  */
 function findContextReviewPairs(): Array<{ contextMd: string; reviewMd: string }> {
   // 監視ベースが存在しない場合は対象外として空配列を返す
-  if (!fs.existsSync(OUTPUT_BASE)) return [];
+      if (!fs.existsSync(OUTPUT_BASE)) return [];
   const files = listFilesRecursive(OUTPUT_BASE);
   const contextMds = files.filter((f) => path.basename(f) === 'context.md');
   const pairs: Array<{ contextMd: string; reviewMd: string }> = [];
@@ -716,7 +732,7 @@ function findContextReviewPairs(): Array<{ contextMd: string; reviewMd: string }
     const reviewMd = path.join(path.dirname(contextMd), 'context-review.md');
     // review が存在する組だけを結果として返す
     if (fs.existsSync(reviewMd)) {
-      pairs.push({ contextMd, reviewMd });
+      pairs.push({ contextMd, reviewMd }); // 対象 context.md に隣接するレビューのみを選別する
     }
   }
 
@@ -762,16 +778,22 @@ function main(): void {
   const dupViolation = dupMsgs.length > 0;
   // 重複検出がある場合はメッセージを列挙して可視化する
   if (dupViolation) {
+
     // 代表メッセージを順に出力してユーザー行動を案内する
+    // 重複検出の詳細を提示して是正作業を促す
     for (const m of dupMsgs) process.stdout.write(`${m  }\n`);
   }
 
   // Post-pass review detection: only run when other checks are satisfied
   // 他の要件が満たされた場合に限りレビュー衝突を検査する
   if (mappings.length === 0 && !rubricViolation && !dupViolation) {
+
+    // まずミラーとルーブリックの要件が揃っている場合にのみレビュー有無を確認する
     const reviewPairs = findContextReviewPairs();
     // レビューが存在する場合は統合作業を促して一時的に Fail とする
     if (reviewPairs.length > 0) {
+
+      // レビュー統合の必要性を明示し、完了まで一時 Fail とする
       emitReviewConflictMessages(reviewPairs);
       process.exit(2);
     }
@@ -779,6 +801,8 @@ function main(): void {
 
   // 重複のみ検出された場合は情報提示後に一時 Fail とする
   if (mappings.length === 0 && !rubricViolation && dupViolation) {
+
+    // ルーブリックは満たすが重複が残っている状況を明確化し、是正を促すため一時 Fail
     // 重複のみで Fail（他の理由が無い場合）
     process.exit(2);
   }

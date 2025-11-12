@@ -177,6 +177,7 @@ function bannedTermsCheck(rootDir, cfg) {
       const m = regex.exec(lines[i]);
       // マッチした行のみを違反として記録し、発見語をメッセージへ含める
       if (m) {
+
         const found = m[0] ?? '';
         violations.push({ ruleId: 'banned_terms', message: `${rel}:${i + 1} contains "${found}"`, file: rel, line: i + 1 });
       }
@@ -250,6 +251,7 @@ async function main() {
   const { ok, violations } = await runAll(repoRoot);
   // いずれかの違反が存在する場合は詳細を標準エラーへ出力して異常終了させる
   if (!ok) {
+
     // 違反一覧を出力する
     for (const v of violations) {
       process.stderr.write(`anti-mvp ❌ ${v.ruleId}: ${v.message}\n`);

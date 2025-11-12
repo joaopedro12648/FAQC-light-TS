@@ -234,9 +234,10 @@ const audio = new Ctx();
    - フォーマット: UTC-ISO8601 を1行（末尾改行付き）で保存
 
 2. **対象ユニット列挙**  
-   - `qualities/policy/*` ディレクトリ。
-   - `qualities/eslint/*` ディレクトリ。(ただし `qualities/eslint/_shared/` を除く)
-   - `qualities/*` ディレクトリ（ただし本列挙ですでに言及されたディレクトリを除く）
+   - 共通除外: 先頭が `_` のディレクトリは全ルールで対象外（例: `_shared`, `_draft`）。
+   - `qualities/policy/*` ディレクトリ（ただし先頭 `_` は除外）。
+   - `qualities/eslint/*` ディレクトリ（ただし先頭 `_` は除外）。
+   - `qualities/*` ディレクトリ（`policy`/`eslint` を除き、かつ先頭 `_` は除外）。
 
 3. **exit=2 の自動診断（example code & diagnostics）**  
    `npm run -s check:pre-common` が exit=2 の場合、スクリプトは以下を自動出力する。
