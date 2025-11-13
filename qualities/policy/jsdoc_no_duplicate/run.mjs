@@ -41,8 +41,11 @@ function listFilesRecursive(dir) {
     // 無効な参照は安全側で打ち切る
     if (!d) break;
     let entries;
-    // ディレクトリ読み取り失敗時は当該ノードをスキップして継続する
-    try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { continue; }
+    // ディレクトリの内容を読み取る
+    try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch {
+      // 読み取りに失敗したディレクトリはスキップする
+      continue;
+    }
 
     // 子要素を評価して探索キューと結果集合を更新する
     for (const e of entries) {
@@ -50,9 +53,9 @@ function listFilesRecursive(dir) {
       const base = path.basename(full);
       // 除外対象ディレクトリは走査から外す
       if (EXCLUDE_DIRS.has(base)) continue;
-      // 下位ディレクトリは後続探索へ積む
+      // ディレクトリは後続探索のためスタックへ積む
       if (e.isDirectory()) stack.push(full); // 下位ディレクトリを後続探索へ積む
-      else if (e.isFile()) files.push(full);
+      else if (e.isFile()) files.push(full); // ファイルは結果配列へ追加する
     }
   }
 
@@ -220,7 +223,12 @@ function main() {
     let content = '';
 
     // 読み取り失敗時は当該ファイルをスキップして処理を継続する
-    try { content = fs.readFileSync(fp, 'utf8'); } catch { continue; } // 読み取り不能なファイルは検査対象から除外する
+    try {
+      content = fs.readFileSync(fp, 'utf8');
+    } catch {
+      // 読み取りに失敗したファイルは検査対象から除外する
+      continue;
+    }
 
     const hits = findDuplicates(content);
     // 重複候補が見つかった場合のみ違反リストへ追加する
@@ -251,7 +259,9 @@ function main() {
 }
 
 // エントリポイント実行時の致命エラーを捕捉して終了コードを明確化する
+// エントリポイント
 try { main(); } catch (e) {
+  // 実行時の致命的例外はメッセージを出力して異常終了とする
   process.stderr.write(`[policy:jsdoc_no_duplicate] fatal: ${String((e?.message) || e)}\n`);
   process.exit(2);
 }

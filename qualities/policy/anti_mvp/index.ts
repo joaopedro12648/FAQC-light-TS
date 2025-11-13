@@ -107,16 +107,16 @@ function parseBannedTerms(lines: readonly string[]): MutableBannedTerms | undefi
 
     const mWB = l.match(/^\s*word_boundary:\s*(true|false)\s*$/);
     // 単語境界の有無を反映する
-  if (mWB) {
-    out.word_boundary = mWB[1] === 'true';
-    continue;
-  }
+    if (mWB) {
+      out.word_boundary = mWB[1] === 'true';
+      continue;
+    }
 
-  // パス指定を既定値で初期化する
-  if (/^\s*paths:\s*/.test(l)) {
-    out.paths = ['**/*.{ts,tsx,mts,cts}'];
-    continue;
-  }
+    // パス指定を既定値で初期化する
+    if (/^\s*paths:\s*/.test(l)) {
+      out.paths = ['**/*.{ts,tsx,mts,cts}'];
+      continue;
+    }
   }
 
   return Object.keys(out).length > 0 ? out : undefined;
@@ -138,7 +138,7 @@ function parseTodo(lines: readonly string[]): MutableTodo | undefined {
     // 正規表現の指定を抽出する
     const mRegex = l.match(/^\s*regex:\s*"(.+)"\s*$/);
     // 正規表現の指定に一致した場合は値を反映する
-  if (mRegex && mRegex[1] !== undefined) {
+    if (mRegex && mRegex[1] !== undefined) {
       out.regex = mRegex[1];
       continue;
     }
@@ -244,6 +244,7 @@ export async function runAll(rootDir: string): Promise<RunnerResult> {
       // 取得した違反を集約配列へ追加する
       for (const v of vs) allViolations.push(v);
     } catch (e) {
+      // 失敗内容を要約して集約し処理を続行する
       allViolations.push({ ruleId, message: `checker crashed: ${e instanceof Error ? e.message : String(e)}` });
     }
   }

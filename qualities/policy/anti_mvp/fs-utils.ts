@@ -43,6 +43,7 @@ export const globFiles = (rootDir: string, patterns: readonly string[]): string[
         results.push(path.relative(rootDir, rel));
       }
     } else if (pattern.endsWith('.ts')) {
+      // 明示指定された .ts のみを対象に追加する
       const abs = path.join(rootDir, pattern);
       // 明示的に指定された .ts パスのみを対象に安全に追加する
       if (fs.existsSync(abs) && fs.statSync(abs).isFile()) {
@@ -72,6 +73,7 @@ const listAllTsUnder = (dirAbs: string): string[] => {
       // 再帰で得たパスを結果へ追加する
       for (const nested of listAllTsUnder(abs)) out.push(nested);
     } else if (entry.isFile() && entry.name.endsWith('.ts')) {
+      // 収集対象の .ts を結果へ追加する
       out.push(abs);
     }
   }

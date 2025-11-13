@@ -36,13 +36,16 @@ describe('policy: no_relaxation', () => {
       // OK: クリア
       // 失敗ファイルを削除してから OK を検証
       // 検証を分離する目的で失敗ファイルを先に除去する
-      try { fs.rmSync(path.join(tmp, 'ng.ts')); } catch {}
+      try { fs.rmSync(path.join(tmp, 'ng.ts')); } catch {
+        // 削除に失敗した場合は後続の OK 検証へ影響しないためスキップする
+      }
 
       writeTextFile(path.join(tmp, 'ok.ts'), 'export const ok = 1;');
       const ok = await runNode('node', [path.join(process.cwd(), 'qualities', 'policy', 'no_relaxation', 'run.mjs')], { cwd: tmp });
       expect(ok.code).toBe(0);
       expect(ok.stdout).toMatch(/OK: no relaxations/);
     } finally {
+      // 一時ディレクトリを削除してテスト間の独立性を確保する
       cleanupDir(tmp);
     }
   });

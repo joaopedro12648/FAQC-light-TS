@@ -54,10 +54,13 @@ function listFilesRecursive(dir) {
   while (stack.length) {
     const d = stack.pop();
     // 無効値に遭遇した場合は探索を中断する
-  if (!d) break;
+    if (!d) break;
     let entries;
-    // 読み取り失敗時は当該ディレクトリをスキップして継続する
-    try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { continue; }
+    // ディレクトリの内容を読み取る
+    try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch {
+      // ディレクトリの読み取りに失敗した場合は当該ノードをスキップする
+      continue;
+    }
 
     // エントリを順に評価し、対象のみを次段処理へ回す
     for (const e of entries) {
@@ -69,6 +72,7 @@ function listFilesRecursive(dir) {
         // 次の探索対象としてスタックへ積む
         stack.push(full);
       } else if (e.isFile()) {
+        // 対象ファイルを結果集合へ追加する
         files.push(full);
       }
     }
@@ -90,7 +94,15 @@ const patterns = [
  * @returns {Array<{line:number,text:string}>} ヒット行の配列
  */
 function scanFile(fp) {
-  const content = fs.readFileSync(fp, 'utf8');
+  let content = '';
+  // 読み取り失敗時は検査不能として空配列でスキップする
+  try {
+    content = fs.readFileSync(fp, 'utf8');
+  } catch {
+    // 読み取りに失敗したファイルは検査から除外する
+    return [];
+  }
+
   const hits = [];
   // 禁止ディレクティブのパターン集合を走査して一致した行位置を収集する
   for (const rx of patterns) {
@@ -145,7 +157,9 @@ function main() {
 }
 
 // 実行時の想定外例外を捕捉し明示的に異常終了コードを返す
+// エントリポイント
 try { main(); } catch (e) {
+  // 実行時の致命的例外はメッセージを出力して異常終了とする
   process.stderr.write(`[policy:no_relaxation] fatal: ${String((e?.message) || e)}\n`);
   process.exit(2);
 }

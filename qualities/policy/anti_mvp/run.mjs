@@ -142,6 +142,7 @@ function listAllTsFiles(rootDir) {
       }
       // 型対象の拡張子に一致するファイルのみをリストへ追加する
       else if (entry.isFile() && TS_EXT_RX.test(name)) {
+        // 型対象ファイルを検出し、相対パスで収集する意図
         out.push(path.relative(rootDir, abs));
       }
     }
@@ -228,6 +229,7 @@ async function runAll(rootDir) {
     // 禁止語チェックの結果を集約する
     for (const v of bannedTermsCheck(rootDir, cfg)) violations.push(v);
   } catch (e) {
+    // 失敗を集約し後続チェックを続行する
     violations.push({ ruleId: 'banned_terms', message: `checker crashed: ${e && e.message ? e.message : String(e)}` });
   }
 
@@ -236,6 +238,7 @@ async function runAll(rootDir) {
     // チケットID必須チェックの結果を集約する
     for (const v of todoTicketRequiredCheck(rootDir, cfg)) violations.push(v);
   } catch (e) {
+    // 失敗を集約し後続チェックを続行する
     violations.push({ ruleId: 'todo_ticket_required', message: `checker crashed: ${e && e.message ? e.message : String(e)}` });
   }
 

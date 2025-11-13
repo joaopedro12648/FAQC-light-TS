@@ -37,13 +37,16 @@ describe('policy: no_unknown_double_cast', () => {
       // OK
       // 失敗ファイルを削除してから OK を検証
       // NG の残存物を除去して OK 検証を独立させる
-      try { fs.rmSync(path.join(tmp, 'ng.ts')); } catch {}
+      try { fs.rmSync(path.join(tmp, 'ng.ts')); } catch {
+        // 削除に失敗した場合は次の検証に影響しない範囲でスキップする
+      }
 
       writeTextFile(path.join(tmp, 'ok.ts'), 'const n: number = 1;');
       const ok = await runNode('node', [path.join(process.cwd(), 'qualities', 'policy', 'no_unknown_double_cast', 'run.mjs')], { cwd: tmp });
       expect(ok.code).toBe(0);
       expect(ok.stdout).toMatch(/OK:/);
     } finally {
+      // 一時ディレクトリの後始末を行い副作用を残さない
       cleanupDir(tmp);
     }
   });

@@ -42,6 +42,7 @@ function findContextMdFiles(dir: string): string[] {
     try {
       entries = fs.readdirSync(current, { withFileTypes: true });
     } catch {
+      // 目録の読み取りに失敗したディレクトリはスキップして後続の探索を続ける
       continue;
     }
     
@@ -54,6 +55,7 @@ function findContextMdFiles(dir: string): string[] {
         stack.push(fullPath);
       // context.md を検出した場合は結果へ追加する
       } else if (entry.isFile() && entry.name === 'context.md') {
+        // 対象の context.md を結果集合へ追加する
         files.push(fullPath);
       }
     }

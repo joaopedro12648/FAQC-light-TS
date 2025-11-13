@@ -26,10 +26,6 @@ export const environmentExceptions = [
   {
     files: FILES_ALL_CODE,
     rules: { 'no-console': 'error' }
-  },
-
-  // 例外を撤廃し、全域で console を禁止（必要に応じて各ファイルで明示的に許可）
-
-  // 設定ファイルの default export 例外は撤廃（各ファイル内で必要に応じて明示）
+  }
 ];
 

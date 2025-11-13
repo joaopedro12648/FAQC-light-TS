@@ -34,22 +34,23 @@ function listFilesRecursive(dir) {
   while (stack.length) {
     const d = stack.pop();
     // 無効値に遭遇した場合は探索を中断する
-  if (!d) break;
+    if (!d) break;
     let entries;
-    // 読み取り失敗時は当該ディレクトリをスキップして継続する
-    try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { continue; }
+    // ディレクトリの内容を読み取る
+    try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch {
+      // 読み取りに失敗したディレクトリはスキップする
+      continue;
+    }
 
     // エントリを順に評価し、対象のみを次段処理へ回す
     for (const e of entries) {
       const full = path.join(d, e.name);
       const base = path.basename(full);
-      // 除外対象のディレクトリ名は走査から外す
-      if (EXCLUDE_DIRS.has(base)) continue;
-      // 子ディレクトリは探索対象としてスタックに積んで深掘りを継続する
-      // ディレクトリはスタックへ積んで再帰探索する
+
+      // 除外ディレクトリは探索対象外としてスキップし、不要な走査を避ける
+      if (EXCLUDE_DIRS.has(base)) continue;  // ディレクトリはスタックへ積んで再帰探索する
       if (e.isDirectory()) stack.push(full); // 下位ディレクトリを後続探索のためキューへ積む
-      // ファイルは一覧に追加する
-      else if (e.isFile()) files.push(full);
+      else if (e.isFile()) files.push(full); // ファイルは一覧に追加する
     }
   }
 
@@ -91,11 +92,14 @@ function main() {
   for (const fp of files) {
     let content = '';
     // 読み込み失敗時はスキップして処理を継続する
-    try { content = fs.readFileSync(fp, 'utf8'); } catch { continue; }
+    try { content = fs.readFileSync(fp, 'utf8'); } catch {
+      // 読み取りに失敗したファイルは検査から除外する
+      continue;
+    }
 
     const hits = scan(content);
-  // 検出結果がある場合のみ違反一覧へ追加して改善対象を明確にする
-  if (hits.length) violations.push({ file: path.relative(PROJECT_ROOT, fp), hits });
+    // 検出結果がある場合のみ違反一覧へ追加して改善対象を明確にする
+    if (hits.length) violations.push({ file: path.relative(PROJECT_ROOT, fp), hits });
   }
 
   // 違反が無ければ正常終了としてメッセージを出力する
@@ -118,7 +122,9 @@ function main() {
 }
 
 // 実行時の想定外例外を捕捉し明示的に異常終了コードを返す
+// エントリポイント
 try { main(); } catch (e) {
+  // 実行時の致命的例外はメッセージを出力して異常終了とする
   process.stderr.write(`[policy:no_unknown_double_cast] fatal: ${String((e?.message) || e)}\n`);
   process.exit(2);
 }

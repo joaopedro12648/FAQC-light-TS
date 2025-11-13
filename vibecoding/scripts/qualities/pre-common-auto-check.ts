@@ -114,6 +114,7 @@ function readFileIfExists(filePath: string): string | null {
   try {
     return fs.readFileSync(filePath, 'utf8');
   } catch {
+    // 読み取りに失敗した場合は未検出扱いで処理を継続する
     return null;
   }
 }
@@ -178,6 +179,7 @@ function listFilesRecursive(dir: string): string[] {
     try {
       entries = fs.readdirSync(current, { withFileTypes: true });
     } catch {
+      // 目録の読み取りに失敗したディレクトリはスキップする
       continue;
     }
 
@@ -190,6 +192,7 @@ function listFilesRecursive(dir: string): string[] {
         // サブディレクトリは後続探索のためスタックへ積む
         stack.push(full);
       } else if (e.isFile()) {
+        // 収集対象のファイルを結果集合へ追加する
         files.push(full);
       }
     }
@@ -287,6 +290,7 @@ function computeNeededMappings(targetDirs: string[]): Array<{ srcDir: string; de
         const ms = st.mtimeMs ?? new Date(st.mtime).getTime();
         return !(Number.isFinite(ms) && ms > maxMtime);
       } catch {
+        // 比較対象の取得に失敗した場合は更新が必要と判断する
         return true;
       }
     };
@@ -324,6 +328,7 @@ function writeLastUpdated(): string {
   try {
     writeFileEnsured(LAST_UPDATED_FILE, `${startAt}\n`);
   } catch (e) {
+    // 鮮度マーカーの書き出し失敗は致命とし、理由を出力して終了する
     process.stderr.write(`pre-common-auto-check: failed to write last_updated: ${String((e as Error)?.message || e)}\n`);
     process.exit(1);
   }
@@ -375,6 +380,15 @@ function outputAndExit(startAt: string, mappings: Array<{ srcDir: string; destDi
     process.stdout.write(`${startAt} ${hash}\n`);
     process.exit(0);
   }
+
+  // ここからは exit=2 相当。次アクションの簡潔ガイダンスを冒頭に提示する
+  const total = mappings.length;
+  process.stdout.write(`PRE-COMMON: ${total} unit(s) require mirror update or rubric fix.\n`);
+  process.stdout.write(`Next steps:\n`);
+  process.stdout.write(`  1) Create/refresh mirrors at vibecoding/var/contexts/qualities/** (context.yaml/context.md)\n`);
+  process.stdout.write(`  2) Run rubric: npx -y tsx vibecoding/scripts/qualities/context-md-rubric.ts\n`);
+  process.stdout.write(`  3) Re-run: npm run -s check:pre-common  # success prints "<StartAt> <hash>"\n`);
+  process.stdout.write(`(diagnostics: tmp/pre-common-diagnostics.md when generated)\n`);
 
   // 必要なミラー生成・更新対象を列挙して作業指示を明確化する
   for (const m of mappings) {
@@ -438,7 +452,7 @@ function runGateCommandsWithKata(_pkgJson: unknown): string[] {
   const kataPath = path.join(kataDir, 'kata_for_auth_check.ts');
   fs.mkdirSync(kataDir, { recursive: true });
   fs.writeFileSync(kataPath, KATA_TS, 'utf8');
-  // 代表出力収集フェーズを保護して後続の片付けを確実に行う
+  // 診断用の代表出力を収集する
   try {
   // 診断には stepDefs を使用（runMode が 'diagnostics' または 'both'。'test' と 'build' は除外）
     const steps = stepDefs.filter((d) => (d.runMode === 'diagnostics' || d.runMode === 'both') && d.id !== 'test' && d.id !== 'build');
@@ -454,14 +468,18 @@ function runGateCommandsWithKata(_pkgJson: unknown): string[] {
     return results;
   } finally {
     // 一時ファイルの削除でクリーンアップを保証する
-    try { fs.unlinkSync(kataPath); } catch {}
+    try { fs.unlinkSync(kataPath); } catch {
+      // 一時ファイルの削除に失敗した場合は後続の後始末を継続する
+    }
 
     // 一時ディレクトリが空であれば削除して痕跡を残さない
     try {
       const remains = fs.readdirSync(kataDir);
       // 空ディレクトリのみ削除して安全にクリーンアップする
       if (remains.length === 0) fs.rmdirSync(kataDir);
-    } catch {}
+    } catch {
+      // 一時ディレクトリの削除に失敗した場合は痕跡が残っても継続する
+    }
   }
 }
 
@@ -511,7 +529,9 @@ function saveDiagnostics(diagnostics: string[]): void {
   try {
     fs.mkdirSync(path.dirname(diagOutFile), { recursive: true });
     fs.writeFileSync(diagOutFile, full, 'utf8');
-  } catch {}
+  } catch {
+    // 診断の保存に失敗した場合は標準出力のみで継続する
+  }
 
   const ascii = toAsciiPrintable(full);
   process.stdout.write(`${ascii  }\n`);
@@ -557,6 +577,7 @@ function emitDiagnostics(): void {
     diagnostics.push('----- end diagnostics -----');
     saveDiagnostics(diagnostics);
   } catch (e) {
+    // 診断生成の失敗は内容を記録して以降の処理を継続する
     process.stderr.write(`pre-common-auto-check: diagnostics error: ${String((e as Error)?.message || e)}\n`);
   }
 }
@@ -599,6 +620,7 @@ function detectTopLevelKeyDuplicates(filePath: string): Array<{ key: string; lin
   try {
     content = fs.readFileSync(filePath, 'utf8');
   } catch {
+    // 読み取りに失敗したファイルは重複検出の対象外とする
     return [];
   }
 
@@ -684,6 +706,7 @@ function allTargetContextMdExist(): boolean {
         return false;
       }
     } catch {
+      // 存在確認の失敗は非整合として扱う
       return false;
     }
   }
@@ -723,7 +746,7 @@ function toAsciiPrintable(s: string): string {
  */
 function findContextReviewPairs(): Array<{ contextMd: string; reviewMd: string }> {
   // 監視ベースが存在しない場合は対象外として空配列を返す
-      if (!fs.existsSync(OUTPUT_BASE)) return [];
+  if (!fs.existsSync(OUTPUT_BASE)) return [];
   const files = listFilesRecursive(OUTPUT_BASE);
   const contextMds = files.filter((f) => path.basename(f) === 'context.md');
   const pairs: Array<{ contextMd: string; reviewMd: string }> = [];
@@ -814,6 +837,7 @@ function main(): void {
 try {
   main();
 } catch (e) {
+  // 実行全体の想定外例外は致命としてログ出力し異常終了する
   process.stderr.write(`pre-common-auto-check: fatal error: ${String((e as Error)?.message || e)}\n`);
   process.exit(1);
 }

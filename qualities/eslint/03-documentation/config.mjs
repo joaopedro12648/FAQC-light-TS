@@ -103,7 +103,7 @@ export const documentation = [
         {
           allowBlankLine: false,
           ignoreElseIf: true,
-          ignoreCatch: true,
+          ignoreCatch: false,
           treatChainHeadAs: 'non-dangling',
           fixMode: true,
           // ja 系なら少なくとも1文字の非ASCIIを要求。それ以外は未設定（無効化）が望ましいが、ここでは動的に切替。

@@ -31,6 +31,7 @@ function run(cmd) {
   try {
     return execSync(cmd, { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' }).trim();
   } catch (e) {
+    // 取得に失敗した場合は空文字を返して後続のフォールバックへ委ねる
     return '';
   }
 }
@@ -50,7 +51,7 @@ function getChangedFiles() {
   for (const cmd of attempts) {
     const out = run(cmd);
     // 最初に成功した差分範囲の結果を採用して余計な走査を避ける
-  if (out) return Array.from(new Set(out.split('\n').filter(Boolean)));
+    if (out) return Array.from(new Set(out.split('\n').filter(Boolean)));
   }
 
   // 最後の手段として、作業ツリーの変更を確認する（CI では空の可能性あり）
@@ -68,6 +69,7 @@ function readFileSafe(p) {
   try {
     return fs.readFileSync(p, 'utf8');
   } catch {
+    // 読み取りに失敗した場合は空文字を返して後続の判定を続ける
     return '';
   }
 }

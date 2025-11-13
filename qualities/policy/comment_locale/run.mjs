@@ -45,10 +45,11 @@ function getEnvLocale() {
  * @returns {string} 推定ロケール
  */
 function getOsLocale() {
-  // 実行環境からロケールを推定し、失敗時は空文字でフォールバックする
+  // 実行環境からロケールを推定する
   try {
     return Intl.DateTimeFormat().resolvedOptions().locale || '';
   } catch {
+    // ロケール取得に失敗した場合は空文字へフォールバックする
     return '';
   }
 }
@@ -111,10 +112,13 @@ function listFilesRecursive(dir) {
   while (stack.length) {
     const d = stack.pop();
     // 無効なエントリに遭遇した場合は走査を中断する
-  if (!d) break;
+    if (!d) break;
     let entries;
-    // ディレクトリ読み取りに失敗した場合は当該ディレクトリをスキップする
-    try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { continue; }
+    // ディレクトリを読み取る
+    try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch {
+      // 目録の読み取りに失敗したディレクトリはスキップする
+      continue;
+    }
 
     // エントリを順に評価しファイルとディレクトリを振り分ける
     for (const e of entries) {
@@ -125,7 +129,7 @@ function listFilesRecursive(dir) {
       // ディレクトリはスタックに積んで再帰的に探索する
       if (e.isDirectory()) stack.push(full); // 下位ディレクトリを後続探索のためキューへ積む
       // ファイルは一覧に追加する
-      else if (e.isFile()) files.push(full);
+      else if (e.isFile()) files.push(full); // ファイルを検出し一覧へ追加する
     }
   }
 
@@ -418,6 +422,7 @@ function analyzeFileForViolations(fp, strictness) {
   try {
     content = fs.readFileSync(fp, 'utf8');
   } catch {
+    // 読み取りに失敗したファイルは検査不能としてスキップする
     return [];
   }
 
@@ -485,7 +490,9 @@ function main() {
 }
 
 // 実行時の想定外例外を捕捉し明示的に異常終了コードを返す
+// エントリポイント
 try { main(); } catch (e) {
+  // 実行時の致命的例外はメッセージを出力して異常終了とする
   process.stderr.write(`[policy:comment_locale] fatal: ${String((e?.message) || e)}\n`);
   process.exit(2);
 }

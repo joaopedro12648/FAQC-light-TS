@@ -55,6 +55,7 @@ describe('policy: jsdoc_no_duplicate', () => {
       expect(ok.code).toBe(0);
       expect(ok.stdout).toMatch(/OK: no adjacent JSDoc duplicates/);
     } finally {
+      // 一時ディレクトリを削除して副作用を残さない
       cleanupDir(tmp);
     }
   });

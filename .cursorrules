@@ -287,6 +287,9 @@ agent_phase:
     suppress_reapproval_prompt_when: "current_phase == IMPL"
     # 再承認プロンプトの作用範囲は SnD 単位（同一 SnD セッション中は再承認不要）
     reapproval_prompt_scope: "per_snd"
+    # 承認要請タイミングの規範（明文化）
+    approval_prompt_policy:
+      require_snd_created_and_pre_common_success: true  # SnD 作成完了（PRE-COMMON exit=0）前は承認要請を出さない
 
 guardrails:
   edits:
@@ -316,8 +319,7 @@ guardrails:
         allow_in_phases: ["SnD-ONLY"]
         scope: "tests の追加/削除や src の数行変更など、個別具体・小変更のみ"
         paths:
-          - "tests/**"
-          - "src/**"
+          - "**"
         constraints:
           max_changed_files: 2
           max_total_changed_lines: 30
@@ -330,7 +332,7 @@ guardrails:
           disallow_public_api_changes: true
         consent:
           required_phrase: "MAINT=承認: scope=<短文>"
-          guidance: "拡大解釈禁止。影響範囲は tests/** と既存 src/** の小変更に限定。"
+          guidance: "拡大解釈禁止。小変更（件数/行数制約）・依存/設定/公開API 変更は依然禁止。"
       - name: "auto-impl-after-approval"
         allow_in_phases: ["IMPL"]
         scope: "from_approved_snd"
@@ -415,6 +417,13 @@ chat_output_guards:
     max_total_fenced_code_lines: 80          # これ以上は分割要求 or ファイル配布に切替
     max_fenced_blocks: 2
     on_violation: "abort_with_guidance"      # 中断し、承認フレーズと代替手段（ファイル化）を提示
+
+  # IMPL 承認要請のタイミング制御（規範補強）
+  approval_prompt_timing:
+    prohibit_before:
+      - "SnD.status == Ready"
+      - "SnD.front_matter.quality_refresh_hash_at_created is set"
+    note: "SnD 未作成/未成功（PRE-COMMON exit=0 未達）時は承認要請を提示しない"
 
   # ゲーム/チュートリアル等の“勝手実装”を検知して遮断
   deny_on_intent_patterns:

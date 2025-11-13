@@ -69,7 +69,7 @@ function extractSchemaPropertyKeys(ast) {
   for (const d of getExportedVariableDeclarators(ast)) {
     const keys = extractSchemaKeysFromInit(d.init);
     // 最初に検出した schema.properties を採用して不要な探索を避ける
-  if (keys.size > 0) return keys;
+    if (keys.size > 0) return keys;
   }
 
   return new Set();
@@ -128,7 +128,7 @@ function extractSchemaKeysFromInit(init) {
 
       // Identifier キーを集合へ追加する
       if (p.key.type === 'Identifier') out.add(p.key.name); // schema キーを集合へ追加する
-      else if (p.key.type === 'Literal' && typeof p.key.value === 'string') out.add(p.key.value);
+      else if (p.key.type === 'Literal' && typeof p.key.value === 'string') out.add(p.key.value); // schema キーを集合へ追加する
     }
   }
 

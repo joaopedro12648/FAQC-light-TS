@@ -88,6 +88,7 @@ function getChangedFilesForLint(): string[] {
       .filter((p) => existsSync(p));
     return targets;
   } catch {
+    // 失敗時は空配列を返す
     return [];
   }
 }
@@ -111,6 +112,7 @@ function getChangedPathsRaw(): string[] | null {
       .filter((s) => s.length > 0);
     return candidates;
   } catch {
+    // 失敗時は null を返す
     return null;
   }
 }
@@ -155,7 +157,7 @@ function traverseUpdatedNewerThan(dir: string, thresholdMs: number): boolean {
  * @returns {boolean} 新しいファイルがあれば true
  */
 function hasFilesUpdatedAfter(rootDir: string, thresholdIso: string): boolean {
-  // 日付の解釈や走査で例外が発生しても安全側で false を返して続行する
+  // 日付を解釈し、ディレクトリを走査して更新の有無を判定する
   try {
     const threshold = new Date(thresholdIso).getTime();
     // しきい値が不正なら検出なし
@@ -164,6 +166,7 @@ function hasFilesUpdatedAfter(rootDir: string, thresholdIso: string): boolean {
     if (!existsSync(rootDir)) return false;
     return traverseUpdatedNewerThan(rootDir, threshold);
   } catch {
+    // 不明/失敗時は検出なし（false）を返す
     return false;
   }
 }
@@ -280,6 +283,7 @@ function hasInternalTestFiles(): boolean {
         stack.push(path.join(current, name));
       }
     } else if (st.isFile() && /\.(test|spec)\.(c|m)?[jt]sx?$/.test(current)) {
+      // テストファイル検出時は早期終了して検出完了とする
       return true;
     }
   }
@@ -370,8 +374,10 @@ async function handleTestStep(cmd: string, args: readonly string[]): Promise<boo
         process.stdout.write('[test] vibecoding/ 変更あり: 内製テストを追加実行します\n');
         // 一時的な Vitest 設定で include を vibecoding/** に限定して実行
         const tmpDir = path.join(process.cwd(), 'tmp');
-        // 一時ディレクトリの作成は失敗しても後続に影響しないようにする
-        try { mkdirSync(tmpDir, { recursive: true }); } catch {}
+        // 一時ディレクトリを作成する
+        try { mkdirSync(tmpDir, { recursive: true }); } catch {
+          // 一時ディレクトリの作成に失敗した場合は後続の処理へ影響しないため無視する
+        }
 
         const internalCfg = path.join('tmp', 'vitest.internal.config.cjs');
         const cfgContent = [
@@ -384,8 +390,10 @@ async function handleTestStep(cmd: string, args: readonly string[]): Promise<boo
           '});',
           '',
         ].join('\n');
-        // 一時設定ファイルの書き込みは失敗しても続行する
-        try { writeFileSync(internalCfg, cfgContent, 'utf8'); } catch {}
+        // 一時設定ファイルを書き込む
+        try { writeFileSync(internalCfg, cfgContent, 'utf8'); } catch {
+          // 一時設定の書き込みに失敗した場合は既定設定で継続する
+        }
 
         await runCommand('npx', ['vitest', 'run', '--config', internalCfg, '--silent']);
       } else {
@@ -415,6 +423,7 @@ const isMain = (() => {
     const invokedHref = pathToFileURL(arg1).href;
     return import.meta.url === invokedHref;
   } catch {
+    // 直接起動の判定に失敗した場合は安全側で false を返す
     return false;
   }
 })();

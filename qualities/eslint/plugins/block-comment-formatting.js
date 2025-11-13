@@ -194,11 +194,11 @@ export const blockCommentFormattingPlugin = {
       create(context) {
         const sourceCode = context.sourceCode || context.getSourceCode();
 
-/**
- * describe 呼び出しかを判定する（it/test は対象外）。
- * @param {import('estree').Node} node 対象ノード（CallExpression など）
- * @returns {boolean} describe 呼び出しであれば true
- */
+        /**
+         * describe 呼び出しかを判定する（it/test は対象外）。
+         * @param {import('estree').Node} node 対象ノード（CallExpression など）
+         * @returns {boolean} describe 呼び出しであれば true
+         */
         function isDescribeCall(node) {
           return (
             node &&
@@ -209,11 +209,11 @@ export const blockCommentFormattingPlugin = {
           );
         }
 
-/**
- * コメントが意味を持つかを判定する。
- * @param {any} c コメントオブジェクト
- * @returns {boolean} 空でなければ true（装飾を除去して非空か）
- */
+        /**
+         * コメントが意味を持つかを判定する。
+         * @param {any} c コメントオブジェクト
+         * @returns {boolean} 空でなければ true（装飾を除去して非空か）
+         */
         function isMeaningfulComment(c) {
           // 無効なコメントは非意味として扱う
           if (!c || typeof c.value !== 'string') return false;
@@ -221,22 +221,22 @@ export const blockCommentFormattingPlugin = {
           return text.length > 0;
         }
 
-/**
- * 直前のコメントを取得する。
- * @param {any} node 対象ノード
- * @returns {any|null} もっとも近い直前コメント（存在しなければ null）
- */
+        /**
+         * 直前のコメントを取得する。
+         * @param {any} node 対象ノード
+         * @returns {any|null} もっとも近い直前コメント（存在しなければ null）
+         */
         function getLastPrecedingComment(node) {
           const commentsBefore = sourceCode.getCommentsBefore ? sourceCode.getCommentsBefore(node) : [];
           return commentsBefore.length > 0 ? commentsBefore[commentsBefore.length - 1] : null;
         }
 
-/**
- * コメントとノードが空行なしで隣接しているかを判定する。
- * @param {any} last 直前コメント
- * @param {any} node 対象ノード
- * @returns {boolean} 空行が無ければ true
- */
+        /**
+         * コメントとノードが空行なしで隣接しているかを判定する。
+         * @param {any} last 直前コメント
+         * @param {any} node 対象ノード
+         * @returns {boolean} 空行が無ければ true
+         */
         function isAdjacent(last, node) {
           const between = sourceCode.text.slice(last.range[1], node.range[0]);
           return !/\n\s*\n/.test(between);

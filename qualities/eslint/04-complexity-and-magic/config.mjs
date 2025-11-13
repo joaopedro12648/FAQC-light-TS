@@ -30,6 +30,9 @@ export const complexityAndMagic = [
       complexity: ['error', 10],
       'max-lines-per-function': ['error', 80],
       'max-nested-callbacks': ['error', 3],
+      // Indentation / tabs-spaces hygiene
+      indent: ['error', 2, { SwitchCase: 1 }],
+      'no-mixed-spaces-and-tabs': 'error',
       // Readable Code（一般則）
       'no-nested-ternary': 'error',
       'no-else-return': ['error', { allowElseIf: false }],

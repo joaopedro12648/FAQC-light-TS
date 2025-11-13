@@ -41,13 +41,16 @@ describe('policy: anti_mvp', () => {
       // OK: クリア
       // 失敗ファイルを削除してから OK を検証
       // 失敗ケースの残骸を除去し検証を分離する
-      try { fs.rmSync(path.join(tmp, 'ng.ts')); } catch {}
+      try { fs.rmSync(path.join(tmp, 'ng.ts')); } catch {
+        // 削除失敗時は後続の OK 検証へ影響しないためスキップする
+      }
 
       writeTextFile(path.join(tmp, 'ok.ts'), 'export const ok = 1;');
       const ok = await runNode('node', [path.join(process.cwd(), 'qualities', 'policy', 'anti_mvp', 'run.mjs')], { cwd: tmp });
       expect(ok.code).toBe(0);
       expect(ok.stdout).toMatch(/anti-mvp ✅/);
     } finally {
+      // 一時ディレクトリを削除してテスト間の独立性を維持する
       cleanupDir(tmp);
     }
   });

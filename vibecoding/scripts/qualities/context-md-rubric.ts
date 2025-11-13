@@ -79,12 +79,13 @@ function listFilesRecursive(dir: string): string[] {
   while (stack.length) {
     const cur = stack.pop();
     // 無効なパスに遭遇した場合は探索を中断して次の要素へ進む
-  if (!cur) break;
+    if (!cur) break;
     let entries: fs.Dirent[] | undefined;
     // ディレクトリの列挙に失敗しても処理全体を止めず次のノードへ進む
     try {
       entries = fs.readdirSync(cur, { withFileTypes: true });
     } catch {
+      // 目録の読み取りに失敗したディレクトリはスキップする
       continue;
     }
 
@@ -93,7 +94,7 @@ function listFilesRecursive(dir: string): string[] {
       const full = path.join(cur, e.name);
       // ディレクトリは後続の走査対象としてスタックへ積む
       if (e.isDirectory()) stack.push(full); // 下位ディレクトリを後続探索のためキューへ積む
-      else if (e.isFile()) files.push(full);
+      else if (e.isFile()) files.push(full); // ファイルを結果へ追加する
     }
   }
 
@@ -482,6 +483,7 @@ function main(): void {
 try {
   main();
 } catch (err) {
+  // 実行時の致命的例外はメッセージを出力して異常終了とする
   process.stderr.write(`context-md-rubric ❌ ${err instanceof Error ? err.message : String(err)}\n`);
   process.exit(1);
 }
