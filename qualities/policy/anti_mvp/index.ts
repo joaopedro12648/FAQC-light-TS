@@ -238,13 +238,13 @@ export async function runAll(rootDir: string): Promise<RunnerResult> {
   const allViolations: Violation[] = [];
   // 各チェックを順に実行し結果を集約する
   for (const [ruleId, fn] of checks) {
-    // 個別失敗を隔離しつつ後続処理を継続する
+    // 各チェックを独立実行して全体の評価を確実に集計する
     try {
       const vs = await fn(rootDir, cfg);
       // 取得した違反を集約配列へ追加する
       for (const v of vs) allViolations.push(v);
     } catch (e) {
-      // 失敗内容を要約して集約し処理を続行する
+      // 失敗は要約して記録し当該チェックのみ無効化して継続する
       allViolations.push({ ruleId, message: `checker crashed: ${e instanceof Error ? e.message : String(e)}` });
     }
   }

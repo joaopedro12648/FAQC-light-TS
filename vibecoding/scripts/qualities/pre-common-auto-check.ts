@@ -110,11 +110,11 @@ export const forceAny = /** @type {unknown} 。*/ (cache);
  * @returns ファイル内容。存在しない場合は null
  */
 function readFileIfExists(filePath: string): string | null {
-  // 存在確認と読み込みに失敗しても処理全体を止めず未検出扱いで続行する
+  // 必要に応じてファイルを読み込み、存在確認と同時に内容を取得する
   try {
     return fs.readFileSync(filePath, 'utf8');
   } catch {
-    // 読み取りに失敗した場合は未検出扱いで処理を継続する
+    // 読み取り失敗は未検出として扱い上位のロジックで継続する
     return null;
   }
 }
@@ -175,11 +175,11 @@ function listFilesRecursive(dir: string): string[] {
     // 無効な参照に遭遇した場合は探索を中断して次へ進む
     if (!current) break;
     let entries: fs.Dirent[] | undefined;
-    // 読み取り失敗時は当該ノードをスキップして探索を継続する
+    // 配下のエントリ一覧を取得して探索キューを拡張する
     try {
       entries = fs.readdirSync(current, { withFileTypes: true });
     } catch {
-      // 目録の読み取りに失敗したディレクトリはスキップする
+    // 読み取り失敗は当該ディレクトリのみ除外して探索を継続する
       continue;
     }
 
@@ -324,7 +324,7 @@ function writeLastUpdated(): string {
   // Keep baseline read for potential future diff logic (currently unused)
   readFileIfExists(LAST_UPDATED_FILE);
   const startAt = toIsoUtcNow();
-  // 鮮度マーカーの書き込みに失敗した場合は致命として終了し後段の不整合を防ぐ
+  // 基準時刻を記録し後続の評価ロジックが参照するタイムスタンプを保存する
   try {
     writeFileEnsured(LAST_UPDATED_FILE, `${startAt}\n`);
   } catch (e) {
@@ -467,18 +467,18 @@ function runGateCommandsWithKata(_pkgJson: unknown): string[] {
 
     return results;
   } finally {
-    // 一時ファイルの削除でクリーンアップを保証する
+    // 一時ファイルを削除してクリーンアップの確実性を高める
     try { fs.unlinkSync(kataPath); } catch {
-      // 一時ファイルの削除に失敗した場合は後続の後始末を継続する
+      // 削除失敗は致命でないため後続の後始末のみ継続する
     }
 
-    // 一時ディレクトリが空であれば削除して痕跡を残さない
+    // ディレクトリが空であれば撤去して痕跡を最小化する
     try {
       const remains = fs.readdirSync(kataDir);
       // 空ディレクトリのみ削除して安全にクリーンアップする
       if (remains.length === 0) fs.rmdirSync(kataDir);
     } catch {
-      // 一時ディレクトリの削除に失敗した場合は痕跡が残っても継続する
+      // 撤去に失敗した場合は影響が小さいため処理を継続する
     }
   }
 }
@@ -507,12 +507,12 @@ function appendDiagnosticsForStep(d: typeof stepDefs[number], results: string[])
   const cappedLines = capped.split('\n');
   // 各行を整形して空行と本文を区別して蓄積する
   for (const cl of cappedLines) {
-    // 空行はそのまま空の行として出力し区切りを示す
+    // 空行か否かで出力方針を切り替える
     if (cl.trim().length === 0) {
-      // 空行は区切りとして保持し可読性を高める
+      // 区切りとして空行を保持し、可読性を担保する
       results.push('');
     } else {
-      // 非空行はサンプル出力として整形し記録する
+      // 本文行をサンプル出力として整形して記録する
       results.push(`[SAMPLE] ${cl}`);
     }
   }
@@ -557,7 +557,7 @@ function runStepDef(command: string, args: string[]): { lines: string[]; result:
 
 /** 合成した診断サンプルブロックを出力する。 */
 function emitDiagnostics(): void {
-  // 診断生成全体を保護して部分失敗時も安定した出力を維持する
+  // 診断生成を実施して出力を構成する（部分失敗時も安定性を維持）
   try {
     const diagnostics: string[] = [];
     diagnostics.push('----- PRE-COMMON: example code & diagnostics (exit=2) -----');
@@ -577,7 +577,7 @@ function emitDiagnostics(): void {
     diagnostics.push('----- end diagnostics -----');
     saveDiagnostics(diagnostics);
   } catch (e) {
-    // 診断生成の失敗は内容を記録して以降の処理を継続する
+    // 生成時の例外は警告として記録し処理を継続する
     process.stderr.write(`pre-common-auto-check: diagnostics error: ${String((e as Error)?.message || e)}\n`);
   }
 }
@@ -616,7 +616,7 @@ function collectVarContextYamlFiles(): string[] {
  */
 function detectTopLevelKeyDuplicates(filePath: string): Array<{ key: string; lines: number[] }> {
   let content = '';
-  // 読み取り失敗時は対象外として空の結果を返す
+  // 重複検出のためにファイル内容を読み込む
   try {
     content = fs.readFileSync(filePath, 'utf8');
   } catch {
@@ -699,14 +699,14 @@ function allTargetContextMdExist(): boolean {
     const rel = path.relative(QUALITIES_DIR, srcDir);
     const destDir = path.join(OUTPUT_BASE, rel);
     const destMd = path.join(destDir, 'context.md');
-    // 存在確認の失敗や未作成は非整合として扱う
+    // 各ユニットの context.md の存在を検査して整合性を評価する
     try {
       // context.md が存在しないユニットを検知したら不整合を返す
       if (!fs.existsSync(destMd)) {
         return false;
       }
     } catch {
-      // 存在確認の失敗は非整合として扱う
+      // 存在確認に失敗した場合は非整合とみなし安全側に倒す
       return false;
     }
   }
@@ -833,7 +833,7 @@ function main(): void {
   outputAndExit(startAt, mappings, rubricViolation);
 }
 
-// 実行全体の例外を捕捉して安定した失敗出力へ統一する
+// 終了方針: 実行全体の例外処理を一元化し致命時は明確に失敗させる
 try {
   main();
 } catch (e) {

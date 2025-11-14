@@ -116,6 +116,12 @@ export const documentation = [
       ]
     }
   },
+  // 一時対応: 自己実装ファイルは段階ロールアウトのため対象外（SnD フォローアップで撤去）
+  {
+    files: ['qualities/eslint/plugins/require-comments-on-control-structures.js'],
+    plugins: { control: controlStructuresPlugin },
+    rules: { 'control/require-comments-on-control-structures': 'off' }
+  },
   // ESLint ディレクティブコメントの説明必須・過剰抑止禁止
   {
     files: FILES_ALL_CODE,

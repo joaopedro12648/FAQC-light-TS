@@ -23,7 +23,7 @@ import { runNode } from '../framework/runNode';
 describe('policy: no_relaxation', () => {
   it('detects relaxations and passes when none present', async () => {
     const tmp = createTmpDir();
-    // 一時ディレクトリを確実に片付け検証を独立させる
+    // 生成物と検証を分離し、実行結果の判定を明瞭にする
     try {
       // NG: eslint-disable を含む
       const kw = 'eslint-';
@@ -45,7 +45,7 @@ describe('policy: no_relaxation', () => {
       expect(ok.code).toBe(0);
       expect(ok.stdout).toMatch(/OK: no relaxations/);
     } finally {
-      // 一時ディレクトリを削除してテスト間の独立性を確保する
+      // 作成資材を完全に除去し、次回検証への汚染を防ぐ
       cleanupDir(tmp);
     }
   });

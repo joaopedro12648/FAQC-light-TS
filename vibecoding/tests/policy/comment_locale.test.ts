@@ -22,7 +22,7 @@ import { runNode } from '../framework/runNode';
 describe('policy: comment_locale', () => {
   it('fails on ASCII-only JSDoc with ja locale and passes when non-ASCII present', async () => {
     const tmp = createTmpDir();
-    // 一時環境の作成と破棄を確実に行い副作用を隔離する
+    // 検証対象の実行と結果確認を集約し、失敗を即時に検出する
     try {
       // NG: ASCII のみの JSDoc（タグ行やパス/URL行ではない本文を用意）
       const asciiOnly = [
@@ -79,7 +79,7 @@ describe('policy: comment_locale', () => {
       expect(ok.code).toBe(0);
       expect(ok.stdout).toMatch(/\[policy:comment_locale\] OK/);
     } finally {
-      // 一時ディレクトリの後始末を行いリークを防止する
+      // 作成した一時資産を確実に消去し永続汚染を回避する
       cleanupDir(tmp);
     }
   });

@@ -368,15 +368,15 @@ async function handleTestStep(cmd: string, args: readonly string[]): Promise<boo
     if (existsSync('vibecoding')) {
       // 内製テストの追加実行を有効化する（対象の探索と限定実行）
       // vibecoding ディレクトリが存在する環境に限定して探索・実行対象とする
-      // 内製テストファイルが存在する場合のみ限定実行する
+      // vibecoding/tests/** に1件以上の内製テストが見つかる場合のみ追加実行を有効化する
       if (hasInternalTestFiles()) {
-        // 内製テストを限定構成で追加実行し、ゲートの網羅性を補完する
+        // 内製テストを限定構成で追加実行し、利用者向けテストを補完する
         process.stdout.write('[test] vibecoding/ 変更あり: 内製テストを追加実行します\n');
         // 一時的な Vitest 設定で include を vibecoding/** に限定して実行
         const tmpDir = path.join(process.cwd(), 'tmp');
-        // 一時ディレクトリを作成する
+        // 内製テスト用の一時ディレクトリを準備して専用設定を配置する
         try { mkdirSync(tmpDir, { recursive: true }); } catch {
-          // 一時ディレクトリの作成に失敗した場合は後続の処理へ影響しないため無視する
+          // 一時ディレクトリ作成に失敗した場合は追加テストをスキップして通常経路を継続する
         }
 
         const internalCfg = path.join('tmp', 'vitest.internal.config.cjs');
@@ -397,15 +397,15 @@ async function handleTestStep(cmd: string, args: readonly string[]): Promise<boo
 
         await runCommand('npx', ['vitest', 'run', '--config', internalCfg, '--silent']);
       } else {
-        // 内製テストが存在しない場合は追加実行せず案内のみ出す
+        // 追加実行は抑止し、スキップの事実のみを案内として出力する
         process.stdout.write('[test] 内製テストファイルなし: 追加実行をスキップ\n');
       }
     } else {
-      // vibecoding ディレクトリが無い環境では内製テストをスキップする
+      // この環境は内製テストの対象外として扱い、追加実行は行わない
       process.stdout.write('[test] vibecoding/ ディレクトリなし: 内製テストはスキップ\n');
     }
   } else {
-    // 変更・条件未充足のため追加の内製テストは実行しない
+    // 条件未充足のため追加の内製テストは実行しない
     process.stdout.write('[test] 変更なし判定: 内製テストはスキップ\n');
   }
 
@@ -414,7 +414,7 @@ async function handleTestStep(cmd: string, args: readonly string[]): Promise<boo
 
 /** このファイルが直接起動されたかの判定（ユニットテストからの import を除外） */
 const isMain = (() => {
-  // 実行判定の決定は失敗しても安全側（false）に倒す
+  // 直接起動かを判定して CLI 実行とライブラリ利用を分岐する
   try {
     // 呼び出しパスが不明な場合は直接起動ではないと判定して安全側に倒す
     const arg1 = typeof process.argv[1] === 'string' ? process.argv[1] : null;
@@ -423,7 +423,7 @@ const isMain = (() => {
     const invokedHref = pathToFileURL(arg1).href;
     return import.meta.url === invokedHref;
   } catch {
-    // 直接起動の判定に失敗した場合は安全側で false を返す
+    // 例外時は判定不能として実行を抑止する（安全側で false）
     return false;
   }
 })();

@@ -22,7 +22,7 @@ import { runNode } from '../framework/runNode';
 describe('policy: jsdoc_no_duplicate', () => {
   it('detects adjacent duplicates (NG) and passes when no duplicates (OK)', async () => {
     const tmp = createTmpDir();
-    // テスト用の一時ディレクトリを確実に片付け検証の独立性を保つ
+    // 主要手順の完了と期待結果を確認し、要件充足を判定する
     try {
       // 配置: YAML のみ参照されるのでコピー
       const srcYaml = path.join(process.cwd(), 'qualities', 'policy', 'baseline.yaml');
@@ -55,7 +55,7 @@ describe('policy: jsdoc_no_duplicate', () => {
       expect(ok.code).toBe(0);
       expect(ok.stdout).toMatch(/OK: no adjacent JSDoc duplicates/);
     } finally {
-      // 一時ディレクトリを削除して副作用を残さない
+      // 実行で生成した一時資材を確実に消去し、残留物を持ち越さない
       cleanupDir(tmp);
     }
   });

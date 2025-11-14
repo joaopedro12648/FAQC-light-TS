@@ -118,11 +118,11 @@ function listFilesRecursive(rootDir) {
     // ガード：不正値を検出した場合は次の処理へ移る
     if (!current) break;
     let entries;
-    // I/O 失敗時は当該ディレクトリをスキップ
+    // 配下のエントリ一覧を取得して走査対象を展開する
     try {
       entries = fs.readdirSync(current, { withFileTypes: true });
     } catch {
-      // 目録の読み取りに失敗したディレクトリはスキップする
+      // 読み取り失敗は当該ディレクトリのみ除外して探索を継続する
       continue;
     }
 
@@ -261,10 +261,10 @@ function main() {
   process.exit(0);
 }
 
-// 実行時例外はユースケースを阻害しないよう安全側で 0 終了
+// 終了方針: 実行例外があってもコマンド用途を阻害しない運用を保証する
 try {
   main();
 } catch {
-  // 致命的例外時も 0 終了（用途を阻害しないため）
+  // 例外時はエラーを表出せず静かに 0 終了して呼び出し側のフローを維持する
   process.exit(0);
 }

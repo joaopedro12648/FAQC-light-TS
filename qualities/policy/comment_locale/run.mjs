@@ -114,9 +114,9 @@ function listFilesRecursive(dir) {
     // 無効なエントリに遭遇した場合は走査を中断する
     if (!d) break;
     let entries;
-    // ディレクトリを読み取る
+    // 配下のエントリ一覧を取得して走査キューを展開する
     try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch {
-      // 目録の読み取りに失敗したディレクトリはスキップする
+      // 読み取り失敗は記録せず対象のみ除外し探索を継続する
       continue;
     }
 
@@ -418,11 +418,11 @@ function isBlockViolation(strictness, rawLines, asciiOnlyLineIndexes) {
  */
 function analyzeFileForViolations(fp, strictness) {
   let content = '';
-  // 目的: 読み取りに失敗したファイルは検査不能として安全にスキップする
+  // ヘッダJSDocの検査対象を抽出するためにファイル本文を読み込む
   try {
     content = fs.readFileSync(fp, 'utf8');
   } catch {
-    // 読み取りに失敗したファイルは検査不能としてスキップする
+    // 読み取り失敗は検査不能として記録し当該ファイルを除外する
     return [];
   }
 

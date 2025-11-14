@@ -368,9 +368,9 @@ function checkHowSection(text: string): string[] {
   // NG patterns: 「### LLM典型NG」セクション内の番号付きリストをカウント
   // 典型NGセクションが存在する場合は番号付き項目数を検査する
   const ngSectionMatch = howSection.match(/###\s*(LLM典型NG|典型.*NG|NG.*パターン)/i);
-  // 典型NGセクションが存在する場合のみ詳細計数に進む
+  // 「典型NG」セクションが存在する場合にのみ詳細計数へ進む
   if (ngSectionMatch) {
-    // 典型NGセクションの範囲を抽出し番号付き項目数を数える
+    // セクション範囲を抽出して番号付き項目数を正確にカウントする
 
     const ngSectionStart = howSection.indexOf(ngSectionMatch[0]);
     const nextHeadingMatch = howSection.slice(ngSectionStart + ngSectionMatch[0].length).match(/^###\s/m);
@@ -382,7 +382,7 @@ function checkHowSection(text: string): string[] {
     // 典型NGの列挙がしきい値未満の場合は不足として報告する
     if (ngCount < MIN_NG_PATTERNS) errs.push(`How: need >= 5 NG patterns (found ${ngCount})`);
   } else {
-    // 典型NGセクションが無い場合は不足として記録する
+    // セクション欠落として不足を記録する（要追補）
     errs.push('How: missing LLM典型NG section');
   }
   
@@ -479,11 +479,11 @@ function main(): void {
   process.exit(1);
 }
 
-// 実行時例外を捕捉してメッセージ化しプロセスを失敗終了させる
+// 終了方針: CLI 全体のエラー処理を一元化して異常を明確に終了させる
 try {
   main();
 } catch (err) {
-  // 実行時の致命的例外はメッセージを出力して異常終了とする
+  // 致命的例外は詳細を記録して非0終了で異常を明確化する
   process.stderr.write(`context-md-rubric ❌ ${err instanceof Error ? err.message : String(err)}\n`);
   process.exit(1);
 }

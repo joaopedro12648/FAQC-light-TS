@@ -36,9 +36,9 @@ function listFilesRecursive(dir) {
     // 無効値に遭遇した場合は探索を中断する
     if (!d) break;
     let entries;
-    // ディレクトリの内容を読み取る
+    // 配下のエントリ一覧を取得して探索キューへ展開する
     try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch {
-      // 読み取りに失敗したディレクトリはスキップする
+      // 読み取り失敗は当該ディレクトリのみ除外して継続する
       continue;
     }
 
@@ -47,8 +47,8 @@ function listFilesRecursive(dir) {
       const full = path.join(d, e.name);
       const base = path.basename(full);
 
-      // 除外ディレクトリは探索対象外としてスキップし、不要な走査を避ける
-      if (EXCLUDE_DIRS.has(base)) continue;  // ディレクトリはスタックへ積んで再帰探索する
+      // 除外集合に一致する名前は走査対象に含めず、以降の探索から除外する
+      if (EXCLUDE_DIRS.has(base)) continue;  // 一致時はここで早期離脱して下位走査を抑止する
       if (e.isDirectory()) stack.push(full); // 下位ディレクトリを後続探索のためキューへ積む
       else if (e.isFile()) files.push(full); // ファイルは一覧に追加する
     }
@@ -91,9 +91,9 @@ function main() {
   // 対象ファイルを順に検査し二重キャストの発生を収集する
   for (const fp of files) {
     let content = '';
-    // 読み込み失敗時はスキップして処理を継続する
+    // ファイル本文を読み込み二重キャストの有無を解析する
     try { content = fs.readFileSync(fp, 'utf8'); } catch {
-      // 読み取りに失敗したファイルは検査から除外する
+      // 読み取り失敗は検査対象から除外して継続する
       continue;
     }
 

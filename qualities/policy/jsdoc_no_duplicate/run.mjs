@@ -41,9 +41,9 @@ function listFilesRecursive(dir) {
     // 無効な参照は安全側で打ち切る
     if (!d) break;
     let entries;
-    // ディレクトリの内容を読み取る
+    // 配下のエントリ一覧を取得して検査対象の列挙を進める
     try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch {
-      // 読み取りに失敗したディレクトリはスキップする
+      // 読み取り失敗は対象のみ除外し走査を継続する
       continue;
     }
 
@@ -222,11 +222,11 @@ function main() {
   for (const fp of files) {
     let content = '';
 
-    // 読み取り失敗時は当該ファイルをスキップして処理を継続する
+    // 重複JSDoc検査のためにファイル本文を読み込む
     try {
       content = fs.readFileSync(fp, 'utf8');
     } catch {
-      // 読み取りに失敗したファイルは検査対象から除外する
+      // 読み取り失敗は検査対象から除外して集計を継続する
       continue;
     }
 

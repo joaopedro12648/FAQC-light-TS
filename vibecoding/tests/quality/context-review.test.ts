@@ -38,7 +38,7 @@ function findContextMdFiles(dir: string): string[] {
     if (!current) break;
     
     let entries;
-    // 読み取り失敗時は当該ディレクトリをスキップして継続する
+    // 探索を優先して結果収集を継続し、個別失敗は全体に影響させない
     try {
       entries = fs.readdirSync(current, { withFileTypes: true });
     } catch {

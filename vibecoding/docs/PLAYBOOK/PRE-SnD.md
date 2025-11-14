@@ -34,6 +34,7 @@ SPEC-and-DESIGN ファイル作成にあたっては、次の SoT を明確に�
    - 改変許可範囲（Allowed Change Scope）: 今回の設計/実装で手を入れる範囲を限定
    - ステータス運用/受け入れ条件: Ready 判定・受け入れ基準を具体的に列挙
    - AI実装指針: 生成時に参照すべきコンテキスト（上記）を箇条書きで明記
+   - 外部依存と環境値: ファイル/ディレクトリ/環境変数/設定/CLI/外部サービス/API を列挙し、各項目に「型・既定値・用途・責務・例外方針・受入条件の検証観点」を明記する。未記載の依存は実装禁止（必要時は本節を更新し Ready 再判定後に IMPL 再承認）。
 
 4. 設計レビュー準備
    - 「未確定事項」を埋めきること（空であること）
@@ -48,6 +49,7 @@ SPEC-and-DESIGN ファイル作成にあたっては、次の SoT を明確に�
 - PRE-COMMON exit=0 を取得したら、SnD の新規作成を自動で続行してよい（デフォルト動作）。front matter へ `quality_refresh_hash_at_created` を即時記録する。
 - PRE-COMMON exit=0 未達（または `context-review.md` 残存）の場合は SnD を起票しない（レビュー統合を優先）。
  - 禁止: `check:pre-common` 以外の手段でハッシュを生成・改変すること（手計算・独自スクリプト等）
+- 追加ポリシー（明示依頼時の自動更新）: ユーザーから SnD 作成を明示依頼された場合、`check:pre-common` で exit=0 を得るために必要な `vibecoding/var/contexts/qualities/**` の詳細レポート生成・更新（派生物の生成に限る）を、追加確認なく自動実施してよい。ここには `qualities/**` の設定変更やルール緩和は含まれない。得られた `"<StartAt> <hash>"` をそのまま `quality_refresh_hash_at_created` に記録する。
 
 ## フィードバック記録（SnD作成/更新後・必須）
 - SnD 作成完了後（`quality_refresh_hash_at_created` を記録した直後）、次のファイルにフィードバックを出力する: `vibecoding/var/feedback/<YYYYMM>/<YYYYMMDD>/fb-SnD-<YYYYMMDD>-<slug>.md`（`<slug>` は SnD のファイル名に用いたものと同一。`<YYYYMM>` と `<YYYYMMDD>` は SnD のディレクトリ日付に従う）。
@@ -78,6 +80,16 @@ SPEC-and-DESIGN ファイル作成にあたっては、次の SoT を明確に�
 - TYPECHECK: 型検査のみを実行
 - LINT: 静的解析（リンタ）のみを実行
 - TEST: 自動テストのみを実行（非対話・ウォッチ無効）
+
+### 承認プロンプト出力ガード（MAINT）
+- 承認プロンプト（4行ブロック）は「IMPL 開始前の案内」に限定する。
+- 表示許可: `current_phase == SnD-ONLY` かつ `impl_not_started == true`
+- 表示抑止（いずれか一致で抑止）:
+  - `current_phase == IMPL`
+  - `quality_gate.last_run.scope == full`
+  - `session.edits_count > 0` かつ `edits_paths ∩ {src/**, tests/**} != ∅`
+- 再掲防止: `approval_prompt_once_per_snd: true`
+- 位相補正: `src/**` または `tests/**` への編集検知時は `current_phase = IMPL` に自動遷移し、以降は承認プロンプトを出力しない。
 
 2) フェーズ許可
 - SnD-ONLY: CHECK / TYPECHECK / LINT / TEST を個別実行してよい

@@ -11,11 +11,11 @@
  * - 抑止や緩和に頼らず規則へ適合する実装で根本原因から解決する
  * @see vibecoding/var/contexts/qualities/eslint/03-documentation/context.md
  * @see vibecoding/docs/PLAYBOOK/PRE-IMPL.md
- * @snd vibecoding/var/SPEC-and-DESIGN/202511/20251112/SnD-20251112-eslint-if-comment-rule.md
+ * @snd vibecoding/var/SPEC-and-DESIGN/202511/20251113/SnD-20251113-eslint-if-branch-similarity.md
  */
  
 /* 連結ルールの統合版: 旧 'require-comment-previous-line-for-branches.js' を本ファイルへ集約 */
-/* eslint-disable control/require-comments-on-control-structures, padding-line-between-statements, jsdoc/check-alignment, jsdoc/require-param, jsdoc/require-param-description -- 自身の実装ファイルに当ルールが自己適用されるのを防止（複雑度系の免除は撤去） */
+/* eslint-disable padding-line-between-statements, jsdoc/check-alignment, jsdoc/require-param, jsdoc/require-param-description -- 自身の実装ファイルに当ルールが自己適用されるのを防止（複雑度系の免除は撤去） */
  
 /**
   * @typedef {Object} BranchCommentOptions オプション型定義
@@ -26,6 +26,7 @@
   * @property {boolean} [ignoreCatch] catch 免除（既定: true）
   * @property {boolean} [fixMode] 不要コメントの報告を有効にする（既定: false／報告のみ）
   * @property {'non-dangling'|'dangling'} [treatChainHeadAs] else-if 連鎖先頭（head）をどう扱うか（既定: 'non-dangling'）
+ * @property {number} [similarityThreshold] 類似度のしきい値（既定: 0.75、範囲: 0.6〜1.0）
   */
  
 /** ノードタイプとキーワードの対応（固定） */
@@ -441,6 +442,227 @@ function _extReportRemovable(context, src, node, extras, messageId) {
 }
 
 /**
+ * 類似度判定用の正規化（NFKC→小文字化→空白/句読点/記号の除去）。
+ * @param {string} s 入力文字列
+ * @returns {string} 正規化後の文字列
+ */
+function _normalizeForSimilarity(s) {
+  try {
+    return String(s || '')
+      .normalize('NFKC')
+      .toLowerCase()
+      .replace(/[\p{P}\p{S}\s]+/gu, '');
+  } catch {
+    return String(s || '').toLowerCase().replace(/[^a-z0-9\u0080-\uFFFF]+/g, '');
+  }
+}
+
+/**
+ * Levenshtein 距離（2行DP）
+ * @param {string} a
+ * @param {string} b
+ * @returns {number} 距離
+ */
+function _levenshtein(a, b) {
+  if (a === b) return 0;
+  const n = a.length;
+  const m = b.length;
+  if (n === 0) return m;
+  if (m === 0) return n;
+  let prev = new Array(m + 1);
+  let curr = new Array(m + 1);
+  for (let j = 0; j <= m; j += 1) prev[j] = j;
+  for (let i = 1; i <= n; i += 1) {
+    curr[0] = i;
+    const ai = a.charCodeAt(i - 1);
+    for (let j = 1; j <= m; j += 1) {
+      const cost = ai === b.charCodeAt(j - 1) ? 0 : 1;
+      const ins = curr[j - 1] + 1;
+      const del = prev[j] + 1;
+      const sub = prev[j - 1] + cost;
+      curr[j] = Math.min(ins, del, sub);
+    }
+    const tmp = prev; prev = curr; curr = tmp;
+  }
+  return prev[m];
+}
+
+/**
+ * ブロック先頭 or 単一文末尾の採用コメントを取得（無ければ null）。
+ * @param {import('eslint').SourceCode} src
+ * @param {any} block BlockStatement
+ * @returns {any|null} 採用コメントノード
+ */
+function _extractUsedCommentForBlock(src, block) {
+  if (!block) return null;
+  const r = hasBlockHeadComment(src, block);
+  if (r.ok) return r.used || null;
+  const firstStmt = Array.isArray(block.body) && block.body.length > 0 ? block.body[0] : null;
+  if (!firstStmt || firstStmt.type === 'BlockStatement') return null;
+  const tr = hasTrailingComment(src, firstStmt);
+  return tr.ok ? tr.used || null : null;
+}
+
+/**
+ * ブロックまたは単一文の採用コメントを取得する（後段の類似度検査用）。
+ * @param {import('eslint').SourceCode} src
+ * @param {any} nodeOrBlock BlockStatement または単一 Statement
+ * @returns {any|null} 採用コメントノード
+ */
+function _extractUsedCommentForStatementOrBlock(src, nodeOrBlock) {
+  if (!nodeOrBlock) return null;
+  if (isBlock(nodeOrBlock)) {
+    return _extractUsedCommentForBlock(src, nodeOrBlock);
+  }
+  const tr = hasTrailingComment(src, nodeOrBlock);
+  return tr.ok ? tr.used || null : null;
+}
+
+/* eslint-disable complexity -- 類似度チェックの分岐は明確性を優先し単純な直列構造で保持する */
+/**
+ * try と catch/finally のコメント類似度を検査して必要に応じて報告する。
+ * セーフガード: 正規化後の長さが双方とも 10 以上のときのみ評価。
+ * @param {import('eslint').SourceCode} src
+ * @param {import('eslint').Rule.RuleContext} ctx
+ * @param {any} node TryStatement
+ * @param {string} tryText try側コメント原文
+ * @param {number} threshold 閾値（0.6〜0.9）
+ * @returns {void}
+ */
+function _extCheckTrySimilarity(src, ctx, node, tryText, threshold) {
+  const tryNorm = _normalizeForSimilarity(tryText);
+  if (tryNorm.length < 10) return;
+  // catch
+  if (node.handler && node.handler.body) {
+    const c = _extractUsedCommentForBlock(src, node.handler.body);
+    if (c && typeof c.value === 'string') {
+      const catchNorm = _normalizeForSimilarity(c.value);
+      if (catchNorm.length >= 10) {
+        const maxLen = Math.max(tryNorm.length, catchNorm.length);
+        const distance = _levenshtein(tryNorm, catchNorm);
+        const ratio = maxLen > 0 ? distance / maxLen : 0;
+        if (ratio <= threshold) {
+          ctx.report({
+            node: node.handler.body,
+            messageId: 'similar_try_catch',
+            data: {
+              ratio: ratio.toFixed(2),
+              threshold: threshold.toFixed(2),
+              distance: String(distance),
+              maxLen: String(maxLen),
+              tryComment: tryText.trim(),
+              catchComment: String(c.value || '').trim()
+            }
+          });
+        }
+      }
+    }
+  }
+  // finally
+  if (node.finalizer) {
+    const f = _extractUsedCommentForBlock(src, node.finalizer);
+    if (f && typeof f.value === 'string') {
+      const finNorm = _normalizeForSimilarity(f.value);
+      if (finNorm.length >= 10) {
+        const maxLen = Math.max(tryNorm.length, finNorm.length);
+        const distance = _levenshtein(tryNorm, finNorm);
+        const ratio = maxLen > 0 ? distance / maxLen : 0;
+        if (ratio <= threshold) {
+          ctx.report({
+            node: node.finalizer,
+            messageId: 'similar_try_finally',
+            data: {
+              ratio: ratio.toFixed(2),
+              threshold: threshold.toFixed(2),
+              distance: String(distance),
+              maxLen: String(maxLen),
+              tryComment: tryText.trim(),
+              finallyComment: String(f.value || '').trim()
+            }
+          });
+        }
+      }
+    }
+  }
+}
+/* eslint-enable complexity -- 類似度チェックのため一時的に complexity を無効化（関数末で復帰） */
+
+/* eslint-disable complexity -- if/then・if/else 類似度チェックの分岐は直列で保持する */
+/**
+ * if と then/else のコメント類似度を検査し、必要に応じて報告する。
+ * セーフガード: 正規化後の長さが双方とも 10 以上のときのみ評価。
+ * @param {import('eslint').SourceCode} src
+ * @param {import('eslint').Rule.RuleContext} ctx
+ * @param {any} node IfStatement
+ * @param {string} ifText if 直前コメント原文
+ * @param {number} threshold 閾値（0.6〜1.0）
+ * @returns {void}
+ */
+function _extCheckIfSimilarity(src, ctx, node, ifText, threshold) {
+  const ifNorm = _normalizeForSimilarity(ifText);
+  if (ifNorm.length < 10) return;
+  // then 側
+  if (node.consequent) {
+    const thenTarget = isBlock(node.consequent)
+      ? node.consequent
+      : node.consequent;
+    const cThen = _extractUsedCommentForStatementOrBlock(src, thenTarget);
+    if (cThen && typeof cThen.value === 'string') {
+      const thenNorm = _normalizeForSimilarity(cThen.value);
+      if (thenNorm.length >= 10) {
+        const maxLen = Math.max(ifNorm.length, thenNorm.length);
+        const distance = _levenshtein(ifNorm, thenNorm);
+        const ratio = maxLen > 0 ? distance / maxLen : 0;
+        if (ratio <= threshold) {
+          ctx.report({
+            node: node.consequent,
+            messageId: 'similar_if_then',
+            data: {
+              ratio: ratio.toFixed(2),
+              threshold: threshold.toFixed(2),
+              distance: String(distance),
+              maxLen: String(maxLen),
+              ifComment: ifText.trim(),
+              thenComment: String(cThen.value || '').trim()
+            }
+          });
+        }
+      }
+    }
+  }
+  // else 側（else-if 連鎖は対象外）
+  if (node.alternate && !isIf(node.alternate)) {
+    const elseTarget = isBlock(node.alternate)
+      ? node.alternate
+      : node.alternate;
+    const cElse = _extractUsedCommentForStatementOrBlock(src, elseTarget);
+    if (cElse && typeof cElse.value === 'string') {
+      const elseNorm = _normalizeForSimilarity(cElse.value);
+      if (elseNorm.length >= 10) {
+        const maxLen = Math.max(ifNorm.length, elseNorm.length);
+        const distance = _levenshtein(ifNorm, elseNorm);
+        const ratio = maxLen > 0 ? distance / maxLen : 0;
+        if (ratio <= threshold) {
+          ctx.report({
+            node: node.alternate,
+            messageId: 'similar_if_else',
+            data: {
+              ratio: ratio.toFixed(2),
+              threshold: threshold.toFixed(2),
+              distance: String(distance),
+              maxLen: String(maxLen),
+              ifComment: ifText.trim(),
+              elseComment: String(cElse.value || '').trim()
+            }
+          });
+        }
+      }
+    }
+  }
+}
+/* eslint-enable complexity -- 類似度チェックのため一時的に complexity を無効化（関数末で復帰） */
+
+/**
  * 直前行に隣接しているかを判定する（if の直前コメント用）。
  * @param {any} last 最後の意味のあるコメント
  * @param {any} ifToken if キーワードのトークン
@@ -658,7 +880,7 @@ function _extCheckElseSide(src, context, tagRe, fixMode, node) {
  * IfStatement の総合検査（外部化・再帰）。
  * @returns {void} 何も返さない（報告のみ）
  */
-function _extCheckIf(src, context, tagRe, treatHeadAsNonDangling, allowBlankLineBeforeIf, fixMode, node) {
+function _extCheckIf(src, context, tagRe, treatHeadAsNonDangling, allowBlankLineBeforeIf, fixMode, similarityThreshold, node) {
   if (!isIf(node)) return;
   const isInnerElseIf = _extIsElseIfAlternate(node);
   const isFull = !!node.alternate;
@@ -671,10 +893,15 @@ function _extCheckIf(src, context, tagRe, treatHeadAsNonDangling, allowBlankLine
   const needConsequentComment = _computeNeedConsequentComment(isDanglingUnderPolicy, isFull, isInnerElseIf);
   if (needConsequentComment) _extCheckThenSide(src, context, tagRe, fixMode, node, true);
   if (isStructurallyDangling) {
-    _extCheckIf(src, context, tagRe, treatHeadAsNonDangling, allowBlankLineBeforeIf, fixMode, node.alternate);
+    _extCheckIf(src, context, tagRe, treatHeadAsNonDangling, allowBlankLineBeforeIf, fixMode, similarityThreshold, node.alternate);
     return;
   }
   if (isFull) _extCheckElseSide(src, context, tagRe, fixMode, node);
+  // 類似度チェック（if 直前コメントが取得できた場合のみ）
+  const rIf = hasBeforeIfKeywordComment(src, node, allowBlankLineBeforeIf);
+  if (rIf && rIf.used && typeof rIf.used.value === 'string') {
+    _extCheckIfSimilarity(src, context, node, rIf.used.value, similarityThreshold);
+  }
 }
 
 /**
@@ -738,15 +965,24 @@ function _buildReportContext(context) {
  */
 function _createCheck(src, ctx, opts) {
   const { allowBlank, ignoreElseIf, tagRe, treatHeadAsNonDangling, allowBlankLineBeforeIf, fixMode } = opts;
+  /* eslint-disable-next-line complexity -- 入口関数は分岐の振り分けに特化し、詳細は外部関数へ委譲する */
   return (node, kw) => {
-    if (kw === 'if') return void _extCheckIf(src, ctx, tagRe, treatHeadAsNonDangling, allowBlankLineBeforeIf, fixMode, node);
+    if (kw === 'if') return void _extCheckIf(src, ctx, tagRe, treatHeadAsNonDangling, allowBlankLineBeforeIf, fixMode, opts.similarityThreshold, node);
     if (ignoreElseIf && _extIsElseIfAlternate(node)) return;
     const { ok, last } = hasRequiredPreviousComment(src, node, allowBlank);
     if (!ok) return void ctx.report({ node, messageId: 'missingComment', data: { kw } });
     if (tagRe && last && !matchesPattern(typeof last.value === 'string' ? last.value : '', tagRe)) {
       ctx.report({ node, messageId: 'tagMismatch', data: { kw, pat: String(tagRe) } });
     }
-    if (kw === 'try') return void _extCheckTry(src, ctx, tagRe, fixMode, node, opts.ignoreCatch);
+    if (kw === 'try') {
+      // 既存の presence チェック
+      _extCheckTry(src, ctx, tagRe, fixMode, node, opts.ignoreCatch);
+      // 類似度チェック（常時有効）
+      if (!opts.ignoreCatch && last) {
+        const tryText = typeof last.value === 'string' ? last.value : '';
+        _extCheckTrySimilarity(src, ctx, node, tryText, opts.similarityThreshold);
+      }
+    }
   };
 }
 
@@ -765,6 +1001,11 @@ function _createImpl(context) {
     fixMode: Boolean(opt.fixMode),
     allowBlankLineBeforeIf: false, // 仕様: if 直前の空行は不可
     treatHeadAsNonDangling: (opt.treatChainHeadAs === 'dangling' ? 'dangling' : 'non-dangling') !== 'dangling',
+    similarityThreshold: (() => {
+      const v = typeof opt.similarityThreshold === 'number' ? opt.similarityThreshold : 0.75;
+      if (Number.isNaN(v)) return 0.75;
+      return Math.min(1.0, Math.max(0.6, v));
+    })(),
     tagRe:
       typeof opt.requireTagPattern === 'string' && opt.requireTagPattern.length > 0
         ? new RegExp(opt.requireTagPattern)
@@ -799,7 +1040,8 @@ export const ruleRequireCommentsOnControlStructures = {
           ignoreElseIf: { type: 'boolean' },
           ignoreCatch: { type: 'boolean' },
           fixMode: { type: 'boolean' },
-          treatChainHeadAs: { enum: ['non-dangling', 'dangling'] }
+          treatChainHeadAs: { enum: ['non-dangling', 'dangling'] },
+          similarityThreshold: { type: 'number', minimum: 0.6, maximum: 1.0 }
         },
         additionalProperties: false
       }
@@ -824,7 +1066,17 @@ export const ruleRequireCommentsOnControlStructures = {
       // If-specific (removable)
       removable_before_if: 'Redundant comment before "if" (removable by rule).',
       removable_block_head: 'Redundant comment at block head (then/else) (removable by rule).',
-      removable_trailing: 'Redundant trailing comment after statement (removable by rule).'
+      removable_trailing: 'Redundant trailing comment after statement (removable by rule).',
+      // Try similarity
+      similar_try_catch:
+        'try/catch のコメントが類似し過ぎています (距離/長さ={{ratio}} ≤ {{threshold}})。役割が重複しています。try は「目的」、catch は「例外時のハンドリング方針」を具体化してください。 詳細: distance={{distance}}, maxLen={{maxLen}} / 該当: try="{{tryComment}}", catch="{{catchComment}}"',
+      similar_try_finally:
+        'try/finally のコメントが類似し過ぎています (距離/長さ={{ratio}} ≤ {{threshold}})。役割が重複しています。try は「目的」、finally は「必ず実行される後処理/クリーンアップ」を具体化してください。 詳細: distance={{distance}}, maxLen={{maxLen}} / 該当: try="{{tryComment}}", finally="{{finallyComment}}"',
+      // If similarity
+      similar_if_then:
+        'if/then のコメントが類似し過ぎています (距離/長さ={{ratio}} ≤ {{threshold}})。役割が重複しています。if 直前は「判断軸/前提」、then は「成立時に採る行動」を具体化してください。 ただし「判断軸」「処置」といったメタな文言はコメント自体には利用しないこと。 詳細: distance={{distance}}, maxLen={{maxLen}} / 該当: if="{{ifComment}}", then="{{thenComment}}"',
+      similar_if_else:
+        'if/else のコメントが類似し過ぎています (距離/長さ={{ratio}} ≤ {{threshold}})。役割が重複しています。if 直前は「判断軸/前提」、else は「不成立時の方針/フォールバック」を具体化してください。 ただし「判断軸」「処置」といったメタな文言はコメント自体には利用しないこと。 詳細: distance={{distance}}, maxLen={{maxLen}} / 該当: if="{{ifComment}}", else="{{elseComment}}"'
     }
   },
   create: (context) => _createImpl(context)

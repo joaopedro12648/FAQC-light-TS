@@ -23,7 +23,7 @@ import { runNode } from '../framework/runNode';
 describe('policy: no_unknown_double_cast', () => {
   it('detects double-cast via unknown and passes otherwise', async () => {
     const tmp = createTmpDir();
-    // 一時ディレクトリの作成/破棄を保証し副作用を隔離する
+    // 実行と検証の境界を明確化し、失敗時の原因追跡を容易にする
     try {
       // NG
       // テストコード本体に問題の連続語を含めないため、分割して組み立てる
@@ -46,7 +46,7 @@ describe('policy: no_unknown_double_cast', () => {
       expect(ok.code).toBe(0);
       expect(ok.stdout).toMatch(/OK:/);
     } finally {
-      // 一時ディレクトリの後始末を行い副作用を残さない
+      // 実行時に生成した一時資産を確実に消去し持ち越しを防ぐ
       cleanupDir(tmp);
     }
   });
