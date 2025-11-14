@@ -277,8 +277,7 @@ function collectAllBlockComments(content) {
       continue;
     }
 
-    // 文字列リテラルは検査対象外とし内容の解析を省く
-    // 単一引用符の文字列リテラルを終端まで読み飛ばす
+    // 文字列リテラルは検査対象外（単一引用符は終端まで読み飛ばす）
     if (ch === '\'') {
 
       i = consumeQuoted(content, i, '\'');
@@ -476,8 +475,7 @@ function reportResult(violations) {
 function main() {
   const { lang } = resolveEffectiveLocale();
   const strictness = resolveStrictness();
-  // ja 系以外は何もしない（成功扱い）
-  // 目的: ja 系ロケールのときのみ本ポリシーを適用する
+  // ja 系以外は何もしない（成功）。ja 系のみ本ポリシーを適用する
   if (lang.toLowerCase() !== 'ja') {
     process.stdout.write('[policy:comment_locale] SKIP: non-ja locale\n');
     process.exit(0);
@@ -489,8 +487,7 @@ function main() {
   reportResult(violations);
 }
 
-// 実行時の想定外例外を捕捉し明示的に異常終了コードを返す
-// エントリポイント
+// エントリポイント: 実行時の想定外例外を捕捉し異常終了コードを返す
 try { main(); } catch (e) {
   // 実行時の致命的例外はメッセージを出力して異常終了とする
   process.stderr.write(`[policy:comment_locale] fatal: ${String((e?.message) || e)}\n`);

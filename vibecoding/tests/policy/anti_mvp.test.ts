@@ -38,9 +38,7 @@ describe('policy: anti_mvp', () => {
       expect(ng.code).toBe(1);
       expect(ng.stderr).toMatch(/anti-mvp ❌/);
 
-      // OK: クリア
-      // 失敗ファイルを削除してから OK を検証
-      // 失敗ケースの残骸を除去し検証を分離する
+      // OK 検証: 失敗ファイルを削除して残骸を除去し、検証を分離した状態で実施する
       try { fs.rmSync(path.join(tmp, 'ng.ts')); } catch {
         // 削除失敗時は後続の OK 検証へ影響しないためスキップする
       }

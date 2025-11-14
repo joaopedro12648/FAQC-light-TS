@@ -112,9 +112,9 @@ function isValidSnd(value, allowSndNone) {
 function getHeaderComment(sourceCode) {
   const ast = sourceCode.ast;
   const firstToken = sourceCode.getFirstToken(ast);
-  // 先頭トークンがある場合は直前コメントからヘッダJSDocを優先探索する
+  // 先頭トークンがある場合は、その直前に付いたコメント群だけを対象にJSDocを探す（無関係な後方は見ない）
   if (firstToken) {
-    // 先頭トークン直前のコメント列からJSDocブロックを最優先で抽出する
+    // 直前コメント列から最初のJSDocブロックを抽出する
 
     const leading = sourceCode.getCommentsBefore(firstToken);
     // 候補コメント群から最初のJSDocブロックを見つける
@@ -123,7 +123,7 @@ function getHeaderComment(sourceCode) {
       if (isJsDocBlock(c)) return c;
     }
   } else {
-    // 先頭トークンが無い場合は全コメントから最初のJSDocブロックを探索する
+  // 先頭トークンが無いファイルは、全コメントを先頭から順に走査し最初に見つかったJSDocを返す
     const all = sourceCode.getAllComments();
     // ファイル全体のコメントからJSDocブロックを探索する
     for (const c of all) {
@@ -281,8 +281,7 @@ export const ruleHeaderBulletsMin = {
         const headerText = sourceCode.getText(headerComment);
         const summary = parseHeader(headerText);
 
-        // Structure validations
-        // 構造違反を網羅的に報告する
+        // 構造検証を実施し、違反を網羅的に報告する
         for (const d of checkBase(summary)) {
           context.report({ loc: headerComment.loc, ...d });
         }

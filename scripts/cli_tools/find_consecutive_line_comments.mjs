@@ -211,8 +211,7 @@ function processFile(filePathAbs, repoRootAbs) {
     // 2行以上連続している場合のみ検出対象として出力する
     if (runLen >= 2) {
       const rel = normalizeOutPath(path.relative(repoRootAbs, filePathAbs));
-      // 重なりペア（k, k+1）を列挙し、各行を 1 行ずつ TSV 出力
-      // 連続区間内の全隣接ペアを走査して出力する
+      // 連続区間内の全隣接ペア（k, k+1）を走査し、各行を1行ずつTSV出力する
       for (let k = runStart; k < runEnd; k++) {
         // ペア (k, k+1) について両行を出力
         const l1 = k + 1; // 1-based
@@ -248,10 +247,7 @@ function main() {
     if (rows.length > 0) outLines.push(...rows);
   }
 
-  // 直近の処理ループを終え、出力条件を明示してから書き出す
-  // 検出件数の有無で出力を切り替え、空行出力を避ける
-  // （直前のループ終了と if 文の視認性を高めるため空行を挿入）
-  // 1行以上の検出がある時のみ標準出力へ書き出す
+  // 出力条件: 直前ループ終了後、検出件数に応じて空行出力を避けつつ1行以上ある時のみ標準出力へ書き出す
   if (outLines.length > 0) {
     // 出力末尾に改行を付与して次の処理系で読みやすくする
     process.stdout.write(`${outLines.join('\n')}\n`);

@@ -142,8 +142,7 @@ function parseIncludeArgs(argv: string[]): string[] {
   // CLI 引数を左から走査して include 指定を抽出する
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i] ?? '';
-    // --include= の形式を優先して解釈し複数指定を分解する
-    // 1トークン形式（--include=...）を優先認識して分割する
+    // --include= の1トークン形式を優先解釈し、複数指定を分解する
     if (a.startsWith('--include=')) {
       const body = a.slice('--include='.length).trim();
       // 空文字を除外して有効な指定のみ取り込む
@@ -151,13 +150,11 @@ function parseIncludeArgs(argv: string[]): string[] {
       continue;
     }
 
-    // --include <patterns> の2トークン形式を解釈して取り込む
-    // 次トークンにパターンを取る形式を解釈して取り込む
+    // --include <patterns> の2トークン形式を解釈し、次トークンのパターンを取り込む
     if (a === '--include') {
 
       const nxt = argv[i + 1] ?? '';
       // 次トークンがオプションでなければパターン指定として取り込む
-      // 候補がオプションでない場合だけパターンとして採用する
       if (nxt && !nxt.startsWith('-')) {
         out.push(...nxt.split(',').map((s) => s.trim()).filter(Boolean)); // カンマ区切りを展開して収集する
         i += 1;
@@ -166,8 +163,7 @@ function parseIncludeArgs(argv: string[]): string[] {
       continue;
     }
 
-    // 先頭が '-' でない位置引数はパターンとして受け取り分解する
-    // 位置引数は include と見なして分解して取り込む
+    // 先頭が '-' でない位置引数は include と見なして分解して取り込む
     if (!a.startsWith('-')) {
       out.push(...a.split(',').map((s) => s.trim()).filter(Boolean));
     }
@@ -187,8 +183,7 @@ function parseIncludeArgs(argv: string[]): string[] {
     if (p.endsWith('/')) return `${p}**/context.md`;
     // 既に context.md を指している場合はそのまま扱う
     if (/\/context\.md$/i.test(p)) return p;
-    // 明示的に *.md が無ければ context.md に寄せる（広げたい場合は **/* を利用）
-    // 明示的拡張子やワイルドカードの無いパターンは context.md へ正規化する
+    // *.md 指定が無い場合は context.md へ正規化（拡張子/ワイルドカードなしは context.md、広げるなら **/*）
     if (!/\*/.test(p) && !/\.md$/i.test(p)) return `${p}/context.md`;
     return p;
   });
@@ -334,8 +329,7 @@ function checkLineCount(text: string): string[] {
   const errs: string[] = [];
   const lines = text.split(/\r?\n/).filter((l) => l.trim()).length; // 空行除外
   
-  // 下限チェックのみ（GPT対策：詳細度不足を防止）
-  // 本文の行数がしきい値未満の場合は詳細度不足として指摘する
+  // 下限チェックのみ（GPT対策: 詳細度不足防止）。しきい値未満なら詳細度不足として指摘する
   if (lines < MIN_LINES) {
 
     errs.push(`Line count: ${lines} lines (MUST be ≥${MIN_LINES} for sufficient detail)`);
@@ -365,8 +359,7 @@ function checkHowSection(text: string): string[] {
   // 代表的な成功/失敗例を最低2ブロック含めることを要求する
   if (codeFences < MIN_CODE_FENCES) errs.push('How: need >= 2 code blocks (success/failure patterns)');
   
-  // NG patterns: 「### LLM典型NG」セクション内の番号付きリストをカウント
-  // 典型NGセクションが存在する場合は番号付き項目数を検査する
+  // NG patterns: 「### LLM典型NG」セクションが存在する場合のみ番号付き項目数を検査する
   const ngSectionMatch = howSection.match(/###\s*(LLM典型NG|典型.*NG|NG.*パターン)/i);
   // 「典型NG」セクションが存在する場合にのみ詳細計数へ進む
   if (ngSectionMatch) {
@@ -437,8 +430,7 @@ function main(): void {
       const rel = relToRepo(abs);
       return regs.some((re) => re.test(rel));
     });
-    // 一致が 0 件ならスキップとして即時終了する
-    // マッチ0件ならスキップとして終了し不要な走査を避ける
+    // マッチ0件ならスキップとして即時終了（不要な走査を避ける）
     if (files.length === 0) {
 
       process.stdout.write('context-md-rubric: no files matched by --include\n');
@@ -450,16 +442,14 @@ function main(): void {
   // 対象ファイルを順に検査して違反を収集する
   for (const f of files) {
     const errs = checkContextMd(f);
-    // 対象ファイルに違反がある場合のみ結果へ追加して報告対象を明確化する
-    // 違反の無いファイルはノイズ削減のためスキップする
+    // 違反がある場合のみ結果へ追加（無いファイルはノイズ削減でスキップ）
     if (errs.length) {
 
       allErrors.push({ file: path.relative(repoRoot, f).replace(/\\/g, '/'), errs });
     }
   }
 
-  // すべての対象が基準を満たしていれば成功として終了する
-  // 全件合格なら成功終了してルーブリック準拠を示す
+  // 全件合格なら成功終了（ルーブリック準拠）
   if (allErrors.length === 0) {
 
     process.stdout.write(`context-md-rubric ✅ all ${files.length} file(s) compliant\n`);

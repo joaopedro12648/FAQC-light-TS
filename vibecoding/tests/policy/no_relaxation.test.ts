@@ -33,9 +33,7 @@ describe('policy: no_relaxation', () => {
       expect(ng.code).toBe(1);
       expect(ng.stderr).toMatch(/no_relaxation/);
 
-      // OK: クリア
-      // 失敗ファイルを削除してから OK を検証
-      // 検証を分離する目的で失敗ファイルを先に除去する
+      // OK: クリア — 失敗ファイルを削除してから検証（検証分離のため先に除去）
       try { fs.rmSync(path.join(tmp, 'ng.ts')); } catch {
         // 削除に失敗した場合は後続の OK 検証へ影響しないためスキップする
       }

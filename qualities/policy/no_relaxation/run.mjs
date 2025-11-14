@@ -156,8 +156,7 @@ function main() {
   process.exit(1);
 }
 
-// 実行時の想定外例外を捕捉し明示的に異常終了コードを返す
-// エントリポイント
+// エントリポイント: 実行時の想定外例外を捕捉し異常終了コードを返す
 try { main(); } catch (e) {
   // 実行時の致命的例外はメッセージを出力して異常終了とする
   process.stderr.write(`[policy:no_relaxation] fatal: ${String((e?.message) || e)}\n`);

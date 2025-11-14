@@ -102,8 +102,7 @@ export const ruleBlockCommentFormatting = {
             loc: c.loc,
             messageId: 'moveToNextLine',
             fix(fixer) {
-              // 変換: "/** <INLINE>\n" を "/**\n<indent>* <INLINE>\n" にする
-              // full = "/**" + afterOpen + remainder
+              // 変換: "/** <INLINE>\n" を "/**\n<indent>* <INLINE>\n" にする（full="/**"+afterOpen+remainder）
               const openIdx = full.indexOf('/**');
               const firstNewline = full.indexOf('\n');
               // 想定外の形式（開幕や改行が無い）は安全のため修正を行わない
@@ -159,8 +158,7 @@ export const blockCommentFormattingPlugin = {
                 continue;
               }
 
-              // Block comment (/* ... */ or /** ... 。*/)
-              // ブロックコメントが空内容かを正規化して検査する
+              // ブロックコメント（/* ... */／JSDoc）を正規化し、空内容かを検査する
               if (c.type === 'Block' && typeof c.value === 'string') {
 
                 const raw = c.value;
@@ -232,10 +230,10 @@ export const blockCommentFormattingPlugin = {
         }
 
         /**
-         * コメントとノードが空行なしで隣接しているかを判定する。
+         * コメントとノードが空行なしで隣接しているかを判定する（空行が無ければ true）。
          * @param {any} last 直前コメント
          * @param {any} node 対象ノード
-         * @returns {boolean} 空行が無ければ true
+         * @returns {boolean} 判定結果
          */
         function isAdjacent(last, node) {
           const between = sourceCode.text.slice(last.range[1], node.range[0]);

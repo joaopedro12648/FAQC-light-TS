@@ -198,19 +198,16 @@ export function evaluateShouldRunInternalTests(params: {
     if (hit) return true;
   }
 
-  // last_updated が不明なら安全側で実行する
-  // last_updated が無い/読めない場合は安全側で追加実行する
+  // last_updated 不明（不存在/読取不能）時は安全側で実行する
   if (lastUpdatedIso == null) return true;
   // last_updated が空の場合も安全側で追加実行する
   if (lastUpdatedIso.trim() === '') return true;
-  // 更新有無が不明なら実行しない
-  // 追加の更新有無が判定不能な場合は実行しない
+  // 更新有無が不明なら実行しない（追加判定不能時も同様）
   if (anyUpdatedSince == null) return false;
   return anyUpdatedSince;
 }
 
-// JSDoc adjacency separator（隣接JSDocの重複検出を避けるための区切り）
-// see: qualities/policy/jsdoc_no_duplicate/run.mjs
+// JSDoc adjacency separator（隣接JSDocの重複検出回避用）see: qualities/policy/jsdoc_no_duplicate/run.mjs
 /**
  * vibecoding 内製テスト（vibecoding/tests/**）を追加実行すべきかを判定する。
  * - 優先1: Git 差分に qualities/** or vibecoding/** が含まれる
@@ -309,8 +306,7 @@ export async function runQualityGate(): Promise<void> {
       }
     }
 
-    // lint は選択的に処理する
-    // 差分限定 lint を優先して実行し、処理した場合は次ステップへ進む
+    // lint は選択的に処理（差分限定 lint を優先実行し、処理した場合は次ステップへ）
     if (id === 'lint' && (await handleLintStep(scope))) continue;
     // test は内製テストの追加入り口を持つ
     if (id === 'test') {
@@ -366,9 +362,7 @@ async function handleTestStep(cmd: string, args: readonly string[]): Promise<boo
   if (shouldRunInternalTests()) {
     // vibecoding ディレクトリがある場合のみ内製テストの探索を行う
     if (existsSync('vibecoding')) {
-      // 内製テストの追加実行を有効化する（対象の探索と限定実行）
-      // vibecoding ディレクトリが存在する環境に限定して探索・実行対象とする
-      // vibecoding/tests/** に1件以上の内製テストが見つかる場合のみ追加実行を有効化する
+      // 追加実行の要件: vibecoding/tests/** に1件以上のテストが存在する場合に限る
       if (hasInternalTestFiles()) {
         // 内製テストを限定構成で追加実行し、利用者向けテストを補完する
         process.stdout.write('[test] vibecoding/ 変更あり: 内製テストを追加実行します\n');

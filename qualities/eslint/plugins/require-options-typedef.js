@@ -294,8 +294,7 @@ export const ruleRequireOptionsTypedef = {
 
     return {
       'Program:exit'() {
-        // ESLint プラグイン実装に対して typedef の厳格な整合性を求める
-        // ローカルプラグイン実装では schema.properties と typedef の整合性を厳密検査する
+        // schema.properties が存在する場合のみ、typedef との厳密な整合性を厳格検証する
         if (isPluginFile && schemaKeys.size > 0) {
 
           // typedef が無い場合は即時に不足を報告する

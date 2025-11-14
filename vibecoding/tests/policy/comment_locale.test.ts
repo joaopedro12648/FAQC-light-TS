@@ -49,8 +49,7 @@ describe('policy: comment_locale', () => {
       expect(ng.code).toBe(1);
       expect(ng.stderr).toMatch(/\[policy:comment_locale\] NG/);
 
-      // OK 検証前に NG ファイルを削除してクリーンな状態にする
-      // 直前に失敗ファイルを除去し検証条件を独立させる
+      // OK 検証前に NG ファイルを削除し、クリーンな状態で条件を独立させる
       try { await runNode('node', ['-e', `"require('node:fs').rmSync('${path.join(tmp, 'ng.ts').replace(/\\/g, '\\\\')}',{force:true})"`]); } catch {
         // 削除失敗は検証条件に影響しないためスキップする
       }

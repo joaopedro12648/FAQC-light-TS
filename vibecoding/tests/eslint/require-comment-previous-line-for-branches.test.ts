@@ -37,8 +37,7 @@ function hasMessages(x: unknown): x is { messages: unknown } {
   return typeof x === 'object' && x !== null && 'messages' in (x as Record<string, unknown>);
 }
 
-// テストスイートの意図を説明（直前コメント必須）
-// 目的: ルールのメタとメッセージがユーザーガイド的になっていることを確認する
+// 意図（直前コメント必須）: ルールのメタとメッセージがユーザーガイド的であることを確認する
 describe('ESLint rule (smoke): require-comment-previous-line-for-branches', () => {
   it('exports rule meta and user-guiding messages', () => {
     expect(typeof ruleU).toBe('object');

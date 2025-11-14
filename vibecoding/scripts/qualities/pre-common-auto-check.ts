@@ -80,8 +80,7 @@ export function primesBad(limit: any, mode: any = "fast"): any {
     if (ok) { arr.push(i); }
   }
 
-  // 診断生成と後始末を例外分離して安定性を維持する
-  // 一時ファイル作成後の代表出力収集を保護し後始末を確実に行う
+  // 診断生成と後始末を例外で分離し、代表出力収集と後始末を確実化する
   try {
     if (arr.length > 42) {
 
@@ -183,8 +182,7 @@ function listFilesRecursive(dir: string): string[] {
       continue;
     }
 
-    // 子エントリを順に評価してスタックまたは結果へ反映する
-    // 子要素を評価して探索を継続し対象集合を拡張する
+    // 子エントリを順に評価し、スタック/結果へ反映して探索を継続する
     for (const e of entries) {
       const full = path.join(current, e.name);
       // ディレクトリは後続探索へ積み、ファイルは結果へ追加する
@@ -242,8 +240,7 @@ function collectTargetDirs(): string[] {
   const eslintChildren = getImmediateSubdirs(eslintDir).filter((d) => !isUnderscoreDir(d));
   result.push(...eslintChildren);
 
-  // 3) qualities/* (exclude directories already mentioned: 'policy', 'eslint')
-  // policy/eslint 以外のトップレベルを対象に追加し既存と重複しないようにする
+  // 3) qualities/*（'policy' と 'eslint' を除外）。既存と重複しないよう追加する
   const topLevel = getImmediateSubdirs(QUALITIES_DIR).filter((d) => {
     const name = path.basename(d);
     return name !== 'policy' && name !== 'eslint' && !name.startsWith('_');
@@ -268,8 +265,7 @@ function collectTargetDirs(): string[] {
  */
 function computeNeededMappings(targetDirs: string[]): Array<{ srcDir: string; destDir: string }> {
   const mappings: Array<{ srcDir: string; destDir: string }> = [];
-  // 各ターゲットを評価して出力側の鮮度と比較し再生成の要否を判断する
-  // 各ディレクトリの鮮度を比較し再生成の要否を評価する
+  // 出力側の鮮度と比較して再生成の要否を判断する
   for (const srcDir of targetDirs) {
     const rel = path.relative(QUALITIES_DIR, srcDir);
     const destDir = path.join(OUTPUT_BASE, rel);
@@ -295,8 +291,7 @@ function computeNeededMappings(targetDirs: string[]): Array<{ srcDir: string; de
       }
     };
 
-    // YAML または MD のいずれかが不足/古い場合に対応表へ追加する
-    // いずれかの生成物が不足/古い場合のみ更新対象に追加する
+    // YAML または MD のいずれかが不足/古い場合のみ更新対象として対応表へ追加する
     if (requiresUpdate(destYaml) || requiresUpdate(destMd)) {
       const srcOut = normalizePathForOutput(path.relative(PROJECT_ROOT, srcDir));
       const destOut = normalizePathForOutput(path.relative(PROJECT_ROOT, destDir));
@@ -342,8 +337,7 @@ function writeLastUpdated(): string {
  */
 function checkRubric(): boolean {
   const rubricChecker = path.join(PROJECT_ROOT, 'vibecoding', 'scripts', 'qualities', 'context-md-rubric.ts');
-  // チェッカーが存在しない場合は非対応としてスキップ扱いにする
-  // チェッカー実体が無い場合は非対応として即時に非違反扱いで戻る
+  // チェッカー実体が無い場合は非対応としてスキップ（即時に非違反扱いで戻る）
   if (!fs.existsSync(rubricChecker)) return false;
   const scriptDir = path.dirname(fileURLToPath(import.meta.url));
   const repoRootFromScript = path.resolve(scriptDir, '../../..');
@@ -402,10 +396,9 @@ function outputAndExit(startAt: string, mappings: Array<{ srcDir: string; destDi
     process.stdout.write('[GATE] contexts/qualities => vibecoding/var/contexts/qualities  # rubric noncompliant\n');
   }
 
-  // 診断は、少なくとも1つ以上の対象ユニットで context.md が存在しない場合のみ出力する。
-  // いずれかのユニットで context.md が欠落する場合は診断情報を付与して作業支援する
+  // 診断出力の条件: 監視対象のいずれかで context.md が未整備（欠落）である
   if (!allTargetContextMdExist()) {
-    emitDiagnostics(); // 対象ユニットの不足を可視化し自己修復のための診断を出力する
+    emitDiagnostics(); // 欠落ユニットを可視化する自己修復用診断を生成・出力する
   }
 
   process.exit(2);
@@ -495,8 +488,7 @@ function appendDiagnosticsForStep(d: typeof stepDefs[number], results: string[])
   // 対象すべてが整っている場合は冗長な診断出力を避けるため早期に戻る
   if (allContextsExist) return;
   const { lines, result } = runStepDef(d.command, d.args as string[]);
-  // コマンド行と標準出力/標準エラーを整形して結果へ追記する
-  // 行を順に取り込み可読性の高い診断ログを構成する
+  // コマンドと標準出力/標準エラーを整形し、行ごとに取り込んで可読な診断ログとして追記する
   for (const ln of lines) {
     results.push(`[SAMPLE] ${ln}`);
   }
@@ -593,8 +585,7 @@ function collectVarContextYamlFiles(): string[] {
   ];
   const roots = Array.from(new Set([base, ...otherRoots]));
   const files: string[] = [];
-  // ルートごとに context.yaml を再帰探索して重複なく収集する
-  // 監視ルートごとに存在確認と再帰探索を実施する
+  // 監視ルートごとに存在確認し、context.yaml を再帰探索して重複なく収集する
   for (const r of roots) {
     // ルートが存在しない場合は対象外としてスキップする
     if (!fs.existsSync(r)) continue;
@@ -802,13 +793,11 @@ function main(): void {
   // 重複検出がある場合はメッセージを列挙して可視化する
   if (dupViolation) {
 
-    // 代表メッセージを順に出力してユーザー行動を案内する
-    // 重複検出の詳細を提示して是正作業を促す
+    // 重複検出の詳細を順に出力して是正作業を促す（ユーザー行動を案内）
     for (const m of dupMsgs) process.stdout.write(`${m  }\n`);
   }
 
-  // Post-pass review detection: only run when other checks are satisfied
-  // 他の要件が満たされた場合に限りレビュー衝突を検査する
+  // 他要件が揃った場合のみレビュー衝突を検査する（post-pass review detection）
   if (mappings.length === 0 && !rubricViolation && !dupViolation) {
 
     // まずミラーとルーブリックの要件が揃っている場合にのみレビュー有無を確認する
@@ -825,8 +814,7 @@ function main(): void {
   // 重複のみ検出された場合は情報提示後に一時 Fail とする
   if (mappings.length === 0 && !rubricViolation && dupViolation) {
 
-    // ルーブリックは満たすが重複が残っている状況を明確化し、是正を促すため一時 Fail
-    // 重複のみで Fail（他の理由が無い場合）
+    // ルーブリックは満たすが重複が残る状況を明確化し是正を促すため一時 Fail（重複のみのケース）
     process.exit(2);
   }
 

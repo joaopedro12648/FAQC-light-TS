@@ -25,8 +25,7 @@ describe('policy: no_unknown_double_cast', () => {
     const tmp = createTmpDir();
     // 実行と検証の境界を明確化し、失敗時の原因追跡を容易にする
     try {
-      // NG
-      // テストコード本体に問題の連続語を含めないため、分割して組み立てる
+      // NG: テストコード本体に問題の連続語を含めないため、分割して組み立てる
       const kw1 = 'as un';
       const kw2 = 'known as';
       writeTextFile(path.join(tmp, 'ng.ts'), `const v = (0 ${kw1}${kw2} number);`);
@@ -34,9 +33,7 @@ describe('policy: no_unknown_double_cast', () => {
       expect(ng.code).toBe(1);
       expect(ng.stderr).toMatch(/double cast/i);
 
-      // OK
-      // 失敗ファイルを削除してから OK を検証
-      // NG の残存物を除去して OK 検証を独立させる
+      // OK: 失敗ファイルを削除してから検証（NG残存物を除去して検証を独立）
       try { fs.rmSync(path.join(tmp, 'ng.ts')); } catch {
         // 削除に失敗した場合は次の検証に影響しない範囲でスキップする
       }

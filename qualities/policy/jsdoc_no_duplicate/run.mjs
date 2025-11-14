@@ -34,8 +34,7 @@ const EXCLUDE_DIRS = new Set(['node_modules', 'dist', 'build', 'coverage', '.git
 function listFilesRecursive(dir) {
   const files = [];
   const stack = [dir];
-  // スタックが空になるまで深さ優先で走査し、対象ファイルを列挙する
-  // 未処理ディレクトリが残る間は深さ優先で探索を継続する
+  // スタックが空になるまで深さ優先で走査し対象ファイルを列挙する（未処理ディレクトリがある限り継続）
   while (stack.length) {
     const d = stack.pop();
     // 無効な参照は安全側で打ち切る
@@ -217,8 +216,7 @@ function main() {
   const files = targets.flatMap(listFilesRecursive).filter((f) => /\.(ts|tsx|mts|cts)$/i.test(f));
   const violations = [];
 
-  // 各ファイルを読み込み重複候補の検査結果を集約する
-  // 対象ファイルを順に検査して違反の有無を集約する
+  // 各ファイルを読み込み重複候補の検査結果を集約する（違反の有無を順次集計）
   for (const fp of files) {
     let content = '';
 
@@ -258,8 +256,7 @@ function main() {
   process.exit(1);
 }
 
-// エントリポイント実行時の致命エラーを捕捉して終了コードを明確化する
-// エントリポイント
+// エントリポイント: 実行時の致命エラーを捕捉して終了コードを明確化する
 try { main(); } catch (e) {
   // 実行時の致命的例外はメッセージを出力して異常終了とする
   process.stderr.write(`[policy:jsdoc_no_duplicate] fatal: ${String((e?.message) || e)}\n`);
