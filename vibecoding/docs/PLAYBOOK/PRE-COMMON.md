@@ -593,6 +593,7 @@ exit=2 の場合、以下を順に実施：
   3) `context-review.md` を削除（当該ユニットのみ）
   4) `npm run -s check:pre-common` を再実行し、`<StartAt> <hash>`（exit=0）を取得するまでループ
 - 禁止: レビュー本文の貼り付け（incorporate 節の作成）、緩和（eslint-disable 等）、例外運用の追加
+- 確認依頼の禁止: 本手順の実施可否を人へ確認する行為（チャット等での可否問い合わせ）は禁止。検出時は即時に自動統合し、確認待ちは行わない。
 - 優先度: 本節は SnD 作成や IMPL 着手より常に優先される（本節が未完了の間は後工程へ進まない）
 - 参考（ポリシー宣言）: `.cursorrules → quality-context-review.mode: auto-integrate-block`
 

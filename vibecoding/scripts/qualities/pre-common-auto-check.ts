@@ -343,7 +343,8 @@ function checkRubric(): boolean {
   const repoRootFromScript = path.resolve(scriptDir, '../../..');
   const tsxLoaderFsPath = path.join(repoRootFromScript, 'node_modules', 'tsx', 'dist', 'loader.mjs');
   // Windows の Node >=20 では file:// URL を優先
-  const tsxLoaderArg = fs.existsSync(tsxLoaderFsPath) ? pathToFileURL(tsxLoaderFsPath).href : null;
+  // ローダ存在時のみ公式ローダのURLを用いる
+  const tsxLoaderArg = fs.existsSync(tsxLoaderFsPath) ? pathToFileURL(tsxLoaderFsPath).href : null /* ローダの有無で選択（存在時はURL、無ければnull） */; // ローダがあればURLに変換、無ければ null
 
   // 公式ローダが利用可能なら rubric を直接実行し、成功なら即時に準拠として戻る
   if (tsxLoaderArg) {
@@ -429,7 +430,8 @@ function formatCap(s: string, cap = DEFAULT_FORMAT_CAP): string {
  */
 function runCommand(command: string, args: string[], cwd?: string): { status: number; stdout: string; stderr: string } {
   const res = spawnSync(command, args, { encoding: 'utf8', shell: true, cwd });
-  const status = typeof res.status === 'number' ? res.status : 1;
+  // status 未定義時は失敗扱い（1）で確定
+  const status = typeof res.status === 'number' ? res.status : 1 /* 未定義時は失敗(1) */; // 未定義時は 1（失敗扱い）
   const stdout = res.stdout || '';
   const stderr = res.stderr || '';
   return { status, stdout, stderr };
@@ -483,7 +485,9 @@ function runGateCommandsWithKata(_pkgJson: unknown): string[] {
  */
 function appendDiagnosticsForStep(d: typeof stepDefs[number], results: string[]): void {
   // すべての対応ユニットに context.md が存在する場合、診断を抑止
-  const unitDirs = (d.relatedUnitDirs && d.relatedUnitDirs.length > 0) ? d.relatedUnitDirs : [d.configRelDir];
+  // 関連ディレクトリが指定されていればそれを優先、無ければ既定の1件
+  // 関連ディレクトリ指定の有無で対象を決定
+  const unitDirs = (d.relatedUnitDirs && d.relatedUnitDirs.length > 0) ? d.relatedUnitDirs : [d.configRelDir] /* 関連指定の有無で探索対象を切替 */; // 関連指定があれば優先、無ければ単一dir
   const allContextsExist = unitDirs.every((u) => fs.existsSync(path.join(OUTPUT_BASE, u, 'context.md')));
   // 対象すべてが整っている場合は冗長な診断出力を避けるため早期に戻る
   if (allContextsExist) return;
@@ -494,7 +498,8 @@ function appendDiagnosticsForStep(d: typeof stepDefs[number], results: string[])
   }
 
   results.push(`[SAMPLE] exit=${result.status}`);
-  const out = (result.stdout || '') + (result.stderr ? `\n[stderr]\n${result.stderr}` : '');
+  // 標準出力に加え、標準エラーがあれば追記して可視化
+  const out = (result.stdout || '') + (result.stderr ? `\n[stderr]\n${result.stderr}` : '' /* 付加情報なし */); /* 標準エラーの有無で付加情報を構成 */ // stderr があれば併記して可視化
   const capped = formatCap(out, DEFAULT_FORMAT_CAP);
   const cappedLines = capped.split('\n');
   // 各行を整形して空行と本文を区別して蓄積する

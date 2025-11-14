@@ -365,11 +365,14 @@ function checkHowSection(text: string): string[] {
   if (ngSectionMatch) {
     // セクション範囲を抽出して番号付き項目数を正確にカウントする
 
+    // 典型NGセクションの範囲抽出（見出し位置から開始を確定）
     const ngSectionStart = howSection.indexOf(ngSectionMatch[0]);
     const nextHeadingMatch = howSection.slice(ngSectionStart + ngSectionMatch[0].length).match(/^###\s/m);
+    // 次見出しが見つかればそこまで、無ければセクション末尾までを終端とする
+    // 次見出しの有無で終端位置を決定
     const ngSectionEnd = nextHeadingMatch 
       ? ngSectionStart + ngSectionMatch[0].length + nextHeadingMatch.index!
-      : howSection.length;
+      : howSection.length /* 典型NGセクションの終端を決定（次見出し or 末尾） */;
     const ngSection = howSection.slice(ngSectionStart, ngSectionEnd);
     const ngCount = (ngSection.match(/^\s*\d+\.\s+\*\*/gm) || []).length;
     // 典型NGの列挙がしきい値未満の場合は不足として報告する
@@ -474,7 +477,9 @@ try {
   main();
 } catch (err) {
   // 致命的例外は詳細を記録して非0終了で異常を明確化する
-  process.stderr.write(`context-md-rubric ❌ ${err instanceof Error ? err.message : String(err)}\n`);
+  // 例外が Error なら message、その他は文字列化して出力
+  // 例外の型に応じて出力内容を安全に分岐
+  process.stderr.write(`context-md-rubric ❌ ${ err instanceof Error ? err.message : String(err) /* 型に応じてメッセージを選択 */ }\n`); // Error型ならmessage、その他は文字列化
   process.exit(1);
 }
 

@@ -19,7 +19,7 @@
  
 /**
   * @typedef {Object} BranchCommentOptions オプション型定義
-  * @property {Array<'if'|'for'|'while'|'do'|'switch'|'try'>} [targets] 対象種別（省略時は全種）
+ * @property {Array<'if'|'for'|'while'|'do'|'switch'|'try'|'ternary'>} [targets] 対象種別（省略時は全種）
   * @property {string} [requireTagPattern] 本文パターン（例: 非ASCIIを要求）
   * @property {boolean} [allowBlankLine] 空行許容（既定: false）
   * @property {boolean} [ignoreElseIf] else if 免除（既定: true）
@@ -40,6 +40,7 @@ const ENTRY_PAIRS = [
   ['DoWhileStatement', 'do'],
   ['SwitchStatement', 'switch'],
   ['TryStatement', 'try'],
+  ['ConditionalExpression', 'ternary'],
 ];
  
 /**
@@ -518,6 +519,84 @@ function _extractUsedCommentForStatementOrBlock(src, nodeOrBlock) {
   return tr.ok ? tr.used || null : null;
 }
 
+/**
+ * SwitchCase ラベル直前の説明コメント（厳格: 直前行のみ）を判定する。
+ * @param {import('eslint').SourceCode} src
+ * @param {any} node SwitchCase
+ * @returns {{ok:boolean,used:any|null}} 判定
+ */
+function _hasLeadingCommentForCaseStrict(src, node) {
+  if (!node || node.type !== 'SwitchCase') return { ok: false, used: null };
+  const last = getLastMeaningfulComment(src, node);
+  if (!last) return { ok: false, used: null };
+  const ok = Boolean(last?.loc && node?.loc && last.loc.end.line === node.loc.start.line - 1);
+  return ok ? { ok: true, used: last } : { ok: false, used: null };
+}
+
+/**
+ * 三項演算子（ConditionalExpression）に対する直前行または同行末コメントの存在チェック。
+ * @param {import('eslint').SourceCode} src
+ * @param {import('eslint').Rule.RuleContext} context
+ * @param {RegExp|null} tagRe
+ * @param {any} node ConditionalExpression
+ * @returns {void}
+ */
+function _extCheckTernary(src, context, tagRe, node, fixMode) {
+  if (!node || node.type !== 'ConditionalExpression') return;
+  // 直前行コメント（空行不可）と同行末コメントを両方チェックし、どちらか片方で適合とする
+  const prev = hasRequiredPreviousComment(src, node, false);
+  const tr = hasTrailingComment(src, node);
+  // 両方ある場合は冗長とみなし、タグ検査は前行、余剰は removable_trailing として報告
+  if (prev.ok && tr.ok) {
+    _extVerifyTagOrReport(src, tagRe, context, node, prev.last, '?:');
+    if (fixMode && tr.used) {
+      context.report({ node, loc: tr.used.loc, messageId: 'removable_trailing' });
+    }
+    return;
+  }
+  // 片方だけある場合はそれを採用
+  if (prev.ok) {
+    _extVerifyTagOrReport(src, tagRe, context, node, prev.last, '?:');
+    return;
+  }
+  if (tr.ok) {
+    _extVerifyTagOrReport(src, tagRe, context, node, tr.used, '?:');
+    return;
+  }
+  // どちらも無ければ不足
+  context.report({ node, messageId: 'need_ternary_comment' });
+}
+
+/**
+ * switch 文に対するヘッドおよび各 case/default 直前コメントの検査。
+ * @param {import('eslint').SourceCode} src
+ * @param {import('eslint').Rule.RuleContext} context
+ * @param {RegExp|null} tagRe
+ * @param {any} node SwitchStatement
+ * @returns {void}
+ */
+function _extCheckSwitch(src, context, tagRe, node) {
+  if (!node || node.type !== 'SwitchStatement') return;
+  // ヘッド（switch キーワード）直前
+  const head = hasRequiredPreviousComment(src, node, false);
+  if (!head.ok) {
+    context.report({ node, messageId: 'need_before_switch' });
+  } else {
+    _extVerifyTagOrReport(src, tagRe, context, node, head.last, 'switch');
+  }
+  // 各 case/default（単一 case のみの switch は除外）
+  const cases = Array.isArray(node.cases) ? node.cases : [];
+  if (cases.length <= 1) return;
+  for (const cs of cases) {
+    const r = _hasLeadingCommentForCaseStrict(src, cs);
+    if (!r.ok) {
+      context.report({ node: cs, messageId: 'need_case_head' });
+    } else {
+      _extVerifyTagOrReport(src, tagRe, context, cs, r.used, 'switch');
+    }
+  }
+}
+
 /* eslint-disable complexity -- 類似度チェックの分岐は明確性を優先し単純な直列構造で保持する */
 /**
  * try と catch/finally のコメント類似度を検査して必要に応じて報告する。
@@ -968,7 +1047,12 @@ function _createCheck(src, ctx, opts) {
   /* eslint-disable-next-line complexity -- 入口関数は分岐の振り分けに特化し、詳細は外部関数へ委譲する */
   return (node, kw) => {
     if (kw === 'if') return void _extCheckIf(src, ctx, tagRe, treatHeadAsNonDangling, allowBlankLineBeforeIf, fixMode, opts.similarityThreshold, node);
+    if (kw === 'ternary') return void _extCheckTernary(src, ctx, tagRe, node, fixMode);
     if (ignoreElseIf && _extIsElseIfAlternate(node)) return;
+    if (kw === 'switch') {
+      _extCheckSwitch(src, ctx, tagRe, node);
+      return;
+    }
     const { ok, last } = hasRequiredPreviousComment(src, node, allowBlank);
     if (!ok) return void ctx.report({ node, messageId: 'missingComment', data: { kw } });
     if (tagRe && last && !matchesPattern(typeof last.value === 'string' ? last.value : '', tagRe)) {
@@ -993,7 +1077,7 @@ function _createCheck(src, ctx, opts) {
  */
 function _createImpl(context) {
   const opt = (Array.isArray(context.options) && context.options[0]) || {};
-  const targets = new Set(opt.targets || ['if', 'for', 'while', 'do', 'switch', 'try']);
+  const targets = new Set(opt.targets || ['if', 'for', 'while', 'do', 'switch', 'try', 'ternary']);
   const opts = {
     allowBlank: Boolean(opt.allowBlankLine),
     ignoreElseIf: opt.ignoreElseIf !== false, // default true
@@ -1033,7 +1117,7 @@ export const ruleRequireCommentsOnControlStructures = {
         properties: {
           targets: {
             type: 'array',
-            items: { enum: ['if', 'for', 'while', 'do', 'switch', 'try'] }
+            items: { enum: ['if', 'for', 'while', 'do', 'switch', 'try', 'ternary'] }
           },
           requireTagPattern: { type: 'string' },
           allowBlankLine: { type: 'boolean' },
@@ -1077,6 +1161,15 @@ export const ruleRequireCommentsOnControlStructures = {
         'if/then のコメントが類似し過ぎています (距離/長さ={{ratio}} ≤ {{threshold}})。役割が重複しています。if 直前は「判断軸/前提」、then は「成立時に採る行動」を具体化してください。 ただし「判断軸」「処置」といったメタな文言はコメント自体には利用しないこと。 詳細: distance={{distance}}, maxLen={{maxLen}} / 該当: if="{{ifComment}}", then="{{thenComment}}"',
       similar_if_else:
         'if/else のコメントが類似し過ぎています (距離/長さ={{ratio}} ≤ {{threshold}})。役割が重複しています。if 直前は「判断軸/前提」、else は「不成立時の方針/フォールバック」を具体化してください。 ただし「判断軸」「処置」といったメタな文言はコメント自体には利用しないこと。 詳細: distance={{distance}}, maxLen={{maxLen}} / 該当: if="{{ifComment}}", else="{{elseComment}}"'
+      ,
+      // Switch-specific (presence)
+      need_before_switch:
+        'switch 文の直前に、この分岐の目的を説明するコメントを書いてください。構造名の繰り返しや「意図は〜」等の定型句は禁止。処理の具体的目的・前提・例外・読者が見落としやすいポイントを原則1文で。',
+      need_case_head:
+        'case/default の直前に、この分岐条件の意味がわかるコメントを書いてください。定型句は禁止。条件の出典や境界条件を簡潔に示してください。',
+      // Ternary-specific
+      need_ternary_comment:
+        '三項演算子の直前行または同行末に、式の意図を説明するコメントが必要です。構造名の繰り返しや「意図は〜」等の定型句は禁止。成立/不成立それぞれの意味が読み取れるように記述してください。'
     }
   },
   create: (context) => _createImpl(context)
