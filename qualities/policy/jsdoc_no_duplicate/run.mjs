@@ -248,7 +248,9 @@ function main() {
   for (const v of violations) {
     // 各候補の概要を整形してstderrへ出力する
     for (const h of v.hits) {
-      const reason = h.key5Dup ? `key5='${h.key5}'` : `tags=[${h.commonTags.join(',')}]`;
+      const reason =
+        // 重複理由が key5 かタグ重複かを明示する
+        h.key5Dup ? `key5='${h.key5}'` : `tags=[${h.commonTags.join(',')}]`;
       process.stderr.write(`${v.file}:${h.line}: duplicate JSDoc (${reason}) -> ${h.snippet}\n`);
     }
   }

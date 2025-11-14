@@ -141,14 +141,28 @@ function getHeaderComment(sourceCode) {
  * @returns {{min:number,max:number,requireSee:number,requireSnd:boolean,allowSndNone:boolean,customMessage:string|null}} 正規化済みオプション
  */
 function normalizeOptions(raw) {
+  // 入力が不正な場合は空オブジェクトへフォールバックする
   const o = raw && typeof raw === 'object' ? raw : {};
+  // 未指定時は 8 を既定とし、指定があれば上書きする
+  const minV = Number.isInteger(o.min) ? o.min : 8;
+  // 未指定時は 10 を既定とし、指定があれば上書きする
+  const maxV = Number.isInteger(o.max) ? o.max : 10;
+  // @see の最低件数は未指定時に 2 を既定とする
+  const requireSeeV = Number.isInteger(o.requireSee) ? o.requireSee : 2;
+  // @snd の必須は未指定時 true を既定とする
+  const requireSndV = typeof o.requireSnd === 'boolean' ? o.requireSnd : true;
+  // 'なし' を許容する可否は未指定時 true を既定とする
+  const allowSndNoneV = typeof o.allowSndNone === 'boolean' ? o.allowSndNone : true;
+  // カスタム文言は非空文字列のときのみ採用する
+  const customMessageV = typeof o.message === 'string' && o.message.length > 0 ? o.message : null;
+
   return {
-    min: Number.isInteger(o.min) ? o.min : 8,
-    max: Number.isInteger(o.max) ? o.max : 10,
-    requireSee: Number.isInteger(o.requireSee) ? o.requireSee : 2,
-    requireSnd: typeof o.requireSnd === 'boolean' ? o.requireSnd : true,
-    allowSndNone: typeof o.allowSndNone === 'boolean' ? o.allowSndNone : true,
-    customMessage: typeof o.message === 'string' && o.message.length > 0 ? o.message : null,
+    min: minV,
+    max: maxV,
+    requireSee: requireSeeV,
+    requireSnd: requireSndV,
+    allowSndNone: allowSndNoneV,
+    customMessage: customMessageV,
   };
 }
 

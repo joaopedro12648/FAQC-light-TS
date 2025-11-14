@@ -29,7 +29,10 @@ const EXT_RX = /\.(js|cjs|mjs|ts|tsx|mts|cts)$/i;
  */
 function getArgLocale(argv) {
   const arg = argv.find((a) => a.startsWith('--locale='));
-  return arg ? (arg.split('=')[1] || '').trim() : '';
+  return (
+    // --locale 指定時は値を抽出し、未指定時は空文字へフォールバックする
+    arg ? (arg.split('=')[1] || '').trim() : ''
+  );
 }
 
 /**
@@ -77,8 +80,13 @@ function resolveEffectiveLocale() {
  */
 function getArgStrict(argv) {
   const a = argv.find((s) => s.startsWith('--strict='));
-  const v = a ? (a.split('=')[1] || '').trim().toLowerCase() : '';
-  return v === 'all' ? 'all' : 'any';
+  const v =
+    // --strict 指定が無ければ空を返して後段で既定化する
+    a ? (a.split('=')[1] || '').trim().toLowerCase() : '';
+  return (
+    // 厳格度は 'all' のみ厳格、それ以外は any に二値化する
+    v === 'all' ? 'all' : 'any'
+  );
 }
 
 /**
@@ -87,7 +95,10 @@ function getArgStrict(argv) {
  */
 function getEnvStrict() {
   const v = (process.env.COMMENT_LOCALE_STRICT || '').trim().toLowerCase();
-  return v === 'all' ? 'all' : 'any';
+  return (
+    // 環境変数の厳格度は 'all' のみ厳格扱い、その他は any とする
+    v === 'all' ? 'all' : 'any'
+  );
 }
 
 /**
@@ -97,7 +108,10 @@ function getEnvStrict() {
 function resolveStrictness() {
   const argv = process.argv.slice(2);
   const s = getArgStrict(argv) || getEnvStrict() || 'any';
-  return s === 'all' ? 'all' : 'any';
+  return (
+    // 優先度に従って厳格度を最終二値へ確定する
+    s === 'all' ? 'all' : 'any'
+  );
 }
 
 /**
@@ -231,7 +245,9 @@ function consumeBlock(content, i) {
   // ブロック終端の */ に到達するまで読み進める
   while (i < n) {
     const ch = content[i];
-    const next = i + 1 < n ? content[i + 1] : '';
+    const next =
+      // 目的: 範囲外アクセスを空文字へ丸めて条件分岐の単純化を図る
+      i + 1 < n ? content[i + 1] : '';
     // */ を検出したらブロックコメントの終端として確定する
     if (ch === '*' && next === '/') {
 
@@ -259,7 +275,9 @@ function collectAllBlockComments(content) {
   // 末尾に到達するまで字句的に走査してブロックコメントのみを収集する
   while (i < n) {
     const ch = content[i];
-    const next = i + 1 < n ? content[i + 1] : '';
+    const next =
+      // 目的: 範囲外アクセスを空文字へ丸めて条件分岐の単純化を図る
+      i + 1 < n ? content[i + 1] : '';
 
     // 行コメントを検出したら次の改行まで読み飛ばしてスキップする
     if (ch === '/' && next === '/') {
@@ -462,7 +480,9 @@ function reportResult(violations) {
   process.stderr.write('[policy:comment_locale] NG: 日本語ロケールでは「ASCIIのみ」のJSDoc行は禁止です。品質コンテキストのルールに従った言語でのコメントを書くべきであり、文末にマルチバイト文字を追加するなどではなく、全体を該当言語に翻訳してください。\n');
   // 具体的な修正箇所を file:line で列挙し、利用者に明示する
   for (const v of violations) {
-    const loc = typeof v.line === 'number' ? `${v.file}:${v.line}` : v.file;
+    const loc =
+      // 目的: 行番号の有無で出力形式を切り替え、読者に場所を明確化する
+      typeof v.line === 'number' ? `${v.file}:${v.line}` : v.file;
     process.stderr.write(`${loc}: ASCIIのみのJSDoc行を避け、各行に非ASCII（例: 日本語）を含めてください。品質コンテキストのルールに従った言語でのコメントを書くべきであり、文末にマルチバイト文字を追加するなどではなく、全体を該当言語に翻訳してください。\n`);
   }
 

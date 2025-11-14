@@ -110,17 +110,11 @@ export const documentation = [
           requireTagPattern: (() => {
             const envLocale = (process.env.CHECK_LOCALE || '').trim();
             const lang = (envLocale || Intl.DateTimeFormat().resolvedOptions().locale || '').split(/[-_]/)[0] || '';
-            return lang.toLowerCase() === 'ja' ? '[^\\x00-\\x7F]' : '';
+            return lang.toLowerCase() === 'ja' ? '[^\\x00-\\x7F]' : ''; // 日本語ロケールでは非ASCIIを必須とし、その他はタグ検証を無効化する意図
           })()
         }
       ]
     }
-  },
-  // 一時対応: 自己実装ファイルは段階ロールアウトのため対象外（SnD フォローアップで撤去）
-  {
-    files: ['qualities/eslint/plugins/require-comments-on-control-structures.js'],
-    plugins: { control: controlStructuresPlugin },
-    rules: { 'control/require-comments-on-control-structures': 'off' }
   },
   // ESLint ディレクティブコメントの説明必須・過剰抑止禁止
   {

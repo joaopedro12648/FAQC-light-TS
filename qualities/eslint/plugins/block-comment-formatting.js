@@ -38,12 +38,12 @@ function detectInlineFirstLine(fullText) {
     return { hasInlineFirstLine: false, inlineText: '', beforeInline: '' };
   }
 
-  const afterOpen = fullText.indexOf('/**') === 0 ? fullText.slice(3, firstNewline) : '';
+  const afterOpen = fullText.indexOf('/**') === 0 ? fullText.slice(3, firstNewline) : ''; // 開幕直後に本文があれば抽出し、無ければ空にする
   const hasInline = /\S/.test(afterOpen); // 改行までに非空白がある
   return {
     hasInlineFirstLine: hasInline,
-    inlineText: hasInline ? afterOpen.trim() : '',
-    beforeInline: hasInline ? afterOpen : '',
+    inlineText: hasInline ? afterOpen.trim() : '', // 先頭行の本文を正規化して次行へ移す
+    beforeInline: hasInline ? afterOpen : '', // 置換前の原文を保持（整形に利用）する
   };
 }
 
@@ -55,7 +55,7 @@ function detectInlineFirstLine(fullText) {
  */
 function getIndent(sourceText, startIdx) {
   const nl = sourceText.lastIndexOf('\n', startIdx - 1);
-  const lineStart = nl === -1 ? 0 : nl + 1;
+  const lineStart = nl === -1 ? 0 : nl + 1; // 前行が無ければ行頭、あれば直後から開始する
   return sourceText.slice(lineStart, startIdx);
 }
 
@@ -171,7 +171,7 @@ export const blockCommentFormattingPlugin = {
                 // ブロック/JSdoc が実質的に空なら指摘して理解を妨げないようにする
                 if (normalized.length === 0) {
 
-                  context.report({ loc: c.loc, messageId: isJsdoc ? 'emptyJsdoc' : 'emptyBlock' });
+                  context.report({ loc: c.loc, messageId: isJsdoc ? 'emptyJsdoc' : 'emptyBlock' }); // JSDoc と通常ブロックで文言を切替える
                 }
               }
             }
@@ -225,8 +225,8 @@ export const blockCommentFormattingPlugin = {
          * @returns {any|null} もっとも近い直前コメント（存在しなければ null）
          */
         function getLastPrecedingComment(node) {
-          const commentsBefore = sourceCode.getCommentsBefore ? sourceCode.getCommentsBefore(node) : [];
-          return commentsBefore.length > 0 ? commentsBefore[commentsBefore.length - 1] : null;
+          const commentsBefore = sourceCode.getCommentsBefore ? sourceCode.getCommentsBefore(node) : []; // API 非提供環境では空配列にフォールバックする
+          return commentsBefore.length > 0 ? commentsBefore[commentsBefore.length - 1] : null; // 直前コメントがあれば最後の1件を採用する
         }
 
         /**
@@ -246,7 +246,7 @@ export const blockCommentFormattingPlugin = {
             if (!isDescribeCall(node)) return;
             const last = getLastPrecedingComment(node);
             const ok = last && isAdjacent(last, node) && isMeaningfulComment(last);
-            // 直前に意味のあるコメントが無ければテスト意図の説明不足として報告する
+            // 直前に意味のあるコメントが無ければテストの説明不足として報告する
             if (!ok) {
 
               context.report({ node, messageId: 'missing' });

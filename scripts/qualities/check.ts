@@ -62,9 +62,11 @@ const scope = scopeArg?.split('=')[1] ?? 'all';
 // 実ゲート用: runMode が 'gate' または 'both' のみ対象
 const gateSteps = stepDefs.filter((d) => d.runMode === 'gate' || d.runMode === 'both');
 /** 実行対象ステップ（--fast の場合は一部を抽出） */
-const selectedSteps = isFast
-  ? gateSteps.filter((d) => d.id.startsWith('policy:') || d.id === 'typecheck' || d.id === 'lint')
-  : gateSteps;
+const selectedSteps =
+  // 高速時はポリシー/型検査/lint のみに限定し、通常時は全ステップを実行する
+  isFast
+    ? gateSteps.filter((d) => d.id.startsWith('policy:') || d.id === 'typecheck' || d.id === 'lint')
+    : gateSteps;
 
 /**
  * 変更ファイルの取得（lint 用）。失敗時は空配列を返す。
@@ -411,7 +413,9 @@ const isMain = (() => {
   // 直接起動かを判定して CLI 実行とライブラリ利用を分岐する
   try {
     // 呼び出しパスが不明な場合は直接起動ではないと判定して安全側に倒す
-    const arg1 = typeof process.argv[1] === 'string' ? process.argv[1] : null;
+    const arg1 =
+      // 直接起動判定のため argv[1] を検査し、無効時は null へ
+      typeof process.argv[1] === 'string' ? process.argv[1] : null;
     // 直接起動の判定ができない場合は意図的に実行を抑止して安全側へ倒す
     if (!arg1) return false;
     const invokedHref = pathToFileURL(arg1).href;
@@ -428,7 +432,9 @@ if (isMain) {
   // 明示的エントリポイントとして起動されたときのみ実行（ユニットテストの import では実行しない）
   runQualityGate().catch((e) => {
     // 例外を標準エラーで明確化して終了コードを非0にする
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg =
+      // 例外の型に応じてユーザー向けメッセージ文字列を抽出する
+      e instanceof Error ? e.message : String(e);
     process.stderr.write(`${msg}\n`);
     process.exit(1);
   });

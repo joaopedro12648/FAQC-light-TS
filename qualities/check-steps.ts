@@ -56,6 +56,7 @@ export type StepDef = Readonly<{
 export const stepDefs: ReadonlyArray<StepDef> = [
   // Policies (explicitly listed; no aggregator)
   { id: 'policy:anti_mvp', command: 'node', args: ['qualities/policy/anti_mvp/run.mjs'], configRelDir: 'policy/anti_mvp', runMode: 'both' },
+  { id: 'policy:no_eslint_disable', command: 'node', args: ['qualities/policy/no_eslint_disable/run.mjs'], configRelDir: 'policy/no_eslint_disable', runMode: 'both' },
   { id: 'policy:jsdoc_no_duplicate', command: 'node', args: ['qualities/policy/jsdoc_no_duplicate/run.mjs'], configRelDir: 'policy/jsdoc_no_duplicate', runMode: 'both' },
   { id: 'policy:no_unknown_double_cast', command: 'node', args: ['qualities/policy/no_unknown_double_cast/run.mjs'], configRelDir: 'policy/no_unknown_double_cast', runMode: 'both' },
   { id: 'policy:no_relaxation', command: 'node', args: ['qualities/policy/no_relaxation/run.mjs'], configRelDir: 'policy/no_relaxation', runMode: 'both' },
