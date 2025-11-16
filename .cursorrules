@@ -339,7 +339,13 @@ guardrails:
         paths:
           - "src/**"
           - "tests/**"
-          - "vibecoding/var/SPEC-and-DESIGN/**"
+          - "vibecoding/**"
+          - "qualities/**"
+        policy: |
+          IMPL フェーズでの自動実装は、承認済み SnD の「改変許可範囲」および `context.outputTargets` に明示されたパスに限り行うこと。
+          qualities/** への編集は、当該 SnD が qualities/** を改変対象として明示している場合にのみ許可する。
+          vibecoding/** への編集も同様とし、例外として vibecoding/var/contexts/** と vibecoding/var/SPEC-and-DESIGN/** は PRE-COMMON/PRE-SnD/PRE-IMPL の指針に従うメンテナンス目的で編集してよい。
+          上記以外のフォルダは、SnD に明示された改変許可範囲のみに限定して編集すること。
 
   commands:
     non_interactive_only: true    # --ci/-q 必須、watch禁止
