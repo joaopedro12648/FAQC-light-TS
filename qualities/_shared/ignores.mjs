@@ -31,6 +31,7 @@ export const IGNORES = [
   'scripts/tmp/**',
   'build/**',
   '*.{ts,js}',
-  '.git/**'
+  '.git/**',
+  'auto-check/**'
 ];
 

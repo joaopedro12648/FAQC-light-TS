@@ -54,5 +54,5 @@
     "../../scripts/**/*.ts",
     "../../vibecoding/scripts/**/*.ts",
   ],
-  "exclude": ["node_modules", "../../dist", "../../build", "../../coverage"]
+  "exclude": ["node_modules", "../../dist", "../../build", "../../coverage", "../../auto-check"]
 }

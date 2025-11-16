@@ -246,7 +246,7 @@ function consumeBlock(content, i) {
   while (i < n) {
     const ch = content[i];
     const next =
-      // 目的: 範囲外アクセスを空文字へ丸めて条件分岐の単純化を図る
+      // 範囲外アクセスを空文字へ丸めて条件分岐の単純化を図る
       i + 1 < n ? content[i + 1] : '';
     // */ を検出したらブロックコメントの終端として確定する
     if (ch === '*' && next === '/') {
@@ -276,7 +276,7 @@ function collectAllBlockComments(content) {
   while (i < n) {
     const ch = content[i];
     const next =
-      // 目的: 範囲外アクセスを空文字へ丸めて条件分岐の単純化を図る
+      // 範囲外アクセスを空文字へ丸めて条件分岐の単純化を図る
       i + 1 < n ? content[i + 1] : '';
 
     // 行コメントを検出したら次の改行まで読み飛ばしてスキップする
@@ -481,7 +481,7 @@ function reportResult(violations) {
   // 具体的な修正箇所を file:line で列挙し、利用者に明示する
   for (const v of violations) {
     const loc =
-      // 目的: 行番号の有無で出力形式を切り替え、読者に場所を明確化する
+      // 行番号の有無で出力形式を切り替え、読者に場所を明確化する
       typeof v.line === 'number' ? `${v.file}:${v.line}` : v.file;
     process.stderr.write(`${loc}: ASCIIのみのJSDoc行を避け、各行に非ASCII（例: 日本語）を含めてください。品質コンテキストのルールに従った言語でのコメントを書くべきであり、文末にマルチバイト文字を追加するなどではなく、全体を該当言語に翻訳してください。\n`);
   }

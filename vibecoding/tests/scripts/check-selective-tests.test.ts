@@ -50,7 +50,7 @@ describe('selective internal tests decision (evaluateShouldRunInternalTests)', (
       { vibecodingExists: true, changedPaths: null, lastUpdatedIso: null, anyUpdatedSince: null },
       true,
     ],
-    // 追加: 境界/負例
+    // 境界/負例
     [
       'vibecoding missing -> false',
       { vibecodingExists: false, changedPaths: ['qualities/x.ts'], lastUpdatedIso: ISO, anyUpdatedSince: true },

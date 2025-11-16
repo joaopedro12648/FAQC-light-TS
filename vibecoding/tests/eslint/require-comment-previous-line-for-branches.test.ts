@@ -51,6 +51,7 @@ describe('ESLint rule (smoke): require-comment-previous-line-for-branches', () =
         const msg = (meta as { messages: Record<string, string> }).messages;
         expect(typeof msg.missingComment).toBe('string');
         expect(typeof msg.tagMismatch).toBe('string');
+        expect(typeof msg.meta_like_comment).toBe('string');
         // 形式合わせではなく「意図説明」を促す文言が含まれること
         expect(msg.missingComment).toMatch(/なぜその分岐\/ループが必要か/);
         // ja 系では ASCII のみ不可という指針が含まれること

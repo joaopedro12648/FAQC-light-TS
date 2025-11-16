@@ -27,6 +27,7 @@
  * @property {boolean} [fixMode] 不要コメントの報告を有効にする（既定: false／報告のみ）
  * @property {'non-dangling'|'dangling'} [treatChainHeadAs] else-if 連鎖先頭（head）をどう扱うか（既定: 'non-dangling'）
  * @property {number} [similarityThreshold] 類似度のしきい値（既定: 0.75、範囲: 0.6〜1.0）
+ * @property {boolean} [enforceMeta] メタ表現検出の有効化（既定: false／無効）
  */
  
 /** ノードタイプとキーワードの対応（固定） */
@@ -277,14 +278,14 @@ function hasBlockHeadComment(src, block) {
  * @returns {{ok:boolean,comments:any[],used:any|null}} 判定結果と候補コメント
  */
 function hasTrailingComment(src, stmt) {
-  // 目的: 単一文でない場合（null/Block）は同行末コメント検査の対象外
+  // 単一文でない（null または Block）の場合は、同行末コメントの検査対象にしない
   if (!stmt || isBlock(stmt)) return { ok: false, comments: [], used: null };
   // 同行末の after/before コメントを簡潔に選択する
   const after = _pickTrailingAfter(src, stmt);
-  // 目的: 同行末 after コメントがあれば採用
+  // 同行末の after コメントがあれば、それを採用する
   if (after) return { ok: true, comments: [after], used: after };
   const before = _pickTrailingBefore(src, stmt);
-  // 目的: 同行末 before コメントがあれば採用
+  // 同行末の before コメントがあれば、それを採用する
   if (before) return { ok: true, comments: [before], used: before };
   return { ok: false, comments: [], used: null };
 }
@@ -406,7 +407,7 @@ function _checkBlockHeadAndReport(src, context, tagRe, fixMode, block, messageId
   // then/else/catch/finally のブロック先頭に説明コメントがあるかを検査する
   const r = hasBlockHeadComment(src, block);
   // ブロック先頭に意図コメントがある場合はタグ検証し、冗長を整理して終了する
-  // 目的: 既に説明コメントがあるときは追加の指摘を避ける
+  // 既に説明コメントがある場合は、追加の指摘を行わない
   if (r.ok) {
     _handleHeadOk(src, context, tagRe, fixMode, block, r.used, r.comments);
     return;
@@ -416,7 +417,7 @@ function _checkBlockHeadAndReport(src, context, tagRe, fixMode, block, messageId
   // 先頭文の存在確認を簡潔に評価し、単一文のみ同行末を許容する
   // 先頭文が無い場合は null を採用し後続の分岐を簡潔にする
   const firstStmt = Array.isArray(block.body) && block.body.length > 0 ? block.body[0] : null; // 先頭文が無ければ null（同行末許容の判定簡略化）
-  // 目的: 単一ステートメントなら同行末コメントで意図説明が可能かを検査する
+  // 単一ステートメントでは同行末コメントで意図説明が可能かを検査する
   if (firstStmt && firstStmt.type !== 'BlockStatement') {
     const tr = hasTrailingComment(src, firstStmt);
     // then/else/catch/finally の最初の単一文に同行末の説明がある場合は採用する
@@ -539,7 +540,7 @@ function _normalizeForSimilarity(s) {
  * @returns {number} 距離（編集距離: 0 は完全一致）
  */
 function _levenshtein(a, b) {
-  // 目的: 早期判定（完全一致/空文字）で計算を省略し性能を確保する
+  // 早期判定（完全一致または空文字）で計算を省略し、性能を確保する
   if (a === b) return 0;
   const n = a.length;
   const m = b.length;
@@ -547,19 +548,19 @@ function _levenshtein(a, b) {
   if (n === 0) return m;
   // 片方が空のときは距離を他方の長さとする（挿入/削除のみ）
   if (m === 0) return n;
-  // 目的: 2行DPを用いた距離計算（メモリ O(m)）
+  // 2 行 DP を用いて距離を計算する（メモリは O(m)）
   let prev = new Array(m + 1);
   let curr = new Array(m + 1);
-  // 目的: 初期化ループで 0..m を設定（列の基底条件）
+  // 初期化ループで 0..m を設定し、列の基底条件とする
   for (let j = 0; j <= m; j += 1) prev[j] = j;
-  // 目的: 各行の先頭セルを初期化し、挿入/削除/置換の最小コストを逐次更新する
+  // 各行の先頭セルを初期化し、挿入・削除・置換の最小コストを逐次更新する
   // DP 行ループ: 各行の先頭で基底条件を設定してから列を走査する
   for (let i = 1; i <= n; i += 1) {
     curr[0] = i;
     const ai = a.charCodeAt(i - 1);
     // 距離DPの列走査: 挿入/削除/置換の最小コストを評価する（計算中核）
     for (let j = 1; j <= m; j += 1) {
-      // 目的: 置換コストは同一文字なら0、異なれば1
+      // 置換コストは同一文字なら 0、異なれば 1 とする
       // 同一文字は置換0、異なる場合は1のコストで比較する
       const cost = ai === b.charCodeAt(j - 1) ? 0 : 1;
       const ins = curr[j - 1] + 1;
@@ -581,7 +582,7 @@ function _levenshtein(a, b) {
  * @returns {{ratio:number,distance:number,maxLen:number}} 比率と内部値
  */
 function _calcDistanceRatio(aNorm, bNorm) {
-  // 目的: 最大長が0のときは安全側で0として扱う（報告対象外の短文は上位で除外）
+  // 最大長が 0 のときは安全側で 0 として扱う（報告対象外の短文は上位で除外する）
   const maxLen = Math.max(aNorm.length, bNorm.length);
   const distance = _levenshtein(aNorm, bNorm);
   // 0除算を避けつつ距離を最大長で正規化して比率を求める
@@ -596,7 +597,7 @@ function _calcDistanceRatio(aNorm, bNorm) {
  * @returns {boolean} 両者とも十分な長さなら true
  */
 function _shouldCompareLen(aNorm, bNorm) {
-  // 目的: ノイズ抑制のため短文（<10）は比較対象から除外
+  // ノイズを抑制するため、短文（<10）は比較対象から除外する
   return aNorm.length >= 10 && bNorm.length >= 10;
 }
 
@@ -616,7 +617,7 @@ function _reportTrySimilarityIfNeeded(ctx, targetNode, side, tryNorm, sideNorm, 
   // 比率が閾値以下なら「役割の重複が読める」と判断し、詳細を片側ごとに報告する
   const { ratio, distance, maxLen } = _calcDistanceRatio(tryNorm, sideNorm);
   // 重複疑いの判定: 閾値を下回る場合にのみ通知へ進めてノイズを抑制する
-  // 判断軸/前提: 比率が基準以下なら「重複の疑いあり」と見なし報告フローへ遷移する
+  // 比率が基準以下なら「重複の疑いあり」と見なし報告フローへ遷移する
   if (ratio <= threshold) {
     // 片側の責務に応じて伝える観点を切り替え、読者が非対称性を理解できるようにする
     if (side === 'catch') {
@@ -634,10 +635,10 @@ function _reportTrySimilarityIfNeeded(ctx, targetNode, side, tryNorm, sideNorm, 
         }
       });
     } else {
-      // 判断軸/前提: 比較側が finally の場合は後処理の重複として扱う（条件の意味）
-      // then: 後処理として実行する内容の意図を先頭で示す（ブロック先頭）
-      // then: クリーンアップ意図の重複を具体的な値と共に報告する（行動）
-      // 不成立時の方針: finally 側では後処理の重複を明確化して報告する
+      // 比較側が finally の場合は後処理の重複として扱う（条件の意味）
+      // 後処理として実行する内容の意図を先頭で示す（ブロック先頭）
+      // クリーンアップ意図の重複を具体的な値と共に報告する（行動）
+      // finally 側では後処理の重複を明確化して報告する
       ctx.report({
         node: targetNode,
         messageId: 'similar_try_finally',
@@ -713,13 +714,13 @@ function _reportIfSimilarityIfNeeded(ctx, targetNode, side, ifNorm, sideNorm, ra
  * @returns {any|null} 採用コメントノード
  */
 function _extractUsedCommentForBlock(src, block) {
-  // 判断軸/前提: 比較対象となるブロックが無い場合は検査を打ち切る
+  // 比較対象となるブロックが無い場合は検査を打ち切る
   if (!block) return null;
   const r = hasBlockHeadComment(src, block);
-  // 成立時の行動: 先頭コメントが採用可能ならそれを返す
+  // 先頭コメントが採用可能ならそれを返す
   if (r.ok) return r.used || null;
   const firstStmt = Array.isArray(block.body) && block.body.length > 0 ? block.body[0] : null; // 先頭文が無ければ null とし、同行末採用の可否判断を単純化する
-  // 判断軸/前提: 単一文が無い/ネストブロックのみの場合は対象外として終了する
+  // 単一文が無い/ネストブロックのみの場合は対象外として終了する
   if (!firstStmt || firstStmt.type === 'BlockStatement') return null;
   const tr = hasTrailingComment(src, firstStmt);
   // 採用可否に応じて最終的なコメントノードを返す（前行コメント）
@@ -733,9 +734,9 @@ function _extractUsedCommentForBlock(src, block) {
  * @returns {any|null} 採用コメントノード
  */
 function _extractUsedCommentForStatementOrBlock(src, nodeOrBlock) {
-  // 判断軸/前提: 比較対象が未定義のときは以降の検査を避ける
+  // 比較対象が未定義のときは以降の検査を避ける
   if (!nodeOrBlock) return null;
-  // 成立時の行動: ブロックであればブロック用の抽出手続きへ委譲する
+  // ブロックであればブロック用の抽出手続きへ委譲する
   if (isBlock(nodeOrBlock)) {
     return _extractUsedCommentForBlock(src, nodeOrBlock);
   }
@@ -751,10 +752,10 @@ function _extractUsedCommentForStatementOrBlock(src, nodeOrBlock) {
  * @returns {{ok:boolean,used:any|null}} 判定
  */
 function _hasLeadingCommentForCaseStrict(src, node) {
-  // 判断軸/前提: 対象が SwitchCase でなければ本検査の対象外
+  // 対象が SwitchCase でなければ本検査の対象外
   if (!node || node.type !== 'SwitchCase') return { ok: false, used: null };
   const last = getLastMeaningfulComment(src, node);
-  // 判断軸/前提: 直前に説明が無い場合は不足扱い
+  // 直前に説明が無い場合は不足扱い
   if (!last) return { ok: false, used: null };
   const ok = Boolean(last?.loc && node?.loc && last.loc.end.line === node.loc.start.line - 1);
   return ok ? { ok: true, used: last } : { ok: false, used: null }; // 行内説明: 厳格隣接が真なら採用、偽なら不足として扱う
@@ -927,9 +928,9 @@ function _extCheckSwitch(src, context, tagRe, node) {
  */
 function _extCheckTrySimilarity(src, ctx, node, tryText, threshold) {
   const tryNorm = _normalizeForSimilarity(tryText);
-  // 目的: 短文は比較対象外（ノイズ抑制）
+  // 短文は比較対象外とし、ノイズを抑制する
   if (tryNorm.length < 10) return;
-  // 目的: catch/finally を共通の手続きで比較する（分岐を圧縮）
+  // catch/finally は共通の手続きで比較し、分岐を圧縮する
   const _block = {
     catch: node && node.handler ? node.handler.body : null,
     finally: node ? node.finalizer : null
@@ -940,15 +941,15 @@ function _extCheckTrySimilarity(src, ctx, node, tryText, threshold) {
    */
   const _compareSide = (side) => {
     const sideBlock = _block[side];
-    // 判断軸/前提: 比較対象ブロックが無ければこの側の評価は不要のため直ちに終了する
+    // 比較対象ブロックが無ければこの側の評価は不要のため直ちに終了する
     if (!sideBlock) return;
     const c = _extractUsedCommentForBlock(src, sideBlock);
-    // 判断軸/前提: 説明コメントが抽出できなければ比較は成立しないため以降を打ち切る
+    // 説明コメントが抽出できなければ比較は成立しないため以降を打ち切る
     if (!c || typeof c.value !== 'string') return;
     const sideNorm = _normalizeForSimilarity(c.value);
-    // 判断軸/前提: 短文の比較はノイズとなるため十分な長さのときだけ類似度を評価する
+    // 短文の比較はノイズとなるため十分な長さのときだけ類似度を評価する
     if (_shouldCompareLen(tryNorm, sideNorm)) {
-      // then: 最低長を満たした場合に限り、正規化した文字列で距離比を評価し報告する
+      // 最低長を満たした場合に限り、正規化した文字列で距離比を評価し報告する
       _reportTrySimilarityIfNeeded(ctx, sideBlock, side, tryNorm, sideNorm, tryText, String(c.value || ''), threshold);
     }
   };
@@ -971,9 +972,9 @@ function _extCheckTrySimilarity(src, ctx, node, tryText, threshold) {
  */
 function _extCheckIfSimilarity(src, ctx, node, ifText, threshold) {
   const ifNorm = _normalizeForSimilarity(ifText);
-  // 目的: 短文は比較対象外（ノイズ抑制）
+  // 短文は比較対象外とし、ノイズを抑制する
   if (ifNorm.length < 10) return;
-  // 目的: then/else を共通の手続きで比較する（分岐を圧縮）
+  // then/else は共通の手続きで比較し、分岐を圧縮する
   const _side = {
     then: node ? node.consequent : null,
     else: node && !isIf(node.alternate) ? node.alternate : null
@@ -1041,7 +1042,7 @@ function _pickAfterBraceHead(src, firstToken, firstStmt) {
   const isComment = after.type === 'Block' || after.type === 'Line';
   // コメント以外は先頭説明の候補にならないため、この時点で不採用とする
   if (!isComment) return null;
-  // 判断軸: 位置情報が欠ける場合は先頭説明の評価ができないため安全側で不採用
+  // 位置情報が欠ける場合は先頭説明の評価ができないため安全側で不採用
   if (!(after.loc && firstToken?.loc)) return null;
   // ブレース直後の行に無ければ先頭説明とは見なさない（位置の一貫性を優先）
   if (after.loc.start.line !== firstToken.loc.start.line + 1) return null;
@@ -1062,7 +1063,7 @@ function _pickBeforeBraceHead(src, firstToken) {
   const isComment = before.type === 'Block' || before.type === 'Line';
   // コメント以外は先頭説明の候補にならないため、この時点で不採用とする
   if (!isComment) return null;
-  // 判断軸: 位置情報が欠ける場合は安全側で不採用（ブレース同行末の条件を厳密化）
+  // 位置情報が欠ける場合は安全側で不採用（ブレース同行末の条件を厳密化）
   if (!(before.loc && firstToken?.loc)) return null;
   return before.loc.end.line === firstToken.loc.start.line ? before : null; // 行内説明: ブレース同行末のコメントのみ採用
 }
@@ -1078,13 +1079,43 @@ function _pickBeforeBraceHead(src, firstToken) {
  * @returns {void} 判定のみを行い、必要時に report する
  */
 function _extVerifyTagOrReport(src, tagRe, context, targetNode, usedComment, kw) {
-  // 判断軸: タグ基準の検査が無効、または検査対象の説明が無い場合は何もしない
-  if (!tagRe || !usedComment) return;
+  // タグ基準の検査が無効、または検査対象の説明が無い場合は何もしない
+  if (!usedComment) return;
   const text = typeof usedComment.value === 'string' ? usedComment.value : ''; // 文字列でなければ空文字へフォールバックし、検査を安定化
-  // 判断軸: コメント本文がタグ基準に一致しない場合は基準違反を報告する
-  if (!matchesPattern(text, tagRe)) {
+  // 追加検査: メタ表現（then:/else:/このifは/ルールに合わせて 等）の禁止
+  const metaEnabled = !!(Array.isArray(context.options) && context.options[0] && context.options[0].enforceMeta);
+  // メタ表現の検出は、将来的にオプションを有効化したときのみ実施する（現状は既定で無効）
+  // if (metaEnabled && _isMetaLikeIntentComment(text)) {
+  //   context.report({ node: targetNode, loc: usedComment.loc, messageId: 'meta_like_comment' });
+  //   return;
+  // }
+  // タグ基準が設定されている場合のみ検査
+  // ロケール基準（例: 非 ASCII 必須）に適合しない場合は違反を報告する
+  if (tagRe && !matchesPattern(text, tagRe)) {
     context.report({ node: targetNode, messageId: 'tagMismatch', data: { kw, pat: String(tagRe) } });
   }
+}
+
+/**
+ * メタ表現に近いコメントかを判定する。
+ * - 目的: 「ルールに合わせた体裁」や接頭語だけのラベルを排除し、自然文の意図説明を促す
+ * - 方針: 先頭のラベル/定型句や中身の無い終止のみを簡易検出（日本語の厳密判定は行わない）
+ * @param {string} raw コメント原文
+ * @returns {boolean} メタ表現と判断した場合は true
+ */
+function _isMetaLikeIntentComment(raw) {
+  const s = String(raw || '').trim();
+  // 内容が空のときは実体が無く判断不能のためメタ扱いにする
+  if (s.length === 0) return true;
+  const headMeta = /^(then|else)\s*:/i.test(s) || /^この\s*(if|for|while|switch)\s*は/.test(s);
+  const ruleMeta = /(ルールに(合わせて|より|準拠)|コメントを置く)/.test(s);
+  const bareOutcome = /^(成功時|失敗時|処理します?)[。.\s]*$/u.test(s);
+  // 内容語の存在ヒューリスティック（目的/理由/結果を示しやすい語）
+  const intentHints = /(ため|ように|ので|結果|避ける|抑える|維持|改善|削減)/.test(s);
+  // 単語数が極端に少ない（2語以下）の短文
+  const fewTokens = s.replace(/[/*]/g, '').trim().split(/\s+/).filter(Boolean).length <= 2;
+  // 先頭ラベル/ルール言及/中身のない終止、かつ意図語が無い短文をメタとみなす
+  return (headMeta || ruleMeta || bareOutcome || fewTokens) && !intentHints;
 }
 
 /**
@@ -1142,7 +1173,7 @@ function _computeNeedConsequentComment(isDanglingUnderPolicy, isFull, isInnerEls
  */
 function _extHasKeepTag(src, c) {
   // 例外方針: コメント抽出の失敗を許容し安全側に倒す（保持タグ判定はベストエフォート）
-  try { // 目的: 文字列抽出時の例外を捕捉し false へフォールバックする
+  try { // 文字列抽出時の例外を捕捉し、false へフォールバックする
     const s = String(getCommentSourceText(src, c) || '').toLowerCase();
     return /\bnofix\b/.test(s) || /\blint-keep\b/.test(s) || /\bkeep\b/.test(s);
   } catch {
@@ -1164,10 +1195,10 @@ function _extHasKeepTag(src, c) {
  */
 function _extCheckBeforeIfKeyword(src, context, tagRe, allowBlankLineBeforeIf, node, needBeforeIf, fixMode) {
   const r = hasBeforeIfKeywordComment(src, node, allowBlankLineBeforeIf);
-  // 判断軸/前提: この if は「直前コメントが必要か」を条件に分岐する（要否の判断基準）
-  // 判断軸: 当該 if に直前説明が必要な場合のみ、存在検査とタグ基準の検証を行う
+  // この if は「直前コメントが必要か」を条件に分岐する（要否の判断基準）
+  // 当該 if に直前説明が必要な場合のみ、存在検査とタグ基準の検証を行う
   if (needBeforeIf) {
-    // 不成立時の扱い: 説明が見つからなければ不足を報告して処理を終了する
+    // 説明が見つからなければ不足を報告して処理を終了する
     if (!r.ok) {
       context.report({ node, messageId: 'need_before_if' });
       return;
@@ -1194,9 +1225,9 @@ function _extCheckBeforeIfKeyword(src, context, tagRe, allowBlankLineBeforeIf, n
  * @returns {void} 何も返さない（報告のみ）
  */
 function _extCheckThenSide(src, context, tagRe, fixMode, node, needConsequentComment) {
-  // 目的: then 側に説明コメントが不要・または対象が無い場合は即時終了する
+  // then 側に説明コメントが不要、または対象が無い場合は直ちに終了する
   if (!needConsequentComment || !node.consequent) return;
-  // 判断軸: ブロック構造ならヘッド検査、単一文なら同行末の説明を検査する
+  // ブロック構造ならヘッド検査、単一文なら同行末の説明を検査する
   if (isBlock(node.consequent)) {
     // then 側のブロック: 先頭コメントの検査・タグ検証・冗長整理を実行する
     const rc = hasBlockHeadComment(src, node.consequent);
@@ -1209,7 +1240,7 @@ function _extCheckThenSide(src, context, tagRe, fixMode, node, needConsequentCom
       _extVerifyTagOrReport(src, tagRe, context, node.consequent, rc.used, 'if');
     }
 
-    // フェーズ切替: コメントが複数ある場合のみ整理を有効化し、ノイズを抑える
+    // コメントが複数ある場合のみ整理を有効化し、ノイズを抑える
     if (fixMode && rc.comments.length > 1) {
       // 先頭以外の重複コメントは削除候補として報告する
       _extReportRemovable(context, src, node.consequent, rc.comments.slice(1), 'removable_block_head');
@@ -1220,7 +1251,7 @@ function _extCheckThenSide(src, context, tagRe, fixMode, node, needConsequentCom
 
   // then が単一文のときは同行末コメントを許容し、説明の重複は整理する
   const rc = hasTrailingComment(src, node.consequent);
-  // 分岐決定: 行内の説明が確認できないケースはアラート経路へ遷移する
+  // 行内の説明が確認できないケースはアラート経路へ遷移する
   if (!rc.ok) {
     // then ブロックの先頭: 単一文の同行末説明が無いため不足を通知する
     context.report({ node: node.consequent, messageId: 'need_then_trailing' });
@@ -1229,7 +1260,7 @@ function _extCheckThenSide(src, context, tagRe, fixMode, node, needConsequentCom
     _extVerifyTagOrReport(src, tagRe, context, node.consequent, rc.used, 'if');
   }
 
-  // フェーズ切替: 同行末の候補が複数ある場合のみ整理を有効化する
+  // 同行末の候補が複数ある場合のみ整理を有効化する
   if (fixMode && rc.comments.length > 1) {
     _extReportRemovable(context, src, node.consequent, rc.comments.slice(0, rc.comments.length - 1), 'removable_trailing');
   }
@@ -1245,9 +1276,9 @@ function _extCheckThenSide(src, context, tagRe, fixMode, node, needConsequentCom
  * @returns {void} 何も返さない（報告のみ）
  */
 function _extCheckElseSide(src, context, tagRe, fixMode, node) {
-  // 判断軸: else 側が存在しない場合はこの側の検査は不要
+  // else 側が存在しない場合はこの側の検査は不要
   if (!node.alternate) return;
-  // 判断軸: ブロック構造ならヘッド検査を行い、単一文なら同行末の説明を検査する
+  // ブロック構造ならヘッド検査を行い、単一文なら同行末の説明を検査する
   if (isBlock(node.alternate)) {
     // else 側のブロック: 先頭コメントの検査・タグ検証・冗長整理を実行する
     const ra = hasBlockHeadComment(src, node.alternate);
@@ -1260,7 +1291,7 @@ function _extCheckElseSide(src, context, tagRe, fixMode, node) {
       _extVerifyTagOrReport(src, tagRe, context, node.alternate, ra.used, 'if');
     }
 
-    // フェーズ切替: コメントが複数ある場合のみ整理を有効化し、ノイズを抑える
+    // コメントが複数ある場合のみ整理を有効化し、ノイズを抑える
     if (fixMode && ra.comments.length > 1) {
       // 先頭以外の重複コメントは削除候補として報告する
       _extReportRemovable(context, src, node.alternate, ra.comments.slice(1), 'removable_block_head');
@@ -1271,7 +1302,7 @@ function _extCheckElseSide(src, context, tagRe, fixMode, node) {
 
   // else が単一文のときは同行末コメントを許容し、説明の重複は整理する
   const ra = hasTrailingComment(src, node.alternate);
-  // 分岐決定: 行内の説明が確認できないケースはアラート経路へ遷移する
+  // 行内の説明が確認できないケースはアラート経路へ遷移する
   if (!ra.ok) {
     // else ブロックの先頭: 単一文の同行末説明が無いため不足を通知する
     context.report({ node: node.alternate, messageId: 'need_else_trailing' });
@@ -1280,7 +1311,7 @@ function _extCheckElseSide(src, context, tagRe, fixMode, node) {
     _extVerifyTagOrReport(src, tagRe, context, node.alternate, ra.used, 'if');
   }
 
-  // フェーズ切替: 同行末の候補が複数ある場合のみ整理を有効化する
+  // 同行末の候補が複数ある場合のみ整理を有効化する
   if (fixMode && ra.comments.length > 1) {
     _extReportRemovable(context, src, node.alternate, ra.comments.slice(0, ra.comments.length - 1), 'removable_trailing');
   }
@@ -1299,7 +1330,7 @@ function _extCheckElseSide(src, context, tagRe, fixMode, node) {
  * @returns {void} 何も返さない（報告のみ）
  */
 function _extCheckIf(src, context, tagRe, treatHeadAsNonDangling, allowBlankLineBeforeIf, fixMode, similarityThreshold, node) {
-  // 目的: 対象が if でない場合は検査を行わない（誤検査を防止）
+  // 対象が if でない場合は検査を行わず、誤検査を防止する
   // if でない場合は以降の検査を行わない
   if (!isIf(node)) return;
   const isInnerElseIf = _extIsElseIfAlternate(node);
@@ -1310,26 +1341,26 @@ function _extCheckIf(src, context, tagRe, treatHeadAsNonDangling, allowBlankLine
   const isNonDanglingUnderPolicy = !isDanglingUnderPolicy;
   const needBeforeIf = _computeNeedBeforeIf(isNonDanglingUnderPolicy, isInnerElseIf);
 
-  // 目的: if キーワード直前コメントの有無を検査し、必要なら不足を報告する
+  // if キーワード直前のコメントの有無を検査し、必要に応じて不足を報告する
   _extCheckBeforeIfKeyword(src, context, tagRe, allowBlankLineBeforeIf, node, needBeforeIf, fixMode);
   const needConsequentComment = _computeNeedConsequentComment(isDanglingUnderPolicy, isFull, isInnerElseIf);
-  // 目的: then 側に説明コメントが必要な場合のみ検査を実施
+  // then 側に説明コメントが必要な場合にのみ検査を実施する
   // then 側は役割説明の具体化が重要なため、必要時のみ検査を実施する
   if (needConsequentComment) _extCheckThenSide(src, context, tagRe, fixMode, node, true);
-  // 目的: else-if 連鎖は再帰的にたどり、連鎖内の要件を検査する
-  // 連鎖が続く場合は alternate の if へ委譲する
+  // else-if 連鎖は再帰的にたどり、連鎖内の要件を検査する
+  // 連鎖継続時はこの節での判定を打ち切り、次段の if へ処理を引き継ぐ
   if (isStructurallyDangling) {
-    // 再帰継続: 連鎖の途中では次の if へ委譲して評価する
+    // 連鎖の途中では次の if へ委譲して評価する
     _extCheckIf(src, context, tagRe, treatHeadAsNonDangling, allowBlankLineBeforeIf, fixMode, similarityThreshold, node.alternate);
     return;
   }
 
-  // 目的: else 側（存在時）の説明コメント有無を検査する
+  // else 側（存在時）の説明コメントの有無を検査する
   // else が存在する場合は else 側の検査を実施する
   if (isFull) _extCheckElseSide(src, context, tagRe, fixMode, node);
   // 類似度チェック（if 直前コメントが取得できた場合のみ）
   const rIf = hasBeforeIfKeywordComment(src, node, allowBlankLineBeforeIf);
-  // 目的: if 直前コメントが取得できた場合のみ then/else 類似度を評価する
+  // if 直前コメントが取得できた場合にのみ then/else の類似度を評価する
   // 比較は十分な情報が取れた場合のみ実施する
   if (rIf && rIf.used && typeof rIf.used.value === 'string') {
     _extCheckIfSimilarity(src, context, node, rIf.used.value, similarityThreshold);
@@ -1354,7 +1385,7 @@ function _buildReportContext(context) {
   const origReport = context.report.bind(context);
   const _pickLoc = (args) => args.loc || (args.node && args.node.loc) || null;
   const _stringifyLoc = (loc) => {
-    // 判断軸: 位置情報が無い場合はダミー座標で表現して以降の計算を安定化する
+    // 位置情報が無い場合はダミー座標で表現して以降の計算を安定化する
     if (!loc) return '-1:-1--1:-1';
     const s = loc.start || {};
     const e = loc.end || {};
@@ -1407,7 +1438,7 @@ function _createCheck(src, ctx, opts) {
   const { allowBlank, ignoreElseIf, tagRe, treatHeadAsNonDangling, allowBlankLineBeforeIf, fixMode } = opts;
   // 入口関数は分岐の振り分けに特化し、詳細は外部関数へ委譲する（複雑度は構造分割で担保）
   return (node, kw) => {
-    // 分岐委譲: 制御構造の種類に応じて専用の検査へディスパッチする
+    // 制御構造の種類に応じて専用の検査へディスパッチする
     return void _dispatchCheck(src, ctx, opts, node, kw);
   };
 }
@@ -1422,43 +1453,43 @@ function _createCheck(src, ctx, opts) {
  * @returns {void}
  */
 function _dispatchCheck(src, ctx, opts, node, kw) {
-  // 目的: ルール別の検査を一元的に振り分ける（複雑度低減のためマップ方式を採用）
+  // ルール別の検査を一元的に振り分け、複雑度を下げるためにマップ方式を採用する
   const HANDLERS = {
     if: () => _extCheckIf(src, ctx, opts.tagRe, opts.treatHeadAsNonDangling, opts.allowBlankLineBeforeIf, opts.fixMode, opts.similarityThreshold, node),
     ternary: () => _extCheckTernary(src, ctx, opts.tagRe, node, opts.fixMode),
     switch: () => _extCheckSwitch(src, ctx, opts.tagRe, node),
     try: () => {
-      // 判断軸: try 直前に説明が無い場合は不足を報告して検査を打ち切る
+      // try 直前に説明が無い場合は不足を報告して検査を打ち切る
       const { ok, last } = hasRequiredPreviousComment(src, node, opts.allowBlank);
-      // 判断軸: 直前説明が存在しない場合は不足として報告し、この分岐の検査を終了する
+      // 直前説明が存在しない場合は不足として報告し、この分岐の検査を終了する
       if (!ok) {
         ctx.report({ node, messageId: 'missingComment', data: { kw } });
         return;
       }
 
+      // try 直前コメントにメタ表現が無いか検査
+      _extVerifyTagOrReport(src, opts.tagRe, ctx, node, last, 'try');
       _extCheckTry(src, ctx, opts.tagRe, opts.fixMode, node, opts.ignoreCatch);
-      // 成立時: 類似度検査は catch/finally を対象に必要時のみ実施する
-      // 判断軸: catch/finally を評価対象とする場合のみ try 類似度を検査する
+      // 類似度検査は catch/finally を対象に必要時のみ実施する
+      // catch/finally を評価対象とする場合のみ try 類似度を検査する
       if (!opts.ignoreCatch && last) {
         const tryText = typeof last.value === 'string' ? last.value : ''; // 文字列以外は空文字として扱い、類似度検査を安定化
         _extCheckTrySimilarity(src, ctx, node, tryText, opts.similarityThreshold);
       }
     },
     default: () => {
-      // 判断軸: ぶら下がり連鎖の else-if を無視するポリシーなら、連鎖内は早期 return する
+      // ぶら下がり連鎖の else-if を無視するポリシーなら、連鎖内は早期 return する
       if (opts.ignoreElseIf && _extIsElseIfAlternate(node)) return;
-      // 判断軸: 直前説明が見当たらない制御構造は不足として扱う（空行不可）
+      // 直前説明が見当たらない制御構造は不足として扱う（空行不可）
       const { ok, last } = hasRequiredPreviousComment(src, node, opts.allowBlank);
-      // 判断軸: 直前説明が存在しない場合は不足として報告し、この分岐の検査を終了する
+      // 直前説明が存在しない場合は不足として報告し、この分岐の検査を終了する
       if (!ok) {
         ctx.report({ node, messageId: 'missingComment', data: { kw } });
         return;
       }
 
-      // 判断軸: タグ要件が設定され、本文が基準に合致しない場合は基準違反として報告
-      if (opts.tagRe && last && !matchesPattern(typeof last.value === 'string' ? last.value : '', opts.tagRe)) {
-        ctx.report({ node, messageId: 'tagMismatch', data: { kw, pat: String(opts.tagRe) } });
-      }
+      // メタ表現/タグ基準の検査を共通手続きで実施
+      _extVerifyTagOrReport(src, opts.tagRe, ctx, node, last, kw);
     }
   };
   const fn = (HANDLERS[kw] || HANDLERS.default);
@@ -1473,11 +1504,11 @@ function _dispatchCheck(src, ctx, opts, node, kw) {
 function _createImpl(context) {
   const opt = (Array.isArray(context.options) && context.options[0]) || {};
   const targets = new Set(opt.targets || ['if', 'for', 'while', 'do', 'switch', 'try', 'ternary']);
-  // 準備: requireTagPattern の有無に応じて正規表現を構築（未設定は null）
+  // requireTagPattern の有無に応じて正規表現を構築（未設定は null）
   const patternRe = (() => {
-    // 判断軸: パターン文字列が与えられた場合のみ正規表現を生成する（未設定は null）
+    // パターン文字列が与えられた場合のみ正規表現を生成する（未設定は null）
     const hasPattern = typeof opt.requireTagPattern === 'string' && opt.requireTagPattern.length > 0;
-    // 切替: 三項で構築の有無を分岐（テキスト→正規表現／null）
+    // 三項で構築の有無を分岐（テキスト→正規表現／null）
     return hasPattern ? new RegExp(opt.requireTagPattern) : null;
   })();
   const opts = {
@@ -1486,10 +1517,10 @@ function _createImpl(context) {
     ignoreCatch: opt.ignoreCatch !== false, // default true
     fixMode: Boolean(opt.fixMode),
     allowBlankLineBeforeIf: false, // 仕様: if 直前の空行は不可
-    // 判断軸: treatChainHeadAs が 'dangling' でない場合は非ぶら下がり扱い（簡潔化）
+    // treatChainHeadAs が 'dangling' でない場合は非ぶら下がり扱い（簡潔化）
     treatHeadAsNonDangling: opt.treatChainHeadAs !== 'dangling', // 既定: 連鎖先頭は非ぶら下がり扱い
     similarityThreshold: (() => {
-      // 判断軸: 数値入力が無い場合は既定閾値を用いて検査の一貫性を保つ
+      // 数値入力が無い場合は既定閾値を用いて検査の一貫性を保つ
       const v = typeof opt.similarityThreshold === 'number' ? opt.similarityThreshold : 0.75; // 未設定時は既定閾値を採用
       if (Number.isNaN(v)) return 0.75;
       return Math.min(1.0, Math.max(0.6, v));
@@ -1528,6 +1559,8 @@ export const ruleRequireCommentsOnControlStructures = {
           fixMode: { type: 'boolean' },
           treatChainHeadAs: { enum: ['non-dangling', 'dangling'] },
           similarityThreshold: { type: 'number', minimum: 0.6, maximum: 1.0 }
+          ,
+          enforceMeta: { type: 'boolean' }
         },
         additionalProperties: false
       }
@@ -1550,6 +1583,7 @@ export const ruleRequireCommentsOnControlStructures = {
       need_catch_block_head: 'catch ブロックの先頭に意図説明コメントが必要です（{ の行または次行）。構造名の繰り返しや『意図は〜』等の定型句は禁止。『このcatchの意図は〜』のような書き出しも禁止。処理の具体的目的・前提・例外・読者が見落としやすいポイントを原則的には1文で。',
       need_finally_block_head: 'finally ブロックの先頭に意図説明コメントが必要です（{ の行または次行）。構造名の繰り返しや『意図は〜』等の定型句は禁止。『このfinallyの意図は〜』のような書き出しも禁止。処理の具体的目的・前提・例外・読者が見落としやすいポイントを原則的には1文で。',
       // If-specific (removable)
+      meta_like_comment: 'メタ表現のコメントは不可です（例: "then:"/"else:"/「このifは…」/「ルールに合わせて…」）。処理の目的・理由・結果のいずれかを、日本語の自然文1文で具体的に記述してください。',
       removable_before_if: 'Redundant comment before "if" (removable by rule).',
       removable_block_head: 'Redundant comment at block head (then/else) (removable by rule).',
       removable_trailing: 'Redundant trailing comment after statement (removable by rule).',

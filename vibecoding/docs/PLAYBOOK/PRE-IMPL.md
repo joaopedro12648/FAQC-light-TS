@@ -4,9 +4,15 @@
 
 > 本チェックリストは [vibecoding/docs/PLAYBOOK/PRE-COMMON.md] の共通手順を内包して実施する。差分がある場合は PRE-COMMON を優先し、ここに反映すること。
 
+## 実装実施時重要遵守項目一覧
+
+- `npm run preflight` による早期検知  
+  - 実装中は適宜 `npm run preflight` を実行し、policy/typecheck/lint レベルの違反を早期に検知・修正する（watch/対話モードは使用しない）。
+
 ### 単一情報源（SoT）の整理
 - ゲート実行の SoT: `qualities/**`（実行は `npm run check`）
 - コード生成時の SoT: `vibecoding/var/contexts/qualities/**`
+ - 開発時の短縮実行: `npm run preflight`（policy/typecheck/lint のみ。build/test は除外）
 
 ### 品質原則
 - 実装自体も後続モデルにとって広義の「品質コンテキスト」になるため、後続モデルの高精度な挙動を保つために、高品質な実装を行うこと
@@ -168,15 +174,18 @@ rg -n '^\s*(//|/\*|\*)\s*[A-Za-z]{4,}' src
   - 本工程の完了は PRE-IMPL の承認条件。ヘッダ未設置/不整合はCIで失敗とする（判定は上記検証基準に従う）。
   - 自動検証は ESLint ルール `header/header-bullets-min`（ローカルプラグイン）で行う。既定で「箇条書き8〜10行」「@file/備考/@see≥2/@snd」を検査する。
 
-## 実行順（必須/推奨項目は推奨と明記）
+## 実行順（必須）
 1. PRE-COMMON 実施（last_updated・contexts 更新）
 2. 対象 SPEC に `quality_refresh_hash_before_impl` を記録
 3. ヘッダ生成の組み込み（MUST）: 以降に新規生成する `src/**/*.ts` は生成時点でヘッダJSDocを自動付与すること。テンプレート先行方式を採る場合は、先にヘッダコメントのみの `.ts` を作成し、その後に実装を追記してよい。いずれの場合も「Header Comment Quick Checklist」に準拠（箇条書き8〜10行・約400±20文字・末尾 `@see` 2件以上）。
-4. (推奨) 実装フェーズ進捗10%で一度 npm run check を通過 (ただし context-review.md 未作成での Fail は無視)
-5. 実装フェーズで `npm run check` を通過（静的解析はリポジトリ全体を対象とすること）
+4. 実装中は適宜 `npm run preflight` を実行して早期検知する（policy/typecheck/lint のみ。build/test は除外）
+   - IMPL 中は `check` を実行しない（最終確認まで遅延・禁止）
+5. 実装フェーズ完了時に `npm run check` を通過（静的解析はリポジトリ全体を対象とすること）
    - flow.1shot_impl=true の場合: 3〜4 の「自動実行」は no-op（任意の手動実行は可）。完了時の単発フルゲートで代替。
+   - IMPL の中間段階での `check` 実行は原則禁止。最終確認として1回だけ実行し、修正が入った場合でも最後にもう一度 `check` を実行して緑で確定する
 
 ### 実装中のゲート運用（必須）
+- 短縮ループは `npm run -s preflight` のみを反復する。IMPL 中の `npm run -s check` は禁止（最終確認まで遅延）。
 - ファイル単位の Lint ブロッカー（必須）
 　- 背景: 本リポでは eslint のルールが非常に厳しく、複数ファイル作成・編集後に Lint ルールを把握しても、
     その後の一括修正が非常に困難になる。eslint ルールを把握しながら実装・修正を進めるために
@@ -189,7 +198,8 @@ rg -n '^\s*(//|/\*|\*)\s*[A-Za-z]{4,}' src
   - 人手による任意実行は許容（推奨）。ただしウォッチャは禁止（非対話・非ウォッチ）
   - 実装完了時にフルゲートを1回だけ必須実行（全体スコープ）
 - 短縮ループ（開発中の素早い確認）:
-  - `npm run -s check`（変更ファイル限定モードは使用禁止）
+  - `npm run -s preflight`（変更ファイル限定モードは使用禁止。build/test は除外）
+  - 実装前の事前確認（仕様確定直後の軽い自己点検）が必要な場合も `preflight` を用いる（最終判定は `check` で実施）
 - 最終確認（修正が1つでも入ったら必須）:
 - 単一コマンドのフル実行で「一発緑」を確認する: `npm run -s check`（静的解析は全体対象）
   - これが成功するまで「完了」扱いにしない（途中でどれかが赤→修正した場合も、最後にもう一度 `npm run -s check` を実行）
@@ -347,6 +357,7 @@ POST-IMPL BATCH に統合して実施:
 - Else if Rust: `cargo clippy -- -D warnings && cargo test`。
 - Else if Gradle: `./gradlew -q check`。
 - Fallback: `echo 'No standard quality gate found; skipping.'`（必要時のみ）。
+ - IMPL 中は開発ループで `preflight` のみを使用し、`check` の実行は完了時の最終1回に限る（自動・手動とも）
 
 3) 失敗時の報告（必須）
 - ファイル:行 とファイルごとの最初のエラーを要約。

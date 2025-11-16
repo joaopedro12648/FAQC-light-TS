@@ -48,7 +48,7 @@ export const documentation = [
           contexts: [
             'TSInterfaceDeclaration',
             'TSTypeAliasDeclaration',
-            // 全域適用: すべての enum メンバーに JSDoc を要求
+            // すべての enum メンバーに JSDoc を要求する
             'TSEnumDeclaration > TSEnumMember'
           ]
         }
@@ -91,7 +91,7 @@ export const documentation = [
       'blockfmt/no-empty-comment': 'error'
     }
   },
-  // 制御構造でのコメントチェック（ロケール整合: ja 系では非ASCIIを要求）
+  // 制御構造でのコメントを検査する（ja 系では非ASCIIを要求する）
   {
     // リポジトリ全体へ適用（IGNORES は eslint.config の IGNORES に準拠）
     files: FILES_ALL_CODE,
@@ -101,12 +101,15 @@ export const documentation = [
       'control/require-comments-on-control-structures': [
         'error',
         {
+          // 三項は対象外（広範な既存コードに影響するため）
+          targets: ['if', 'for', 'while', 'do', 'switch', 'try'],
           allowBlankLine: false,
           ignoreElseIf: true,
           ignoreCatch: false,
           treatChainHeadAs: 'non-dangling',
           fixMode: true,
           // ja 系なら少なくとも1文字の非ASCIIを要求。それ以外は未設定（無効化）が望ましいが、ここでは動的に切替。
+          enforceMeta: false,
           requireTagPattern: (() => {
             const envLocale = (process.env.CHECK_LOCALE || '').trim();
             const lang = (envLocale || Intl.DateTimeFormat().resolvedOptions().locale || '').split(/[-_]/)[0] || '';

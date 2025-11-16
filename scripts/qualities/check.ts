@@ -59,8 +59,13 @@ const scopeArg = argv.find((a) => a.startsWith('--scope='));
 const scope = scopeArg?.split('=')[1] ?? 'all';
 
 /** 対象ステップの選択 */
-// 実ゲート用: runMode が 'gate' または 'both' のみ対象
-const gateSteps = stepDefs.filter((d) => d.runMode === 'gate' || d.runMode === 'both');
+// 実ゲート用: runMode が 'gate' または 'both'、かつ runScope が 'ci' | 'both'（未指定は 'ci' 扱い）
+const gateSteps = stepDefs.filter((d) => {
+  const modeOk = d.runMode === 'gate' || d.runMode === 'both';
+  const scope = d.runScope ?? 'ci';
+  const scopeOk = scope === 'ci' || scope === 'both';
+  return modeOk && scopeOk;
+});
 /** 実行対象ステップ（--fast の場合は一部を抽出） */
 const selectedSteps =
   // 高速時はポリシー/型検査/lint のみに限定し、通常時は全ステップを実行する

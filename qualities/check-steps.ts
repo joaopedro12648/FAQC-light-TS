@@ -32,6 +32,15 @@ export type StepTuple = readonly [command: string, args: readonly string[]];
 export type RunMode = 'both' | 'gate' | 'diagnostics';
 
 /**
+ * 実行スコープ。
+ * - 'ci': CI/本番ゲート用の既定スコープ
+ * - 'preflight': 実装中の軽量チェック用
+ * - 'both': ci と preflight の双方に該当
+ * - 'diagnostics': PRE-COMMON 診断専用（preflight/check 双方の対象外）
+ */
+export type RunScope = 'ci' | 'preflight' | 'both' | 'diagnostics';
+
+/**
  * ゲート実行ステップの定義。
  * commands/args は実行コマンド、configRelDir は `qualities/` 配下のユニット相対ディレクトリ。
  * relatedUnitDirs は診断抑止などで複数ユニットに紐づける際に使用する（指定時は優先）。
@@ -43,6 +52,7 @@ export type StepDef = Readonly<{
   configRelDir: string; // 設定ディレクトリ（空文字は設定不要）
   relatedUnitDirs?: ReadonlyArray<string>; // 診断抑止などで参照する追加ユニット群
   runMode: RunMode; // 実ゲート/診断の実行モード
+  runScope?: RunScope; // 実行スコープ（省略時は 'ci' と解釈）
 }>;
 
 /**
@@ -55,15 +65,15 @@ export type StepDef = Readonly<{
  */
 export const stepDefs: ReadonlyArray<StepDef> = [
   // Policies (explicitly listed; no aggregator)
-  { id: 'policy:anti_mvp', command: 'node', args: ['qualities/policy/anti_mvp/run.mjs'], configRelDir: 'policy/anti_mvp', runMode: 'both' },
-  { id: 'policy:no_eslint_disable', command: 'node', args: ['qualities/policy/no_eslint_disable/run.mjs'], configRelDir: 'policy/no_eslint_disable', runMode: 'both' },
-  { id: 'policy:jsdoc_no_duplicate', command: 'node', args: ['qualities/policy/jsdoc_no_duplicate/run.mjs'], configRelDir: 'policy/jsdoc_no_duplicate', runMode: 'both' },
-  { id: 'policy:no_unknown_double_cast', command: 'node', args: ['qualities/policy/no_unknown_double_cast/run.mjs'], configRelDir: 'policy/no_unknown_double_cast', runMode: 'both' },
-  { id: 'policy:no_relaxation', command: 'node', args: ['qualities/policy/no_relaxation/run.mjs'], configRelDir: 'policy/no_relaxation', runMode: 'both' },
-  { id: 'policy:comment_locale', command: 'node', args: ['qualities/policy/comment_locale/run.mjs'], configRelDir: 'policy/comment_locale', runMode: 'both' },
-  { id: 'typecheck',     command: 'npm',  args: ['run', 'typecheck', '--silent'],        configRelDir: 'tsconfig', runMode: 'both' },
+  { id: 'policy:anti_mvp', command: 'node', args: ['qualities/policy/anti_mvp/run.mjs'], configRelDir: 'policy/anti_mvp', runMode: 'both', runScope: 'both' },
+  { id: 'policy:no_eslint_disable', command: 'node', args: ['qualities/policy/no_eslint_disable/run.mjs'], configRelDir: 'policy/no_eslint_disable', runMode: 'both', runScope: 'both' },
+  { id: 'policy:jsdoc_no_duplicate', command: 'node', args: ['qualities/policy/jsdoc_no_duplicate/run.mjs'], configRelDir: 'policy/jsdoc_no_duplicate', runMode: 'both', runScope: 'both' },
+  { id: 'policy:no_unknown_double_cast', command: 'node', args: ['qualities/policy/no_unknown_double_cast/run.mjs'], configRelDir: 'policy/no_unknown_double_cast', runMode: 'both', runScope: 'both' },
+  { id: 'policy:no_relaxation', command: 'node', args: ['qualities/policy/no_relaxation/run.mjs'], configRelDir: 'policy/no_relaxation', runMode: 'both', runScope: 'both' },
+  { id: 'policy:comment_locale', command: 'node', args: ['qualities/policy/comment_locale/run.mjs'], configRelDir: 'policy/comment_locale', runMode: 'both', runScope: 'both' },
+  { id: 'typecheck',     command: 'npm',  args: ['run', 'typecheck', '--silent'],        configRelDir: 'tsconfig', runMode: 'both', runScope: 'both' },
   // 実ゲート用の lint（1回）
-  { id: 'lint',          command: 'npm',  args: ['run', 'lint', '--silent'],             configRelDir: 'eslint', runMode: 'gate' },
+  { id: 'lint',          command: 'npm',  args: ['run', 'lint', '--silent'],             configRelDir: 'eslint', runMode: 'gate', runScope: 'both' },
   // 診断専用の lint（1回だが、5ユニットへの対応関係を持つ）
   { id: 'lint:diagnostics', command: 'npm', args: ['run', 'lint', '--silent'], configRelDir: 'eslint', relatedUnitDirs: [
     'eslint/01-module-boundaries',
@@ -71,7 +81,7 @@ export const stepDefs: ReadonlyArray<StepDef> = [
     'eslint/03-documentation',
     'eslint/04-complexity-and-magic',
     'eslint/05-environment-exceptions'
-  ], runMode: 'diagnostics' },
+  ], runMode: 'diagnostics', runScope: 'diagnostics' },
   { id: 'build',         command: 'npm',  args: ['run', 'build', '--silent'],            configRelDir: '', runMode: 'both' },
   { id: 'test',          command: 'npm',  args: ['test', '--silent'],                    configRelDir: '', runMode: 'both' },
 ] as const;

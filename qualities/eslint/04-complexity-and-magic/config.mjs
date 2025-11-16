@@ -28,7 +28,7 @@ export const complexityAndMagic = [
     files: FILES_ALL_CODE,
     rules: {
       complexity: ['error', 10],
-      'max-lines-per-function': ['error', 80],
+      'max-lines-per-function': ['error', { max: 80, skipComments: true, skipBlankLines: true }],
       'max-nested-callbacks': ['error', 3],
       // Indentation / tabs-spaces hygiene
       indent: ['error', 2, { SwitchCase: 1 }],

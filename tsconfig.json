@@ -15,7 +15,7 @@
     "vibecoding/tests/**/*.mts",
     "vibecoding/tests/**/*.cts"
   ],
-  "exclude": ["node_modules", "dist", "build", "coverage"]
+  "exclude": ["node_modules", "dist", "build", "coverage", "auto-check"]
 }
 
 

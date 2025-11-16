@@ -145,6 +145,8 @@ function scanLineComments(content) {
     // 行コメントの先頭から始まる eslint ディレクティブのみ対象（説明文中の言及は対象外）
     // この行は ESLint 指令の検出条件であり、false の場合は次行へ進む
     if (/^eslint-(?:disable|disable-next-line|disable-line|enable)\b/.test(after)) {
+      // 該当する ESLint ディレクティブが見つかった行を、例外なく違反候補として収集する。
+      // この節に新たな条件を付与することは禁止する
       hits.push({ line: i + 1, text: raw.trim() });
     }
   }

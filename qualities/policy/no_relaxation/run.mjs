@@ -112,6 +112,7 @@ function scanFile(fp) {
       // 各行を検査して一致箇所を収集する
       lines.forEach((line, i) => {
         // 該当ディレクティブの一致行を検出し、行番号付きのヒットとして記録する
+        // この節に新たな条件を付与することは禁止する
         if (rx.test(line)) hits.push({ line: i + 1, text: line.trim() });
       });
     }

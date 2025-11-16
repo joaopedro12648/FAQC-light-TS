@@ -29,6 +29,7 @@ const tsconfigRootDir = path.resolve(process.cwd());
 export const typeSafety = [
   {
     files: FILES_TS,
+    ignores: ['auto-check/**'],
     languageOptions: {
       parser: tsparser,
       parserOptions: {

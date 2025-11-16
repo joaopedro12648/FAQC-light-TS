@@ -494,7 +494,29 @@ auto_chain:
 
 commands:
   non_interactive_only: true          # --silent/--ci; no watchers
+  powershell_wrapper:
+    path: "scripts/powershell/Invoke-CheckedCommand.ps1"
+    policy: |
+      エージェントが PowerShell 経由で任意コマンドを実行する場合は、必ずこのラッパスクリプトを経由して実行すること。
+      直接の PowerShell コマンド実行（ラッパ非経由）は禁止とする。
+      本ポリシーは tool_calling 設定から参照されることを前提とした単一情報源であり、PowerShell での任意コマンド実行はすべて本ラッパ経由とする。
+      実行例（いずれも必ずラッパ経由とする）:
+        - Invoke-CheckedCommand.ps1 cmd /c npm --version
+        - Invoke-CheckedCommand.ps1 cmd /c npm run --silent check
+        - Invoke-CheckedCommand.ps1 cmd /c "npm run --silent your:script -- --flag value"
+      AI Agent は原則として上記パターンに従い、foreach など複雑な PowerShell 構文を直接渡すのではなく、一時スクリプトファイルを作成して本ラッパ経由で実行すること。
+      一時スクリプトは同一セッション内での再利用予定がない場合、実行完了後に削除してクリーンアップすること。
 
+
+# --- SnD residual tasks append policy ---
+snd_residual_tasks_append:
+  when: "User requests 'append remaining tasks to SnD'"
+  action: "Append a self-contained residual-tasks block enabling execution without chat context."
+  required_contents: "背景/目的, 非目標, 前提・依存（参照パス/環境値）, 入出力（対象/生成物）, 具体タスク（実施可能粒度）, 受入条件, 既知リスク/除外, 非対話コマンド例（--ci/-q）, 関連SnDパス"
+  guards: "SnD.status==Ready（未Readyなら不足項目の列挙のみ返し追記は保留）; quality_refresh_hash_*は非開示; output_policyに従いツール実行時のみマイクロ更新"
+  approval_guidance:
+    phrase_examples: ["PHASE=IMPL 承認: SnD=<path>", "PHASE=IMPL APPROVE: SnD=<path>"]
+    notes: ["承認は別チャットでも可。", "上記フレーズをコピー&ペーストで送信。"]
 
 # --- Output Policy Binding ---
 output_policy_overrides:
