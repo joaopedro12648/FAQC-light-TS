@@ -18,7 +18,7 @@ import js from '@eslint/js';
 import importPlugin from 'eslint-plugin-import';
 import jsdoc from 'eslint-plugin-jsdoc';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
-import { FILES_JS, FILES_TS } from '../_shared/globs.mjs';
+import { FILES_JS, FILES_TS } from '../../_shared/core/globs.mjs';
 
 /**
  * モジュール境界／依存関係に関するフラット設定断片を提供する。

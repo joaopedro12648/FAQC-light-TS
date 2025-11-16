@@ -26,8 +26,8 @@ SPEC-and-DESIGN ファイル作成にあたっては、次の SoT を明確に�
 
 2. コンテキストの添付（LLM/ADR向け）
    - 設計/ADR生成時の入力に、次の【最新】コンテキストを必ず添付する:
-     - `vibecoding/var/contexts/qualities/policy/**/*.md`（該当ユニットの人間可読文書）
-     - `vibecoding/var/contexts/qualities/policy/**/*.yaml`（機械可読設定）
+     - `vibecoding/var/contexts/qualities/{core,types,docs,tsconfig}/context.md`（正規ユニットの人間可読コンテキスト）
+     - `vibecoding/var/contexts/qualities/**/*.yaml`（対応する機械可読設定）
      - `qualities/policy/baseline.yaml` など（ポリシーは `npm run check` から個別実行される）
 
 3. SnD 内の明記ポイント

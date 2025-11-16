@@ -258,25 +258,166 @@ function collectTargetDirs(): string[] {
   });
 }
 
+/** PRE-COMMON で扱う正規ユニット ID を表す型 */
+type UnitId = 'core' | 'types' | 'docs' | 'tsconfig';
+
+/** 各ユニットに紐づく qualities/** 側のソースディレクトリ群 */
+interface UnitSources {
+  unit: UnitId;
+  srcDirs: string[];
+}
+
+/**
+ * qualities/** のフォルダ構成からユニットごとのソースディレクトリを自動抽出する。
+ * - eslint/policy/tsconfig の bucket 構造を走査し、末端の core/types/docs/tsconfig エリアを検出する。
+ * - 新しい bucket や policy が追加されても、core/types/docs/tsconfig エリアが追加されれば自動的に対象へ含まれる。
+ * @returns ユニットごとのソースディレクトリ定義
+ */
+function collectUnitSources(): UnitSources[] {
+  const unitToDirs = new Map<UnitId, Set<string>>();
+  const targets = collectTargetDirs();
+
+  /**
+   * 指定ユニットに対応する入力ディレクトリを登録するヘルパー。
+   * qualities/** 側に実在するディレクトリのみをユニット単位の集合へ追加する。
+   *
+   * @param unit 集約先となるコンテキストユニット ID（core/types/docs/tsconfig）
+   * @param dir  ユニットにひも付ける qualities/** 側のディレクトリパス
+   */
+  const addUnitDir = (unit: UnitId, dir: string): void => {
+    // PRE-COMMON の対象は qualities/** の実在ディレクトリに限定し、壊れた参照はここで除外する
+    if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return;
+    const existing = unitToDirs.get(unit) ?? new Set<string>();
+    existing.add(dir);
+    unitToDirs.set(unit, existing);
+  };
+
+  /**
+   * eslint ドメインの bucket 構造から core/types/docs エリアを抽出し、ユニットへひも付ける。
+   * plugins 配下の docs/types も docs/types ユニットの入力として扱う。
+   */
+  const collectFromEslint = (): void => {
+    // eslint ドメインに属するターゲットだけを抽出し、bucket/plugins ごとに core/types/docs エリアをユニット入力へ集約する
+    const eslintTargets = targets.filter((srcDir) => {
+      const rel = path.relative(QUALITIES_DIR, srcDir);
+      const parts = rel.split(path.sep).filter(Boolean);
+      const domain = parts[0];
+      return domain === 'eslint';
+    });
+
+    // 抽出された eslint 関連ディレクトリを順に巡回し、bucket 単位または plugins 単位でユニット入力へひも付ける
+    for (const srcDir of eslintTargets) {
+      const rel = path.relative(QUALITIES_DIR, srcDir);
+      const parts = rel.split(path.sep).filter(Boolean);
+      const bucketOrSpecial = parts[1];
+      const eslintDir = path.join(QUALITIES_DIR, 'eslint');
+      // bucket 単位で core/types/docs エリアを検出し、各ユニットの入力ディレクトリとして登録する
+      if (bucketOrSpecial && bucketOrSpecial !== 'plugins') {
+        const bucketDir = path.join(eslintDir, bucketOrSpecial);
+        addUnitDir('core', path.join(bucketDir, 'core'));
+        addUnitDir('types', path.join(bucketDir, 'types'));
+        addUnitDir('docs', path.join(bucketDir, 'docs'));
+      } else if (bucketOrSpecial === 'plugins') {
+        const pluginsDir = path.join(eslintDir, 'plugins');
+        addUnitDir('docs', path.join(pluginsDir, 'docs'));
+        addUnitDir('types', path.join(pluginsDir, 'types'));
+      }
+    }
+  };
+
+  /**
+   * policy ドメインの各ポリシーディレクトリから core/types/docs エリアを抽出し、ユニットへひも付ける。
+   */
+  const collectFromPolicy = (): void => {
+    // policy ドメインに属するターゲットだけを走査し、各ポリシーごとの core/types/docs エリアを core/types/docs ユニットへ束ねる
+    // 各 policy ディレクトリを順に確認し、core/types/docs の下位構造をユニット入力として拾い上げるためのループ
+    for (const srcDir of targets) {
+      const rel = path.relative(QUALITIES_DIR, srcDir);
+      const parts = rel.split(path.sep).filter(Boolean);
+      const domain = parts[0];
+      // policy ドメイン以外はこのフェーズの対象外とし、ループだけを維持して次の候補へ進める
+      if (domain !== 'policy') continue;
+
+      const policyDir = srcDir;
+      addUnitDir('core', path.join(policyDir, 'core'));
+      addUnitDir('types', path.join(policyDir, 'types'));
+      addUnitDir('docs', path.join(policyDir, 'docs'));
+    }
+  };
+
+  /**
+   * tsconfig ドメインから tsconfig 全体と types サブディレクトリを抽出し、tsconfig/types ユニットへひも付ける。
+   */
+  const collectFromTsconfig = (): void => {
+    // tsconfig ドメインに属するターゲットだけを走査し、tsconfig 全体と types サブディレクトリを tsconfig/types ユニットへひも付ける
+    // tsconfig 関連の設定ディレクトリをすべて巡回し、型設定の変更がユニット単位で検出できるようにするためのループ
+    for (const srcDir of targets) {
+      const rel = path.relative(QUALITIES_DIR, srcDir);
+      const parts = rel.split(path.sep).filter(Boolean);
+      const domain = parts[0];
+      // tsconfig ドメイン以外は型設定ユニットとは無関係なので、この条件で早期にスキップして探索コストを抑える
+      if (domain !== 'tsconfig') continue;
+
+      const tsconfigBase = path.join(QUALITIES_DIR, 'tsconfig');
+      addUnitDir('tsconfig', tsconfigBase);
+      addUnitDir('types', path.join(tsconfigBase, 'tsconfig', 'types'));
+    }
+  };
+
+  /**
+   * 将来のドメイン追加時に、末端の core/types/docs エリアを自動的にユニット入力へひも付ける拡張検出処理。
+   */
+  const collectFallback = (): void => {
+    // 既知ドメイン以外についても、末端ディレクトリ名が core/types/docs であれば対応ユニットへ自動登録し PRE-COMMON の拡張に追従できるようにする
+    // すべての candidates を確認し、既知ドメインに属さない core/types/docs エリアも漏らさず検出するためのループ
+    for (const srcDir of targets) {
+      const last = path.basename(srcDir);
+      // 末端名が core/types/docs のものだけを補完対象とし、それぞれを対応ユニットへ自動登録する
+      if (last === 'core' || last === 'types' || last === 'docs') {
+        addUnitDir(last as UnitId, srcDir);
+      }
+    }
+  };
+
+  collectFromEslint();
+  collectFromPolicy();
+  collectFromTsconfig();
+  collectFallback();
+
+  const units: UnitSources[] = [];
+  // unitToDirs に保持したユニットごとの入力ディレクトリ集合を配列へ展開し、後続処理で扱いやすい構造へ変換するための反復処理
+  for (const [unit, dirs] of unitToDirs.entries()) {
+    units.push({ unit, srcDirs: Array.from(dirs) });
+  }
+
+  return units;
+}
+
 /**
  * context 再生成が必要な qualities ディレクトリを算出する。
- * @param targetDirs qualities/** 配下の絶対ディレクトリ群
+ * @param unitSources ユニットごとの qualities/** ソースディレクトリ群
  * @returns 更新が必要な src->dest の対応表
  */
-function computeNeededMappings(targetDirs: string[]): Array<{ srcDir: string; destDir: string }> {
+function computeNeededMappings(unitSources: UnitSources[]): Array<{ srcDir: string; destDir: string }> {
   const mappings: Array<{ srcDir: string; destDir: string }> = [];
-  // 出力側の鮮度と比較して再生成の要否を判断する
-  for (const srcDir of targetDirs) {
-    const rel = path.relative(QUALITIES_DIR, srcDir);
-    const destDir = path.join(OUTPUT_BASE, rel);
+  // 各ユニットごとに関連する qualities/** 側のファイル群を集約し、対応する var/contexts/qualities/<unit>/ を 1 ユニットとして評価する
+  // ユニット定義ごとに対応する qualities/** 入力エリアを走査し、鏡像の更新要否を評価する
+  // 各ユニット定義に対し同じ処理を適用し、ユニットごとの鏡像更新判定を一括で行うための反復処理
+  unitSources.forEach(({ unit, srcDirs }) => {
+    const allFiles: string[] = [];
+    // ユニットごとの入力エリア全体で gate 設定やポリシー実装の更新時刻を集約し、鏡像の鮮度判定に使うために走査する
+    for (const srcDir of srcDirs) {
+      // qualities/** 側の各ディレクトリに対して設定変更がないかを再帰的に確認し、ユニット単位の更新判定に反映する
+      allFiles.push(...listFilesRecursive(srcDir));
+    }
 
-    const allFiles = listFilesRecursive(srcDir);
     const compareFiles = allFiles.filter((f) => {
       const b = path.basename(f).toLowerCase();
       return !(b === 'context.yaml' || b === 'context.md');
     });
     const maxMtime = getMaxMtimeMs(compareFiles);
 
+    const destDir = path.join(OUTPUT_BASE, unit);
     const destYaml = path.join(destDir, 'context.yaml');
     const destMd = path.join(destDir, 'context.md');
     const requiresUpdate = (targetPath: string): boolean => {
@@ -293,11 +434,13 @@ function computeNeededMappings(targetDirs: string[]): Array<{ srcDir: string; de
 
     // YAML または MD のいずれかが不足/古い場合のみ更新対象として対応表へ追加する
     if (requiresUpdate(destYaml) || requiresUpdate(destMd)) {
-      const srcOut = normalizePathForOutput(path.relative(PROJECT_ROOT, srcDir));
+      const srcOutBases = srcDirs.map((d) => normalizePathForOutput(path.relative(PROJECT_ROOT, d)));
+      const srcLabel = srcOutBases.length > 0 ? `qualities/* (${unit}): ${srcOutBases.join(', ')}` : `qualities/* (${unit})`;
       const destOut = normalizePathForOutput(path.relative(PROJECT_ROOT, destDir));
-      mappings.push({ srcDir: srcOut, destDir: destOut });
+      // ユニット単位の src=>dest 対応を1件として列挙し、PRE-COMMON 実行時の GATE 出力に反映する
+      mappings.push({ srcDir: srcLabel, destDir: destOut });
     }
-  }
+  });
 
   return mappings;
 }
@@ -689,20 +832,19 @@ function buildDuplicateMessages(): string[] {
  * @returns boolean 全ユニットに context.md が存在する場合は true、それ以外は false
  */
 function allTargetContextMdExist(): boolean {
-  const targetDirs = collectTargetDirs();
+  const units = collectUnitSources();
+  const seenUnits = new Set<UnitId>();
   // 各ユニットごとに context.md の存在を確認して整合性を判断する
-  for (const srcDir of targetDirs) {
-    const rel = path.relative(QUALITIES_DIR, srcDir);
-    const destDir = path.join(OUTPUT_BASE, rel);
+  // 取得済みユニット一覧を順に確認し、var 配下に対応する context.md が存在するかを検査する
+  for (const { unit } of units) {
+    // 各ユニットは一度だけ確認し、重複チェックによる無駄なファイルアクセスやレポートの揺れを防ぐ
+    // すでに確認済みのユニットは二重判定を避けてスキップする
+    if (seenUnits.has(unit)) continue;
+    seenUnits.add(unit);
+    const destDir = path.join(OUTPUT_BASE, unit);
     const destMd = path.join(destDir, 'context.md');
-    // 各ユニットの context.md の存在を検査して整合性を評価する
-    try {
-      // context.md が存在しないユニットを検知したら不整合を返す
-      if (!fs.existsSync(destMd)) {
-        return false;
-      }
-    } catch {
-      // 存在確認に失敗した場合は非整合とみなし安全側に倒す
+    // 正規ユニット（core/types/docs/tsconfig）の context.md が欠けていれば不整合とみなす
+    if (!fs.existsSync(destMd)) {
       return false;
     }
   }
@@ -791,7 +933,7 @@ function emitReviewConflictMessages(pairs: Array<{ contextMd: string; reviewMd: 
 function main(): void {
   ensurePreconditions();
   const startAt = writeLastUpdated();
-  const mappings = computeNeededMappings(collectTargetDirs());
+  const mappings = computeNeededMappings(collectUnitSources());
   const rubricViolation = checkRubric();
   const dupMsgs = buildDuplicateMessages();
   const dupViolation = dupMsgs.length > 0;

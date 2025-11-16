@@ -15,7 +15,7 @@
  * @snd vibecoding/var/SPEC-and-DESIGN/SnD-creation.md
  */
 import tseslint from '@typescript-eslint/eslint-plugin';
-import { FILES_ALL_CODE, FILES_TS } from '../_shared/globs.mjs';
+import { FILES_ALL_CODE, FILES_TS } from '../../_shared/core/globs.mjs';
 
 /**
  * 複雑度・可読性・マジックナンバーに関する設定断片。

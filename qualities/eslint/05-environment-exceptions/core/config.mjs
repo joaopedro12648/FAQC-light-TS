@@ -1,5 +1,5 @@
 /**
- * @file ESLint 共有グロブ定義（DRY: files 配列の集約）
+ * @file ESLint セクション: 環境別の例外と運用
  * 備考: 特記事項なし
  * - 関数は短く単一責務で構成し入出力と前提を明確に記す
  * - 値は定数へ集約し意味を付与して可読性と変更容易性を高める
@@ -14,23 +14,18 @@
  * @see vibecoding/docs/PLAYBOOK/PRE-IMPL.md
  * @snd vibecoding/var/SPEC-and-DESIGN/SnD-creation.md
  */
+import { FILES_ALL_CODE } from '../../_shared/core/globs.mjs';
 
 /**
- * Lint の対象外パス（成果物・キャッシュ等）
+ * 環境別の例外方針（基本は禁止で必要時に明示許容）を定義する設定断片。
+ * - 既定では console 使用を禁止（各ファイルで必要に応じて局所許可）
+ * @returns Flat Config 配列
  */
-
-/**
- * JS 系ファイルのグロブ（ESM/CJS 含む）
- */
-export const FILES_JS = ['**/*.{js,cjs,mjs}'];
-
-/**
- * TS 系ファイルのグロブ（*.ts/*.tsx など）
- */
-export const FILES_TS = ['**/*.{ts,tsx,mts,cts}'];
-
-/**
- * JS/TS 全コードファイルのグロブ
- */
-export const FILES_ALL_CODE = ['**/*.{js,cjs,mjs,ts,tsx,mts,cts}'];
+export const environmentExceptions = [
+  // デフォルトでは console 禁止
+  {
+    files: FILES_ALL_CODE,
+    rules: { 'no-console': 'error' }
+  }
+];
 

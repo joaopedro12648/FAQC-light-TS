@@ -16,11 +16,11 @@
  */
 import eslintComments from 'eslint-plugin-eslint-comments';
 import jsdoc from 'eslint-plugin-jsdoc';
-import { FILES_ALL_CODE, FILES_JS, FILES_TS } from '../_shared/globs.mjs';
-import { blockCommentFormattingPlugin } from '../plugins/block-comment-formatting.js';
-import { headerPlugin } from '../plugins/header-bullets-min.js';
-import { controlStructuresPlugin } from '../plugins/require-comments-on-control-structures.js';
-import { typedefPlugin } from '../plugins/require-options-typedef.js';
+import { FILES_ALL_CODE, FILES_JS } from '../../_shared/core/globs.mjs';
+import { blockCommentFormattingPlugin } from '../../plugins/docs/block-comment-formatting.js';
+import { headerPlugin } from '../../plugins/docs/header-bullets-min.js';
+import { controlStructuresPlugin } from '../../plugins/docs/require-comments-on-control-structures.js';
+import { typedefPlugin } from '../../plugins/types/require-options-typedef.js';
 
 /**
  * ドキュメント/コメント規律（JSDoc・ヘッダ・ESLintディレクティブ）に関する設定断片。
@@ -128,8 +128,7 @@ export const documentation = [
       'eslint-comments/no-unused-disable': 'error',
       'eslint-comments/no-unlimited-disable': 'error'
     }
-  }
-  ,
+  },
   // describe コメント必須（グローバル適用、ルール内で describe のみ対象）
   {
     files: FILES_ALL_CODE,
@@ -160,8 +159,7 @@ export const documentation = [
       ]
     },
     settings: { jsdoc: { mode: 'typescript' } }
-  }
-  ,
+  },
   // リポジトリ全体に Options typedef を適用（一般 JS/MJS 対象、グローバル ignores は eslint.config.mjs の IGNORES に従う）
   {
     files: FILES_JS,
@@ -169,8 +167,7 @@ export const documentation = [
     rules: {
       'typedef/require-options-typedef': ['error', { generalJsMode: 'error' }]
     }
-  }
-  ,
+  },
   // JS ローカルプラグインに Options typedef を要求（meta.schema.properties を包含）
   {
     files: ['qualities/eslint/plugins/**/*.js'],
@@ -180,4 +177,3 @@ export const documentation = [
     }
   }
 ];
-

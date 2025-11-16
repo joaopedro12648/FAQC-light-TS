@@ -17,7 +17,7 @@
 import tseslint from '@typescript-eslint/eslint-plugin';
 import tsparser from '@typescript-eslint/parser';
 import path from 'node:path';
-import { FILES_TS } from '../_shared/globs.mjs';
+import { FILES_TS } from '../../_shared/core/globs.mjs';
 
 const tsconfigRootDir = path.resolve(process.cwd());
 

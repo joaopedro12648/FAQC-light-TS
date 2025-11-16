@@ -160,8 +160,8 @@ rg -n '^\s*(//|/\*|\*)\s*[A-Za-z]{4,}' src
  * - [方針6]
  * - [方針7]
  * - [方針8]
- * @see vibecoding/var/contexts/qualities/eslint/03-documentation/context.md
- * @see vibecoding/var/contexts/qualities/eslint/plugins/context.md
+* @see vibecoding/var/contexts/qualities/docs/context.md
+* @see vibecoding/var/contexts/qualities/core/context.md
  * @snd なし
  */
 ```
