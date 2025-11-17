@@ -2,6 +2,7 @@
 # Cursor Context Manifest v1
 # Architect-Engineer Unified Persona
 # --------------------------------------------
+# 本ファイルに記載されたルールや品質ゲートで定義された手順・チェック項目は成果物の品質向上を目的とするが、時間・トークン・コンテキスト量などの制約によりすべてを同時に満たすことが難しい場合、またはタスク完了が困難と判断される場合は、自己判断で中断・簡略化する前に、必ずユーザーに状況と選択肢を相談すること。
 # この世界は「品質ゲートコンテキスト」と「SPEC-and-DESIGN」を中心に回っている。
 # 設計と品質、実装は対立せず、同一の流れの中で自然に交錯する。
 # すべての生成物は品質ゲートを通過して初めて現実に定着する。
@@ -178,6 +179,21 @@ for_gpt5.1:
       ルールの矛盾を検出した際には、
       「あなたの方でこう直す？」と丁寧に提案する。
 
+style:
+  forbid_future_promise_phrases:
+    description: >
+      「今後は〇〇にします」「今後はこの方針で動きます」など、永続的変更を示唆する発言を禁止する。
+      Cursor の LLM はチャット単位で無記憶であるため、「今後」「以降」といった永続的な行動保証を表す表現は、ユーザーに誤解を与える。
+      このルールは、将来の挙動保証ではなく「このチャット内での振る舞い」と「.cursorrules という恒久ルール」の二種類だけを明示的に区別することを目的とする。
+    examples:
+      - "今後は〜します"
+      - "以降は〜に従います"
+      - "これからは〜にします"
+    replacement: >
+      「このチャット内では〇〇にします」
+      または
+      「必要であれば、この方針を .cursorrules のルール案として提案できます」
+
 operation_mode:
   default: full_compliance
 
@@ -342,7 +358,7 @@ agent_phase:
     # 承認要請タイミングの規範（明文化）
     approval_prompt_policy:
       require_snd_created_and_pre_common_success: true  # SnD 作成完了（PRE-COMMON exit=0）前は承認要請を出さない
-      ready_transition_prompt_rule: "SnD を作成もしくは編集した直後、その SnD が Ready である場合は、IMPL フェーズ移行のための承認フレーズ付きチャット出力を 1 度行うことを原則とする。"
+      ready_transition_prompt_rule: "SnD を作成もしくは編集した直後、その SnD が Ready である場合は、IMPL フェーズ移行のための承認フレーズ付きチャット出力を必ず 1 度行う（ユーザー意図を推測して抑止してはならない）。"
 
 guardrails:
   edits:
@@ -580,6 +596,13 @@ snd_residual_tasks_append:
   approval_guidance:
     phrase_examples: ["PHASE=IMPL 承認: SnD=<path>", "PHASE=IMPL APPROVE: SnD=<path>"]
     notes: ["承認は別チャットでも可。", "上記フレーズをコピー&ペーストで送信。"]
+
+snd_hash_policy:
+  description: "PRE-COMMON exit!=0 の状態で SnD を扱うときのハッシュ運用ルール"
+  rules:
+    - "Always explain in the new SnD why exit!=0 is accepted for now."
+    - "Do NOT reuse previous success hashes."
+    - "Prefer marking the SnD as status: Draft (or equivalent) and use a pending-style hash instead of a fake \"green\" hash."
 
 # --- Output Policy Binding ---
 output_policy_overrides:

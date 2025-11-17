@@ -57,7 +57,7 @@ export type StepDef = Readonly<{
  */
 /**
  * ゲート実行ステップ定義（実行順序は優先度を反映）
- * - policies → typecheck → lint → build/test の順序と対象を定義
+ * - policies → typecheck → lint（preflight/ci）→ build/test の順序と対象を定義
  */
 export const stepDefs: ReadonlyArray<StepDef> = [
   // Policies (explicitly listed; no aggregator)
@@ -68,8 +68,10 @@ export const stepDefs: ReadonlyArray<StepDef> = [
   { id: 'policy:no_relaxation', command: 'node', args: ['qualities/policy/no_relaxation/core/run.mjs'], configRelDir: 'policy/no_relaxation', runMode: 'both', runScope: 'both' },
   { id: 'policy:comment_locale', command: 'node', args: ['qualities/policy/comment_locale/docs/run.mjs'], configRelDir: 'policy/comment_locale', runMode: 'both', runScope: 'both' },
   { id: 'typecheck',     command: 'npm',  args: ['run', 'typecheck', '--silent'],        configRelDir: 'tsconfig', runMode: 'both', runScope: 'both' },
-  // 実ゲート用の lint（1回）
-  { id: 'lint',          command: 'npm',  args: ['run', 'lint', '--silent'],             configRelDir: 'eslint', runMode: 'gate', runScope: 'both' },
+  // preflight 用の lint（docs プラグインの厳しいルールを一時的に切り離す専用エントリ）
+  { id: 'lint:preflight', command: 'node', args: ['qualities/eslint/run-lint-preflight.mjs'], configRelDir: 'eslint/03-documentation', runMode: 'gate', runScope: 'preflight' },
+  // 実ゲート用の lint（1回: ci/check のみで実行する）
+  { id: 'lint',          command: 'npm',  args: ['run', 'lint', '--silent'],             configRelDir: 'eslint', runMode: 'gate', runScope: 'ci' },
   // 診断専用の lint（1回だが、5ユニットへの対応関係を持つ）
   { id: 'lint:diagnostics', command: 'npm', args: ['run', 'lint', '--silent'], configRelDir: 'eslint', relatedUnitDirs: [
     'eslint/01-module-boundaries',
