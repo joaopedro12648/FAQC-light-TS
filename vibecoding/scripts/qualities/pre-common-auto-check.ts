@@ -258,8 +258,8 @@ function collectTargetDirs(): string[] {
   });
 }
 
-/** PRE-COMMON で扱う正規ユニット ID を表す型 */
-type UnitId = 'core' | 'types' | 'docs' | 'tsconfig';
+/** PRE-COMMON で扱う正規ユニット ID を表す型（TypeScript gate は types ユニットへ集約し、tsconfig 専用ユニットは廃止） */
+type UnitId = 'core' | 'types' | 'docs';
 
 /** 各ユニットに紐づく qualities/** 側のソースディレクトリ群 */
 interface UnitSources {
@@ -269,8 +269,8 @@ interface UnitSources {
 
 /**
  * qualities/** のフォルダ構成からユニットごとのソースディレクトリを自動抽出する。
- * - eslint/policy/tsconfig の bucket 構造を走査し、末端の core/types/docs/tsconfig エリアを検出する。
- * - 新しい bucket や policy が追加されても、core/types/docs/tsconfig エリアが追加されれば自動的に対象へ含まれる。
+ * - eslint/policy/tsconfig の bucket 構造を走査し、末端の core/types/docs エリアを検出する（tsconfig は types ユニットへ集約）。
+ * - 新しい bucket や policy が追加されても、core/types/docs エリアが追加されれば自動的に対象へ含まれる。
  * @returns ユニットごとのソースディレクトリ定義
  */
 function collectUnitSources(): UnitSources[] {
@@ -346,21 +346,20 @@ function collectUnitSources(): UnitSources[] {
   };
 
   /**
-   * tsconfig ドメインから tsconfig 全体と types サブディレクトリを抽出し、tsconfig/types ユニットへひも付ける。
+   * tsconfig ドメインから TypeScript 設定ディレクトリを抽出し、types ユニットへひも付ける（tsconfig 専用ユニットは持たない）。
    */
   const collectFromTsconfig = (): void => {
-    // tsconfig ドメインに属するターゲットだけを走査し、tsconfig 全体と types サブディレクトリを tsconfig/types ユニットへひも付ける
-    // tsconfig 関連の設定ディレクトリをすべて巡回し、型設定の変更がユニット単位で検出できるようにするためのループ
+    // tsconfig ドメインに属するターゲットだけを走査し、tsconfig 全体を types ユニットの入力として扱う
+    // tsconfig 関連の設定ディレクトリをすべて巡回し、型設定の変更が types ユニットの鮮度判定に反映されるようにするためのループ
     for (const srcDir of targets) {
       const rel = path.relative(QUALITIES_DIR, srcDir);
       const parts = rel.split(path.sep).filter(Boolean);
       const domain = parts[0];
-      // tsconfig ドメイン以外は型設定ユニットとは無関係なので、この条件で早期にスキップして探索コストを抑える
+      // tsconfig ドメイン以外は TypeScript 設定とは無関係なので、この条件で早期にスキップして探索コストを抑える
       if (domain !== 'tsconfig') continue;
 
       const tsconfigBase = path.join(QUALITIES_DIR, 'tsconfig');
-      addUnitDir('tsconfig', tsconfigBase);
-      addUnitDir('types', path.join(tsconfigBase, 'tsconfig', 'types'));
+      addUnitDir('types', tsconfigBase);
     }
   };
 
@@ -843,7 +842,7 @@ function allTargetContextMdExist(): boolean {
     seenUnits.add(unit);
     const destDir = path.join(OUTPUT_BASE, unit);
     const destMd = path.join(destDir, 'context.md');
-    // 正規ユニット（core/types/docs/tsconfig）の context.md が欠けていれば不整合とみなす
+    // 正規ユニット（core/types/docs）の context.md が欠けていれば不整合とみなす
     if (!fs.existsSync(destMd)) {
       return false;
     }

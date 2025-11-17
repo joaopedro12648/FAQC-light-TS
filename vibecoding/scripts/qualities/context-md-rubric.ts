@@ -394,6 +394,36 @@ function checkHowSection(text: string): string[] {
 }
 
 /**
+ * core/docs/types ユニット向けに「設定閾値一覧」小節の存在を検査する。
+ * @param filePath 絶対パス
+ * @param text     context.md の本文
+ * @returns エラーメッセージ配列
+ */
+function checkThresholdSectionForKeyUnits(filePath: string, text: string): string[] {
+  const rel = toPosix(path.relative(repoRoot, filePath));
+  const keyUnitTargets = new Set<string>([
+    'vibecoding/var/contexts/qualities/core/context.md',
+    'vibecoding/var/contexts/qualities/docs/context.md',
+    'vibecoding/var/contexts/qualities/types/context.md',
+  ]);
+  // 閾値一覧の必須対象ユニット以外はこの検査の対象外とし、Rubric のノイズを抑える
+  if (!keyUnitTargets.has(rel)) {
+    return [];
+  }
+
+  const howPatterns = [/^\s*#{1,6}\s*適用例（How）/m, /^\s*\d+\.\s*適用例（How）/m, /^\s*#{1,6}\s*How\b/m];
+  const howSection = extractSection(text, howPatterns);
+  const hasThresholdHeading = /#{2,6}\s*設定閾値一覧/.test(howSection);
+  const errs: string[] = [];
+  // 設定値由来の閾値一覧が無い場合は core/docs/types ユニットの設計意図が再現できないため不足として扱う
+  if (!hasThresholdHeading) {
+    errs.push('How: missing 設定閾値一覧 section for core/docs/types unit');
+  }
+
+  return errs;
+}
+
+/**
  * 単一の context.md に対してルーブリック検査を実行する。
  * @param filePath 絶対パス
  * @returns エラーメッセージ配列
@@ -406,6 +436,8 @@ function checkContextMd(filePath: string): string[] {
   errs.push(...checkWhereSection(text));
   errs.push(...checkWhatSection(text));
   errs.push(...checkHowSection(text));
+  errs.push(...checkThresholdSectionForKeyUnits(filePath, text));
+
   return errs;
 }
 

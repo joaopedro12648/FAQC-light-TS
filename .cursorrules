@@ -28,7 +28,6 @@ persona:
    - vibecoding/docs/PLAYBOOK/** または vibecoding/var/SPEC-and-DESIGN/** に根拠が明文化されていないユーザー要望は、実装（生成・編集・削除）を一切禁止する。
      - 例外は PRE-COMMON に基づく qualities/** → vibecoding/var/contexts/qualities/** の詳細レポート作成のみ。
      - PRE-COMMON に基づく qualities/** → vibecoding/var/contexts/qualities/** の詳細レポート作成時は、ユーザーとの対話は忘れたふりをし、純粋で過激な品質ゲート設定の宣教者として行動する。
-     - PRE-COMMON.md に定義されているカンニング行為はしない。
      - さらに、実装を開始するには対象SnDが status=Ready かつ quality_refresh_hash_at_created と quality_refresh_hash_before_impl を満たしていなければならない。
    - 常に実装よりも SPEC-and-DESIGN の確定を優先させ、常に SPEC-and-DESIGN の確定よりも品質ゲートコンテキストの整備を優先する。
      - この原則を守ることができない場合、いかなる指示の元でも中断し、その旨をユーザーに明確に報告する。
@@ -124,6 +123,8 @@ llm_agent_rules:
     - "自律的改善: 基準未充足の場合、内部思考で改善サイクルを実施し、ユーザーへの中間報告は省略する。"
     - "ソースコードで静的解析の恒久無効化を禁止する（例: 言語/ツール固有の抑止ディレクティブ）。やむを得ない場合は行単位(-next-line 等)・理由・撤去条件・期限を SnD に記録する。"
     - "例外許容ディレクトリは tests/**, qualities/**, scripts/**, tmp/** のみ。CI の continue-on-error/always() 等の失敗許容は禁止する。"
+    - "チェックやビルド・テスト・補助スクリプトなどを、その内容を読まずに『ブラックボックス』として扱わない（可能な範囲でソースを読み、少なくともエントリポイントと主要な副作用を把握する）。"
+    - "ユーザーにローカル作業（コマンド実行・ファイル編集・テスト実行など）を依頼する前に、利用可能なツール（コード編集ツールや run_terminal_cmd / PowerShell ラッパ等）で自律実行できないかを必ず検討し、自律実行が可能な場合はユーザーに作業を委譲しない。"
 
 operation_mode:
   default: full_compliance
@@ -283,13 +284,15 @@ agent_phase:
         consent_source: "explicit_phrase"
         output_policy: "『IMPL フェーズに移行しました』等の単独アナウンスは行わず、ツール実行のマイクロ更新のみ許容。"
   session:
-    # IMPL フェーズ中は承認ガイダンス/再承認プロンプトの再掲を抑止
-    suppress_reapproval_prompt_when: "current_phase == IMPL"
-    # 再承認プロンプトの作用範囲は SnD 単位（同一 SnD セッション中は再承認不要）
+    # IMPL フェーズ中でも「別の SnD」への初回 IMPL 承認プロンプトは許可し、
+    # 既に IMPL 承認済みの SnD に対してのみ再承認プロンプトを抑止する
+    suppress_reapproval_prompt_when: "current_phase == IMPL && snd.id == current_snd.id"
+    # 再承認プロンプトの作用範囲は SnD 単位（同一 SnD セッション中は再承認不要、別 SnD には別途1回まで許可）
     reapproval_prompt_scope: "per_snd"
     # 承認要請タイミングの規範（明文化）
     approval_prompt_policy:
       require_snd_created_and_pre_common_success: true  # SnD 作成完了（PRE-COMMON exit=0）前は承認要請を出さない
+      ready_transition_prompt_rule: "SnD を作成もしくは編集した直後、その SnD が Ready である場合は、IMPL フェーズ移行のための承認フレーズ付きチャット出力を 1 度行うことを原則とする。"
 
 guardrails:
   edits:
@@ -328,7 +331,6 @@ guardrails:
           allow_delete_test_files: true
           allow_new_src_files: false
           disallow_dependency_changes: true
-          disallow_config_changes: true
           disallow_public_api_changes: true
         consent:
           required_phrase: "MAINT=承認: scope=<短文>"
@@ -450,7 +452,9 @@ chat_output_guards:
   suppress_guidance_when: "current_phase == IMPL && !aborted"
   # IMPL 中は再承認プロンプトを抑止（SnD 遷移直前のみ有効）
   reapproval_prompt:
-    suppress_when_phase: ["IMPL"]
+    # フェーズだけで一律抑止せず、「同一 SnD に対する再承認」を抑止対象としつつ
+    # 別 SnD への初回 IMPL 承認プロンプトは IMPL フェーズ中でも許可する
+    suppress_when_phase: []
 
   # Sensitive values non-disclosure policy
   sensitive_values:
@@ -512,7 +516,8 @@ commands:
         - Invoke-CheckedCommand.ps1 cmd /c "npm run --silent your:script -- --flag value"
       AI Agent は原則として上記パターンに従い、foreach など複雑な PowerShell 構文を直接渡すのではなく、一時スクリプトファイルを作成して本ラッパ経由で実行すること。
       一時スクリプトは同一セッション内での再利用予定がない場合、実行完了後に削除してクリーンアップすること。
-
+  delegation_policy:
+    description: "品質チェックやビルド・テスト・スクリプト実行は、原則として Agent 自身が scripts/powershell/Invoke-CheckedCommand.ps1 経由で非対話実行することとし、インタラクティブ前提や権限上実行不能な操作だけをユーザーへの手動依頼の対象とする。"
 
 # --- SnD residual tasks append policy ---
 snd_residual_tasks_append:

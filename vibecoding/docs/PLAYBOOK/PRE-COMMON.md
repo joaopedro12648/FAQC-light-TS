@@ -186,6 +186,10 @@ updated_at: <UTC-ISO8601>
    - 定数集約の雛形（no-magic-numbers 回避）
    - 複雑度回避の構造化雛形（エンジン分割など）
    - ブラウザ互換の安全な型付け例（Safari の AudioContext など）
+5. 各ユニットの `context.md` の How 節の先頭に「設定閾値一覧」小節を設ける（特に core/docs/types ユニットは必須）：
+   - 設定閾値一覧には、当該ユニットが参照する `qualities/**` の設定値から導出した主要な閾値・禁止事項・フラグを、**「閾値名＋具体的な値」** の組み合わせ（例: `complexity: 10`, `max-lines-per-function: 80`, `max-warnings: 0`）として表または箇条書きで一覧する（抽象表現やスタータの例値は禁止）。
+   - 各行に「出典（相対パス＋抜粋/値）」を必ず併記し、PRE-COMMON 実行時点の現行設定と整合していることを示す（設定ファイルの値をそのまま引用し、SnD 側の仮値・サンプル値で代用しない）。
+   - core/docs/types 以外のユニットでも、数値閾値や禁止語など設定値由来の境界条件を持つ場合は同様に「設定閾値一覧」を How 節先頭へ追加する。
 
 ### スタータ（How にそのまま貼れる例）
 
@@ -445,6 +449,12 @@ Rubric照合は `check:pre-common` による機械的最低限のチェックに
 - Policy: 禁止語（case-insensitive, コード+コメント）  
 - 実行は `npm run check`  
 - coverage mirror 一致必須。
+
+### TypeScript 系ユニット構成メモ（types = canonical）
+
+- TypeScript 型検査ゲート（`npm run -s typecheck` とその coverage）は `types` ユニット（`unit_path: /qualities/types/`）が canonical とする。
+- `tsconfig` ユニット（`unit_path: /qualities/tsconfig/`）は、`qualities/tsconfig/tsconfig.json` の設定変更が PRE-COMMON の再実行と `types` ユニット context 更新を要求するかどうかを記述する補助的コンテキストとし、型検査 gate 定義（commands/configs/coverage）は持たない。
+- PRE-COMMON の詳細レポート作成時に TypeScript 系の gate/coverage を把握したい場合は、まず `vibecoding/var/contexts/qualities/types/context.{yaml,md}` を参照し、必要に応じて tsconfig 側のメタ情報（再実行トリガー）を確認する。
 
 ### 実務的チェックリスト（実装前に読む）
 - [ ] `vibecoding/var/contexts/qualities/**/context.md` の How 節に「定数化/分割/型付け/禁止事項」のスタータが載っているか

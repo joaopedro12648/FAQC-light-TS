@@ -325,6 +325,9 @@ export async function runQualityGate(): Promise<void> {
     // 順次実行（ゲートは前提条件の成立が重要）
     await runCommand(cmd, args);
   }
+
+  // すべてのステップが成功した後に context-review テストを追加実行し、レビュー不足を本番ゲートで検出する
+  await runContextReviewTest();
 }
 
 /**
@@ -411,6 +414,23 @@ async function handleTestStep(cmd: string, args: readonly string[]): Promise<boo
   }
 
   return true;
+}
+
+/**
+ * context-review テストを実行し、品質コンテキストごとのレビュー不足を確認する。
+ * - 成功時: 何も出力せずに完了する
+ * - 失敗時: vitest のエラー出力により不足している context-review.md を可視化する
+ */
+async function runContextReviewTest(): Promise<void> {
+  const testPath = path.join('vibecoding', 'tests', 'quality', 'context-review.test.ts');
+  // テストファイルが存在しない環境では追加実行をスキップする
+  if (!existsSync(testPath)) {
+    process.stdout.write('[test] context-review test not found: スキップします\n');
+    return;
+  }
+
+  process.stdout.write('[test] context-review: context-review.md の存在を検査します\n');
+  await runCommand('npx', ['vitest', 'run', testPath, '--silent']);
 }
 
 /** このファイルが直接起動されたかの判定（ユニットテストからの import を除外） */
