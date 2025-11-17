@@ -97,9 +97,7 @@ export const ruleHeaderBulletsMin = {
   },
 };
 
-/**
- * プラグインエクスポート。
- */
+/** プラグインエクスポート。 */
 export const headerPlugin = {
   rules: {
     'header-bullets-min': ruleHeaderBulletsMin,

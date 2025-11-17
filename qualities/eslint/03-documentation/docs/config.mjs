@@ -88,7 +88,8 @@ export const documentation = [
     plugins: { blockfmt: blockCommentFormattingPlugin },
     rules: {
       'blockfmt/block-comment-formatting': 'error',
-      'blockfmt/no-empty-comment': 'error'
+      'blockfmt/no-empty-comment': 'error',
+      'blockfmt/prefer-single-line-block-comment': 'error'
     }
   },
   // 制御構造でのコメントを検査する（ja 系では非ASCIIを要求する）

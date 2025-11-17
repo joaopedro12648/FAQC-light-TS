@@ -72,6 +72,72 @@ export const ruleBlockCommentFormatting = {
 };
 
 /**
+ * 単一行で表現できる内容を複数行ブロックコメントとして書くことを抑止するルール。
+ * - 対象: 複数行ブロックコメントのうち、実質 1 文の説明だけで構成されるコメント
+ * - 失敗: 本文を連結した文字列が maxLength 以下かつ文の区切りが 1 つ以下であり、箇条書きや JSDoc タグ行を含まない場合
+ * @type {import('eslint').Rule.RuleModule}
+ */
+export const rulePreferSingleLineBlockComment = {
+  meta: {
+    type: 'suggestion',
+    docs: {
+      description:
+        '内容が 1 文で済む複数行ブロックコメントを検出し、単一行ブロックコメントまたは行コメントへの統一を促します。',
+    },
+    schema: [],
+    messages: {
+      preferSingleLine:
+        '単一行で表現できるブロックコメントです。単一行ブロックコメント（/* ... */）または行コメント（// ...）へ統一してください。',
+    },
+  },
+  create(context) {
+    const sourceCode = context.getSourceCode();
+    /**
+     * コメント本文行（空行除外済み）の行数を数える。
+     * @param {import('eslint').AST.Token | import('estree').Comment} comment 対象コメント
+     * @returns {number} 空行を除いた本文行数
+     */
+    function countContentLines(comment) {
+      const rawLines = String(comment.value).split(/\r?\n/);
+      return rawLines
+        .map((line) => line.replace(/^\s*\*?\s?/, '').trim())
+        .filter((line) => line.length > 0).length;
+    }
+
+    /**
+     * コメントが「実質 1 行コメント」かどうかを判定する。
+     * @param {import('eslint').AST.Token | import('estree').Comment} comment 対象コメント
+     * @returns {boolean} 実質 1 行コメントと見なせる場合 true
+     */
+    function isEffectivelySingleLine(comment) {
+      // 単一行コメントや 1 行ブロックは対象外とし、構造的に複数行のものだけを検査する
+      if (comment.type !== 'Block') return false;
+      // 物理的に 1 行で完結しているブロックコメントは本ルールの対象外とする
+      if (comment.loc.start.line === comment.loc.end.line) return false;
+
+      const lineCount = countContentLines(comment);
+      // 空コメントや 2 行以上のコメントは対象外とし、「実質 1 行」のみを違反とする
+      return lineCount === 1;
+    }
+
+    return {
+      Program() {
+        // ソースコード全体のコメントを走査し、実質 1 行で済む複数行ブロックコメントのみを検査する
+        for (const comment of sourceCode.getAllComments()) {
+          // 判定ロジックに合致したコメントに対してのみ単一行コメント化を推奨する
+          if (isEffectivelySingleLine(comment)) {
+            context.report({
+              loc: comment.loc,
+              messageId: 'preferSingleLine',
+            });
+          }
+        }
+      },
+    };
+  },
+};
+
+/**
  * 空ブロックコメント禁止ルール。
  * - 対象: すべてのブロックコメント
  * - 失敗: 本文行から装飾文字（* や空白）を除いた結果、意味のあるテキストが 1 行も無い場合
@@ -205,12 +271,14 @@ export const ruleRequireDescribeComment = {
  * - block-comment-formatting: ブロックコメント整形ルール
  * - no-empty-comment: 空ブロックコメント禁止ルール
  * - require-describe-comment: describe 直前コメント必須ルール
+ * - prefer-single-line-block-comment: 単一行で済む内容の多行ブロックコメントを抑止するルール
  */
 export const blockCommentFormattingPlugin = {
   rules: {
     'block-comment-formatting': ruleBlockCommentFormatting,
     'no-empty-comment': ruleNoEmptyBlockComment,
     'require-describe-comment': ruleRequireDescribeComment,
+    'prefer-single-line-block-comment': rulePreferSingleLineBlockComment,
   },
 };
 

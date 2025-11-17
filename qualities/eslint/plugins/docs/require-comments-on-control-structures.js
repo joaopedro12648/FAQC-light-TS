@@ -293,9 +293,7 @@ export const ruleRequireCommentsOnControlStructures = {
   },
 };
 
-/**
- * プラグインエクスポート（rules マップ）
- */
+/** プラグインエクスポート（rules マップ） */
 export const controlStructuresPlugin = {
   rules: {
     'require-comments-on-control-structures': ruleRequireCommentsOnControlStructures,

@@ -255,9 +255,7 @@ async function runAll(rootDir) {
   return { ok: violations.length === 0, violations };
 }
 
-/**
- * CLI エントリポイント。リポジトリルートを基準とした anti_mvp ポリシーチェックを実行する。
- */
+/** CLI エントリポイント。リポジトリルートを基準とした anti_mvp ポリシーチェックを実行する。 */
 async function main() {
   const repoRoot = process.cwd();
   const { ok, violations } = await runAll(repoRoot);

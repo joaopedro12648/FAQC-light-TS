@@ -15,14 +15,10 @@
  * @snd vibecoding/var/SPEC-and-DESIGN/SnD-creation.md
  */
 
-/**
- * ゲート実行ステップのタプル型。[command, args]
- */
+/** ゲート実行ステップのタプル型。[command, args] */
 export type StepTuple = readonly [command: string, args: readonly string[]];
 
-/**
- * 1:1 定義（キー結合なし）。configRelDir は `qualities/` からの相対パス。
- */
+/** 1:1 定義（キー結合なし）。configRelDir は `qualities/` からの相対パス。 */
 /**
  * 実行モードの種別。
  * - 'both': 実ゲート・診断の両方で実行

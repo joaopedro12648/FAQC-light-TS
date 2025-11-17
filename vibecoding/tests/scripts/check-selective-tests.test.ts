@@ -20,13 +20,9 @@ import { evaluateShouldRunInternalTests } from '../../../scripts/qualities/check
 describe('selective internal tests decision (evaluateShouldRunInternalTests)', () => {
   const ISO = '2025-01-01T00:00:00.000Z';
 
-  /**
-   * evaluateShouldRunInternalTests に渡す判定入力の型（テスト用エイリアス）。
-   */
+  /** evaluateShouldRunInternalTests に渡す判定入力の型（テスト用エイリアス）。 */
   type Params = Parameters<typeof evaluateShouldRunInternalTests>[0];
-  /**
-   * テーブル駆動テスト行の型: [説明, 入力, 期待値]。
-   */
+  /** テーブル駆動テスト行の型: [説明, 入力, 期待値]。 */
   type Row = [name: string, params: Params, expected: boolean];
 
   const rows: Row[] = [

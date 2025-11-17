@@ -15,9 +15,7 @@
  */
 import { spawn } from 'node:child_process';
 
-/**
- * 子プロセス実行結果の型
- */
+/** 子プロセス実行結果の型 */
 export type RunResult = {
   code: number | null;
   stdout: string;

@@ -21,9 +21,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { stepDefs } from '../../qualities/check-steps.ts';
 
-/**
- * ゲート実行ステップのタプル型。[command, args]
- */
+/** ゲート実行ステップのタプル型。[command, args] */
 
 /**
  * 子プロセスでコマンドを実行（stdio 継承）。成功時 resolve、非0終了/シグナル時 reject。

@@ -15,9 +15,7 @@
  * @see vibecoding/docs/PLAYBOOK/PRE-IMPL.md
  * @snd vibecoding/var/SPEC-and-DESIGN/SnD-creation.md
  */
-/**
- * PRE-COMMON 用ユーティリティおよび診断出力。
- */
+/** PRE-COMMON 用ユーティリティおよび診断出力。 */
 import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -325,9 +323,7 @@ function collectUnitSources(): UnitSources[] {
     }
   };
 
-  /**
-   * policy ドメインの各ポリシーディレクトリから core/types/docs エリアを抽出し、ユニットへひも付ける。
-   */
+  /** policy ドメインの各ポリシーディレクトリから core/types/docs エリアを抽出し、ユニットへひも付ける。 */
   const collectFromPolicy = (): void => {
     // policy ドメインに属するターゲットだけを走査し、各ポリシーごとの core/types/docs エリアを core/types/docs ユニットへ束ねる
     // 各 policy ディレクトリを順に確認し、core/types/docs の下位構造をユニット入力として拾い上げるためのループ
@@ -345,9 +341,7 @@ function collectUnitSources(): UnitSources[] {
     }
   };
 
-  /**
-   * tsconfig ドメインから TypeScript 設定ディレクトリを抽出し、types ユニットへひも付ける（tsconfig 専用ユニットは持たない）。
-   */
+  /** tsconfig ドメインから TypeScript 設定ディレクトリを抽出し、types ユニットへひも付ける（tsconfig 専用ユニットは持たない）。 */
   const collectFromTsconfig = (): void => {
     // tsconfig ドメインに属するターゲットだけを走査し、tsconfig 全体を types ユニットの入力として扱う
     // tsconfig 関連の設定ディレクトリをすべて巡回し、型設定の変更が types ユニットの鮮度判定に反映されるようにするためのループ
@@ -363,9 +357,7 @@ function collectUnitSources(): UnitSources[] {
     }
   };
 
-  /**
-   * 将来のドメイン追加時に、末端の core/types/docs エリアを自動的にユニット入力へひも付ける拡張検出処理。
-   */
+  /** 将来のドメイン追加時に、末端の core/types/docs エリアを自動的にユニット入力へひも付ける拡張検出処理。 */
   const collectFallback = (): void => {
     // 既知ドメイン以外についても、末端ディレクトリ名が core/types/docs であれば対応ユニットへ自動登録し PRE-COMMON の拡張に追従できるようにする
     // すべての candidates を確認し、既知ドメインに属さない core/types/docs エリアも漏らさず検出するためのループ

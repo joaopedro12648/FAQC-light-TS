@@ -22,13 +22,9 @@ import { run as bannedTerms } from './checks/banned_terms';
 import { run as todoTicketRequired } from './checks/todo_ticket_required';
 import type { CheckFn, PolicyConfig, RunnerResult, Violation } from './types';
 
-/**
- * banned_terms 可変構築用型
- */
+/** banned_terms 可変構築用型 */
 type MutableBannedTerms = { patterns?: string[]; paths?: string[]; word_boundary?: boolean };
-/**
- * todo_ticket_required 可変構築用型
- */
+/** todo_ticket_required 可変構築用型 */
 type MutableTodo = { regex?: string; paths?: string[] };
 
 /**

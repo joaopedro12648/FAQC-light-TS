@@ -16,6 +16,8 @@
 declare module '../../../qualities/eslint/plugins/docs/block-comment-formatting.js' {
   /** ルール: ブロックコメント整形（メタ/メッセージを公開） */
   export const ruleBlockCommentFormatting: unknown;
+  /** ルール: 単一行ブロックコメント推奨（メタ/メッセージを公開） */
+  export const rulePreferSingleLineBlockComment: unknown;
   /** プラグイン: ルールマップ（blockfmt/*） */
   export const blockCommentFormattingPlugin: unknown;
 }
@@ -28,6 +30,8 @@ declare module '../../../qualities/eslint/plugins/docs/header-bullets-min.js' {
 declare module '../../../qualities/eslint/plugins/docs/*.js' {
   /** ルール: ブロックコメント整形（補助ワイルドカード宣言） */
   export const ruleBlockCommentFormatting: unknown;
+  /** ルール: 単一行ブロックコメント推奨（補助ワイルドカード宣言） */
+  export const rulePreferSingleLineBlockComment: unknown;
   /** プラグイン: ルールマップ（補助ワイルドカード宣言） */
   export const blockCommentFormattingPlugin: unknown;
   /** ルール: ヘッダ箇条書き最小件数（補助ワイルドカード宣言） */

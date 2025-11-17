@@ -107,9 +107,7 @@ function isValidStartAtHash(value) {
   return /^\d{4}-\d{2}-\d{2}T[^\s]+Z\s+[0-9a-f]{64}$/.test(value);
 }
 
-/**
- * エントリポイント。SPEC の pre-impl ハッシュ有無を検査し、欠落時は失敗させる。
- */
+/** エントリポイント。SPEC の pre-impl ハッシュ有無を検査し、欠落時は失敗させる。 */
 function main() {
   const changed = getChangedFiles();
   const codeChanged = changed.filter((p) => /^(apps|src)\//.test(p));

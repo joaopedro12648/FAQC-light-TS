@@ -205,9 +205,7 @@ export const ruleRequireOptionsTypedef = {
   },
 };
 
-/**
- * プラグインエクスポート
- */
+/** プラグインエクスポート */
 export const typedefPlugin = {
   rules: {
     'require-options-typedef': ruleRequireOptionsTypedef,
