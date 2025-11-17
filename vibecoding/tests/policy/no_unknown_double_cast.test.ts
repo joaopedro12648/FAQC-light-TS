@@ -29,7 +29,7 @@ describe('policy: no_unknown_double_cast', () => {
       const kw1 = 'as un';
       const kw2 = 'known as';
       writeTextFile(path.join(tmp, 'ng.ts'), `const v = (0 ${kw1}${kw2} number);`);
-      const ng = await runNode('node', [path.join(process.cwd(), 'qualities', 'policy', 'no_unknown_double_cast', 'run.mjs')], { cwd: tmp });
+      const ng = await runNode('node', [path.join(process.cwd(), 'qualities', 'policy', 'no_unknown_double_cast', 'types', 'run.mjs')], { cwd: tmp });
       expect(ng.code).toBe(1);
       expect(ng.stderr).toMatch(/double cast/i);
 
@@ -39,7 +39,7 @@ describe('policy: no_unknown_double_cast', () => {
       }
 
       writeTextFile(path.join(tmp, 'ok.ts'), 'const n: number = 1;');
-      const ok = await runNode('node', [path.join(process.cwd(), 'qualities', 'policy', 'no_unknown_double_cast', 'run.mjs')], { cwd: tmp });
+      const ok = await runNode('node', [path.join(process.cwd(), 'qualities', 'policy', 'no_unknown_double_cast', 'types', 'run.mjs')], { cwd: tmp });
       expect(ok.code).toBe(0);
       expect(ok.stdout).toMatch(/OK:/);
     } finally {

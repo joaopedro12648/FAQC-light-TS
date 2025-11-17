@@ -214,7 +214,7 @@ export function evaluateShouldRunInternalTests(params: {
   return anyUpdatedSince;
 }
 
-// JSDoc adjacency separator（隣接JSDocの重複検出回避用）see: qualities/policy/jsdoc_no_duplicate/run.mjs
+// JSDoc adjacency separator（隣接JSDocの重複検出回避用）see: qualities/policy/jsdoc_no_duplicate/docs/run.mjs
 /**
  * vibecoding 内製テスト（vibecoding/tests/**）を追加実行すべきかを判定する。
  * - 優先1: Git 差分に qualities/** or vibecoding/** が含まれる

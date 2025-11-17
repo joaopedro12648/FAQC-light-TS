@@ -29,7 +29,7 @@ describe('policy: no_relaxation', () => {
       const kw = 'eslint-';
       const kw2 = 'disable';
       writeTextFile(path.join(tmp, 'ng.ts'), `/* ${kw}${kw2} */\nexport const a = 1;`);
-      const ng = await runNode('node', [path.join(process.cwd(), 'qualities', 'policy', 'no_relaxation', 'run.mjs')], { cwd: tmp });
+      const ng = await runNode('node', [path.join(process.cwd(), 'qualities', 'policy', 'no_relaxation', 'core', 'run.mjs')], { cwd: tmp });
       expect(ng.code).toBe(1);
       expect(ng.stderr).toMatch(/no_relaxation/);
 
@@ -39,7 +39,7 @@ describe('policy: no_relaxation', () => {
       }
 
       writeTextFile(path.join(tmp, 'ok.ts'), 'export const ok = 1;');
-      const ok = await runNode('node', [path.join(process.cwd(), 'qualities', 'policy', 'no_relaxation', 'run.mjs')], { cwd: tmp });
+      const ok = await runNode('node', [path.join(process.cwd(), 'qualities', 'policy', 'no_relaxation', 'core', 'run.mjs')], { cwd: tmp });
       expect(ok.code).toBe(0);
       expect(ok.stdout).toMatch(/OK: no relaxations/);
     } finally {

@@ -105,11 +105,10 @@ const listAllTsUnderAnySrc = (rootDir: string): string[] => {
       if (name === 'scripts' && fs.existsSync(path.join(abs, 'tmp'))) continue;
       // src 配下の .ts を列挙して収集する
       if (name === 'src') {
-        
         // src 配下の .ts を列挙して結果へ追加する
         for (const file of listAllTsUnder(abs)) out.push(file);
       }
-      
+
       // 残りの下位ディレクトリも再帰的に探索する
       walk(abs);
     }

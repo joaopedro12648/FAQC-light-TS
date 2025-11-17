@@ -25,16 +25,16 @@ describe('policy: anti_mvp', () => {
     const tmp = createTmpDir();
     // テスト用の一時環境を確実に片付け結果の独立性を保つ
     try {
-      // YAML をコピー
-      const srcYaml = path.join(process.cwd(), 'qualities', 'policy', 'anti_mvp', 'anti_mvp_policy.yaml');
-      const destYaml = path.join(tmp, 'qualities', 'policy', 'anti_mvp', 'anti_mvp_policy.yaml');
+      // YAML をコピー（core 階層の単一情報源を再現する）
+      const srcYaml = path.join(process.cwd(), 'qualities', 'policy', 'anti_mvp', 'core', 'anti_mvp_policy.yaml');
+      const destYaml = path.join(tmp, 'qualities', 'policy', 'anti_mvp', 'core', 'anti_mvp_policy.yaml');
       ensureDir(path.dirname(destYaml));
       copyFile(srcYaml, destYaml);
 
       // NG: banned term（分割して組み立て）を含む
       const banned = 'fall' + 'back';
       writeTextFile(path.join(tmp, 'ng.ts'), `export const s = "${banned}";`);
-      const ng = await runNode('node', [path.join(process.cwd(), 'qualities', 'policy', 'anti_mvp', 'run.mjs')], { cwd: tmp });
+      const ng = await runNode('node', [path.join(process.cwd(), 'qualities', 'policy', 'anti_mvp', 'core', 'run.mjs')], { cwd: tmp });
       expect(ng.code).toBe(1);
       expect(ng.stderr).toMatch(/anti-mvp ❌/);
 
@@ -44,7 +44,7 @@ describe('policy: anti_mvp', () => {
       }
 
       writeTextFile(path.join(tmp, 'ok.ts'), 'export const ok = 1;');
-      const ok = await runNode('node', [path.join(process.cwd(), 'qualities', 'policy', 'anti_mvp', 'run.mjs')], { cwd: tmp });
+      const ok = await runNode('node', [path.join(process.cwd(), 'qualities', 'policy', 'anti_mvp', 'core', 'run.mjs')], { cwd: tmp });
       expect(ok.code).toBe(0);
       expect(ok.stdout).toMatch(/anti-mvp ✅/);
     } finally {

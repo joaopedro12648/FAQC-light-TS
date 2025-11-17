@@ -110,7 +110,7 @@ const parseTodo = (lines) => {
  * @returns {{checks:{banned_terms?:object,todo_ticket_required?:object}}} パース済みチェック設定
  */
 function readYamlConfig(repoRoot) {
-  const yamlPath = path.join(repoRoot, 'qualities', 'policy', 'anti_mvp', 'anti_mvp_policy.yaml');
+  const yamlPath = path.join(repoRoot, 'qualities', 'policy', 'anti_mvp', 'core', 'anti_mvp_policy.yaml');
   const raw = fs.readFileSync(yamlPath, 'utf8');
   const lines = raw.split(/\r?\n/);
   const cfg = { checks: {} };

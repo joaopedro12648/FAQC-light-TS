@@ -1,5 +1,5 @@
 {
-  "extends": "./qualities/tsconfig/tsconfig.json",
+  "extends": "./qualities/tsconfig/tsconfig/types/tsconfig.json",
   "compilerOptions": {
     "types": ["node", "vitest/globals"],
     "typeRoots": [

@@ -56,8 +56,8 @@
    - 対象ユニットの `qualities/**` 配下のすべての設定ファイルを読み込む
    - 例：
      - `qualities/eslint/eslint.config.mjs` - ESLintルール全体
-     - `qualities/tsconfig/tsconfig.json` - TypeScript strictオプション全体
-     - `qualities/policy/anti_mvp/anti_mvp_policy.yaml` - 禁止語・パターン全体
+     - `qualities/tsconfig/tsconfig/types/tsconfig.json` - TypeScript strictオプション全体
+     - `qualities/policy/anti_mvp/core/anti_mvp_policy.yaml` - 禁止語・パターン全体
      - `qualities/policy/baseline.yaml` - ポリシーベースライン
      - 関連する実装コード（`qualities/policy/anti_mvp/**/*.ts`）
 
@@ -143,7 +143,7 @@ updated_at: <UTC-ISO8601 start_at>
   - 代表例: `npm run check`（内部でポリシー/型検査/Lint/テストを実行）。
   - **lint の厳格性**: `--max-warnings=0` を指定し、warning も許容しない。
 - configs の典拠: qualities 配下の実設定。
-  - 代表例: `qualities/eslint/eslint.config.mjs`（ESLint）, `qualities/tsconfig/tsconfig.json`（TypeScript）, `qualities/policy/baseline.yaml` および `qualities/policy/**`（Policy）。
+  - 代表例: `qualities/eslint/eslint.config.mjs`（ESLint）, `qualities/tsconfig/tsconfig/types/tsconfig.json`（TypeScript）, `qualities/policy/baseline.yaml` および `qualities/policy/**`（Policy）。
 
 参考例（ESLint ユニットの context.yaml 抜粋）:
 ```yaml

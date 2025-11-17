@@ -65,12 +65,12 @@ export type StepDef = Readonly<{
  */
 export const stepDefs: ReadonlyArray<StepDef> = [
   // Policies (explicitly listed; no aggregator)
-  { id: 'policy:anti_mvp', command: 'node', args: ['qualities/policy/anti_mvp/run.mjs'], configRelDir: 'policy/anti_mvp', runMode: 'both', runScope: 'both' },
-  { id: 'policy:no_eslint_disable', command: 'node', args: ['qualities/policy/no_eslint_disable/run.mjs'], configRelDir: 'policy/no_eslint_disable', runMode: 'both', runScope: 'both' },
-  { id: 'policy:jsdoc_no_duplicate', command: 'node', args: ['qualities/policy/jsdoc_no_duplicate/run.mjs'], configRelDir: 'policy/jsdoc_no_duplicate', runMode: 'both', runScope: 'both' },
-  { id: 'policy:no_unknown_double_cast', command: 'node', args: ['qualities/policy/no_unknown_double_cast/run.mjs'], configRelDir: 'policy/no_unknown_double_cast', runMode: 'both', runScope: 'both' },
-  { id: 'policy:no_relaxation', command: 'node', args: ['qualities/policy/no_relaxation/run.mjs'], configRelDir: 'policy/no_relaxation', runMode: 'both', runScope: 'both' },
-  { id: 'policy:comment_locale', command: 'node', args: ['qualities/policy/comment_locale/run.mjs'], configRelDir: 'policy/comment_locale', runMode: 'both', runScope: 'both' },
+  { id: 'policy:anti_mvp', command: 'node', args: ['qualities/policy/anti_mvp/core/run.mjs'], configRelDir: 'policy/anti_mvp', runMode: 'both', runScope: 'both' },
+  { id: 'policy:no_eslint_disable', command: 'node', args: ['qualities/policy/no_eslint_disable/core/run.mjs'], configRelDir: 'policy/no_eslint_disable', runMode: 'both', runScope: 'both' },
+  { id: 'policy:jsdoc_no_duplicate', command: 'node', args: ['qualities/policy/jsdoc_no_duplicate/docs/run.mjs'], configRelDir: 'policy/jsdoc_no_duplicate', runMode: 'both', runScope: 'both' },
+  { id: 'policy:no_unknown_double_cast', command: 'node', args: ['qualities/policy/no_unknown_double_cast/types/run.mjs'], configRelDir: 'policy/no_unknown_double_cast', runMode: 'both', runScope: 'both' },
+  { id: 'policy:no_relaxation', command: 'node', args: ['qualities/policy/no_relaxation/core/run.mjs'], configRelDir: 'policy/no_relaxation', runMode: 'both', runScope: 'both' },
+  { id: 'policy:comment_locale', command: 'node', args: ['qualities/policy/comment_locale/docs/run.mjs'], configRelDir: 'policy/comment_locale', runMode: 'both', runScope: 'both' },
   { id: 'typecheck',     command: 'npm',  args: ['run', 'typecheck', '--silent'],        configRelDir: 'tsconfig', runMode: 'both', runScope: 'both' },
   // 実ゲート用の lint（1回）
   { id: 'lint',          command: 'npm',  args: ['run', 'lint', '--silent'],             configRelDir: 'eslint', runMode: 'gate', runScope: 'both' },

@@ -56,7 +56,6 @@ function collectViolations(
     const m = regex.exec(lineText);
     // 正規表現に一致した行のみを違反として記録する
     if (m) {
-
       const found = m[1] ?? '';
       out.push({ ruleId, message: `${relPath}:${i + 1} contains "${String(found)}"`, file: path.normalize(relPath), line: i + 1 });
     }

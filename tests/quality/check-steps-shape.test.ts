@@ -36,7 +36,7 @@ test('first step should execute policy verifier directly', () => {
   const first = stepDefs[0]!;
   expect(first).toBeDefined();
   expect(first.command).toBe('node');
-  expect(first.args[0]).toBe('qualities/policy/anti_mvp/run.mjs');
+  expect(first.args[0]).toBe('qualities/policy/anti_mvp/core/run.mjs');
   expect(first.configRelDir).toBe('policy/anti_mvp');
 });
 

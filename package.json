@@ -4,13 +4,13 @@
   "type": "module",
   "scripts": {
     "check:pre-common": "tsx vibecoding/scripts/qualities/pre-common-auto-check.ts",
-    "typecheck": "tsc --noEmit --incremental --tsBuildInfoFile tmp/tsbuildinfo.json -p qualities/tsconfig/tsconfig.json",
+    "typecheck": "tsc --noEmit --incremental --tsBuildInfoFile tmp/tsbuildinfo.json -p qualities/tsconfig/tsconfig/types/tsconfig.json",
     "lint": "node -e \"console.log('ESLint is running with --max-warnings=0');\" && eslint . --config qualities/eslint/eslint.config.mjs --max-warnings=0 --cache --cache-location node_modules/.cache/eslint",
     "test": "vitest run --config tests/vitest.config.cjs",
     "preflight": "tsx scripts/qualities/preflight.ts",
     "check": "tsx scripts/qualities/check.ts",
     "check:fast": "tsx scripts/qualities/check.ts --fast",
-    "verify:policy": "node qualities/policy/anti_mvp/run.mjs && node qualities/policy/no_relaxation/run.mjs"
+    "verify:policy": "node qualities/policy/anti_mvp/core/run.mjs && node qualities/policy/no_relaxation/core/run.mjs"
   },
   "author": "cozyupk",
   "license": "MIT",

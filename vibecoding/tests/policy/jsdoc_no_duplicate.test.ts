@@ -45,13 +45,13 @@ describe('policy: jsdoc_no_duplicate', () => {
       writeTextFile(path.join(tmp, 'b.ts'), 'export const ok = 1;');
 
       // 実行（NG 期待）
-      const ng = await runNode('node', [path.join(process.cwd(), 'qualities', 'policy', 'jsdoc_no_duplicate', 'run.mjs')], { cwd: tmp });
+      const ng = await runNode('node', [path.join(process.cwd(), 'qualities', 'policy', 'jsdoc_no_duplicate', 'docs', 'run.mjs')], { cwd: tmp });
       expect(ng.code).toBe(1);
       expect(ng.stderr).toMatch(/duplicate JSDoc/);
 
       // 上書きして OK 期待
       writeTextFile(path.join(tmp, 'a.ts'), '/** summary 。*/\nexport const x2 = 2;');
-      const ok = await runNode('node', [path.join(process.cwd(), 'qualities', 'policy', 'jsdoc_no_duplicate', 'run.mjs')], { cwd: tmp });
+      const ok = await runNode('node', [path.join(process.cwd(), 'qualities', 'policy', 'jsdoc_no_duplicate', 'docs', 'run.mjs')], { cwd: tmp });
       expect(ok.code).toBe(0);
       expect(ok.stdout).toMatch(/OK: no adjacent JSDoc duplicates/);
     } finally {

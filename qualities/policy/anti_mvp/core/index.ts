@@ -251,6 +251,5 @@ export async function runAll(rootDir: string): Promise<RunnerResult> {
 
   return { ok: allViolations.length === 0, violations: allViolations };
 }
-
 // index.ts はランナーからのみ使用される
 

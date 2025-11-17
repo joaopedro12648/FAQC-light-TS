@@ -37,7 +37,7 @@ describe('policy: comment_locale', () => {
       // 実行（NG 期待）
       const ng = await runNode(
         'node',
-        [path.join(process.cwd(), 'qualities', 'policy', 'comment_locale', 'run.mjs')],
+        [path.join(process.cwd(), 'qualities', 'policy', 'comment_locale', 'docs', 'run.mjs')],
         {
           cwd: tmp,
           env: {
@@ -66,7 +66,7 @@ describe('policy: comment_locale', () => {
 
       const ok = await runNode(
         'node',
-        [path.join(process.cwd(), 'qualities', 'policy', 'comment_locale', 'run.mjs')],
+        [path.join(process.cwd(), 'qualities', 'policy', 'comment_locale', 'docs', 'run.mjs')],
         {
           cwd: tmp,
           env: {
