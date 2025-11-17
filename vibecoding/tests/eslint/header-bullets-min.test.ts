@@ -14,7 +14,7 @@
  * @snd vibecoding/var/SPEC-and-DESIGN/SnD-creation.md
  */
 import { describe, expect,it } from 'vitest';
-import { ruleHeaderBulletsMin } from '../../../qualities/eslint/plugins/header-bullets-min.js';
+import { ruleHeaderBulletsMin } from '../../../qualities/eslint/plugins/docs/header-bullets-min.js';
 
 /** テスト対象のルール実体（型は unknown で受ける） */
 const ruleU: unknown = ruleHeaderBulletsMin;

@@ -14,7 +14,7 @@
  * @snd vibecoding/var/SPEC-and-DESIGN/SnD-creation.md
  */
 import { describe, expect,it } from 'vitest';
-import { ruleBlockCommentFormatting } from '../../../qualities/eslint/plugins/block-comment-formatting.js';
+import { ruleBlockCommentFormatting } from '../../../qualities/eslint/plugins/docs/block-comment-formatting.js';
 
 /** テスト対象のルール実体（型は unknown で受ける） */
 const ruleU: unknown = ruleBlockCommentFormatting;

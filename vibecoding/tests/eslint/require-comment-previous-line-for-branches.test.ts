@@ -15,7 +15,7 @@
  */
 import { describe, expect, it } from 'vitest';
 // @ts-expect-error: importing named export from JS file for test purposes
-import { controlStructuresPlugin } from '../../../qualities/eslint/plugins/require-comments-on-control-structures.js';
+import { controlStructuresPlugin } from '../../../qualities/eslint/plugins/docs/require-comments-on-control-structures.js';
 
 const ruleU: unknown = (controlStructuresPlugin as { rules: Record<string, unknown> }).rules['require-comments-on-control-structures'];
 

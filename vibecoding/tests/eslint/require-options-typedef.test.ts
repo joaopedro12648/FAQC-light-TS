@@ -15,7 +15,7 @@
  * @snd vibecoding/var/SPEC-and-DESIGN/202511/20251111/SnD-20251111-jsdoc-typedef-enforcement.md
  */
 import { describe, expect, it } from 'vitest';
-import { ruleRequireOptionsTypedef } from '../../../qualities/eslint/plugins/require-options-typedef.js';
+import { ruleRequireOptionsTypedef } from '../../../qualities/eslint/plugins/types/require-options-typedef.js';
 
 const ruleU: unknown = ruleRequireOptionsTypedef;
 
