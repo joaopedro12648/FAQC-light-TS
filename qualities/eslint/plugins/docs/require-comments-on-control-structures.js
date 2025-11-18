@@ -27,6 +27,9 @@
  * @property {'non-dangling'|'dangling'} [treatChainHeadAs] else-if 連鎖先頭（head）をどう扱うか（既定: 'non-dangling'）
  * @property {number} [similarityThreshold] 類似度のしきい値（既定: 0.75、範囲: 0.6〜1.0）
  * @property {boolean} [enforceMeta] メタ表現検出の有効化（既定: false／無効）
+ * @property {boolean|'fullOnly'} [requireSectionComments] then/else/catch/finally 節に節コメントを必須化するか（既定: false）
+ * @property {ReadonlyArray<'before-if'|'block-head'|'trailing'>} [sectionCommentLocations]
+ * 節コメントとして認める位置（既定: ['before-if','block-head','trailing']）
  */
 
 /** ノードタイプとキーワードの対応（固定） */
@@ -159,6 +162,290 @@ function matchesPattern(text, re) {
 }
 
 /**
+ * 対象行のプレビュー文字列を生成する（エラーメッセージ用）。
+ * @param {import('eslint').SourceCode} src ソースコード
+ * @param {number} line 1 始まりの行番号
+ * @returns {string} プレビュー文字列
+ */
+function getLinePreview(src, line) {
+  const lines = Array.isArray(src.lines) ? src.lines : [];
+  const idx = Math.max(0, line - 1);
+  const raw = lines[idx] || '';
+  const trimmed = raw.trim();
+  // 行が十分に短い場合はそのまま返し、長い場合は末尾を省略してプレビューとして整形する
+  if (trimmed.length <= 120) return trimmed;
+  return `${trimmed.slice(0, 117)}...`;
+}
+
+/**
+ * IfStatement を full/non-full/dangling で分類する。
+ * @param {any} node 対象ノード
+ * @returns {'non-full-non-dangling-if'|'full-non-dangling-if'|'dangling-if'|null} 分類結果
+ */
+function classifyIfStructure(node) {
+  // IfStatement 以外や null のノードは分類対象外とし、節コメント検査の対象から外す
+  if (!node || node.type !== 'IfStatement') return null;
+  const hasAlternate = node.alternate != null;
+  const isDangling = node.alternate && node.alternate.type === 'IfStatement';
+  // else 節を持たない if は「非フルかつ非ぶら下がり if」として扱う
+  if (!hasAlternate) {
+    return 'non-full-non-dangling-if';
+  }
+
+  // else 節が IfStatement の場合はぶら下がり if として分類する
+  if (isDangling) {
+    return 'dangling-if';
+  }
+
+  return 'full-non-dangling-if';
+}
+
+/**
+ * if に対して節コメント検査を行うべきかどうかを判定する。
+ * @param {'non-full-non-dangling-if'|'full-non-dangling-if'|'dangling-if'|null} classification 分類
+ * @param {boolean|'fullOnly'|undefined} flag requireSectionComments オプション値
+ * @returns {boolean} 検査が必要なら true
+ */
+function shouldCheckSectionCommentsForIf(classification, flag) {
+  // 設定と分類の両方が揃っていない場合は節コメント検査を無効化する
+  if (!flag || !classification) return false;
+  // fullOnly の場合は「非フル if」を除外し、それ以外（フル/dangling）のみ節コメントを対象とする
+  if (flag === 'fullOnly') {
+    return classification !== 'non-full-non-dangling-if';
+  }
+
+  // boolean true の場合はすべての if を節コメント対象とする
+  return true;
+}
+
+/**
+ * ブロック先頭に節コメントが存在するかどうかを判定する。
+ * @param {import('eslint').SourceCode} src ソースコード
+ * @param {any} block BlockStatement ノード
+ * @returns {{ ok: boolean, previewLine: number }} 判定結果とプレビュー用行番号
+ */
+function hasBlockHeadSectionComment(src, block) {
+  /**
+   * 先頭ステートメント直前に意味のあるコメントがあるか（ディレクティブ除外）
+   * @param {any} stmt 先頭ステートメント
+   * @returns {boolean} 直前コメントがあれば true
+   */
+  function hasMeaningfulCommentBeforeFirstStatement(stmt) {
+    const last = getLastMeaningfulComment(src, stmt);
+    return Boolean(last);
+  }
+
+  /**
+   * ブロック内の最初の（ディレクティブ以外の）コメントトークンを返す
+   * @param {any} blk BlockStatement
+   * @returns {any|null} コメントトークン or null
+   */
+  function findFirstMeaningfulCommentInBlock(blk) {
+    const inside = typeof src.getCommentsInside === 'function' ? src.getCommentsInside(blk) : [];
+    const foundInside = (inside || []).find((c) => !isDirectiveComment(c)) || null;
+    const tokens = src.getTokens(blk, { includeComments: true }) || [];
+    return foundInside || tokens.find((t) => (t.type === 'Block' || t.type === 'Line') && !isDirectiveComment(t)) || null;
+  }
+
+  /**
+   * ノードの開始行（loc.start.line）を安全に取得する
+   * @param {any} n 対象ノード
+   * @param {number|null} fb フォールバック
+   * @returns {number|null} 行番号（無ければ fb）
+   */
+  function getStartLineSafe(n, fb) {
+    return n && n.loc && n.loc.start && typeof n.loc.start.line === 'number' ? n.loc.start.line : fb;
+  }
+
+  const body = Array.isArray(block && block.body) ? block.body : [];
+  const firstStmt = body[0];
+  const fallbackLine = getStartLineSafe(block, 1);
+
+  // then/else の節コメント要件を判定するため、先頭文の有無を確認（空ブロック分岐の根拠）
+  const firstLine = getStartLineSafe(firstStmt, null);
+  // 先頭文が存在する場合のみ then/else の直前コメント適合で可否を判断する
+  if (firstLine != null) {
+    // 直前コメントが無ければ節コメント不適合
+    if (!hasMeaningfulCommentBeforeFirstStatement(firstStmt)) {
+      return { ok: false, previewLine: firstLine };
+    }
+
+    return { ok: true, previewLine: firstLine };
+  }
+
+  // 空ブロック: ブロック内の最初の（ディレクティブ以外の）コメントを節コメントとして許容
+  const selected = findFirstMeaningfulCommentInBlock(block);
+  const preview = getStartLineSafe(selected, fallbackLine);
+  return selected ? { ok: true, previewLine: preview } : { ok: false, previewLine: fallbackLine };
+}
+
+/**
+ * 単一ステートメントの末尾に節コメントが存在するかどうかを判定する。
+ * @param {import('eslint').SourceCode} src ソースコード
+ * @param {any} statement 対象ステートメント
+ * @returns {{ ok: boolean, previewLine: number }} 判定結果とプレビュー用行番号
+ */
+function hasTrailingSectionComment(src, statement) {
+  // 位置情報が無いステートメントは trailing コメント検査の対象外とする
+  if (!statement.loc || !statement.loc.end) {
+    return { ok: false, previewLine: 1 };
+  }
+
+  const endLine = statement.loc.end.line;
+  const commentsAfter = src.getCommentsAfter(statement) || [];
+  // ステートメント直後に続くコメント列を走査し、同行の trailing 節コメント候補を探す
+  for (const c of commentsAfter) {
+    // 位置情報を持たないコメントは検査対象外とし、安全側にスキップする
+    if (!c.loc || !c.loc.start) continue;
+    // ステートメントと同一行を越えた時点で trailing コメント候補の探索を終了する
+    if (c.loc.start.line !== endLine) {
+      // 行が変わった時点で trailing コメント候補は終了とみなす
+      break;
+    }
+
+    // ツール系ディレクティブ以外のコメントが同行に存在すれば trailing 節コメントとして採用する
+    if (!isDirectiveComment(c)) {
+      return { ok: true, previewLine: endLine };
+    }
+  }
+
+  return { ok: false, previewLine: endLine };
+}
+
+/**
+ * if 文の then/else 節に対する節コメント要件を検査する。
+ * @param {import('eslint').SourceCode} src ソースコード
+ * @param {import('eslint').Rule.RuleContext} context ルールコンテキスト
+ * @param {any} node IfStatement ノード
+ * @param {boolean|'fullOnly'|undefined} requireSectionComments 節コメントオプション
+ * @param {Set<string>} locations 節コメントとして認める位置の集合
+ * @returns {void}
+ */
+function checkIfSectionComments(src, context, node, requireSectionComments, locations) {
+  const classification = classifyIfStructure(node);
+  // 設定と分類に基づき、この if 文が節コメント検査の対象かどうかを早期に判定する
+  if (!shouldCheckSectionCommentsForIf(classification, requireSectionComments)) {
+    return;
+  }
+
+  const considerBlockHead = locations.has('block-head');
+  const considerTrailing = locations.has('trailing');
+
+  /**
+   * ブロック節に対する節コメント違反を報告する。
+   * @param {'then'|'else'} kind 節種別
+   * @param {any} branch 対象ブロックノード
+   */
+  function reportBlockBranchIssue(kind, branch) {
+    // 節コメントの対象がブロックでない、またはブロック先頭検査が無効な場合は何もしない
+    if (!branch || !considerBlockHead) return;
+    const { ok, previewLine } = hasBlockHeadSectionComment(src, branch);
+    // ブロック先頭に節コメントが無い場合は then/else に応じたメッセージで報告する
+    if (!ok) {
+      context.report({
+        node: branch,
+        messageId: kind === 'then' ? 'need_then_block_head' : 'need_else_block_head',
+        data: { preview: getLinePreview(src, previewLine) },
+      });
+    }
+  }
+
+  /**
+   * 単一ステートメント節に対する節コメント違反を報告する。
+   * @param {'then'|'else'} kind 節種別
+   * @param {any} branch 対象ステートメントノード
+   */
+  function reportNonBlockBranchIssue(kind, branch) {
+    // 節コメントの対象がステートメントでない、または末尾コメント検査が無効な場合は何もしない
+    if (!branch || !considerTrailing) return;
+    const { ok, previewLine } = hasTrailingSectionComment(src, branch);
+    // 同一行末尾に節コメントが無い場合は then/else に応じた trailing コメント不足として報告する
+    if (!ok) {
+      context.report({
+        node: branch,
+        messageId: kind === 'then' ? 'need_then_trailing' : 'need_else_trailing',
+        data: { preview: getLinePreview(src, previewLine) },
+      });
+    }
+  }
+
+  /**
+   * 個々の節に対して節コメントを検査する。
+   * @param {'then'|'else'} kind 節種別
+   * @param {any} branch 対象ブランチノード
+   */
+  function checkBranch(kind, branch) {
+    // 節が存在しない場合は検査対象外とする
+    if (!branch) return;
+    // ブロック節は先頭コメント、単文節は行末コメントとして検査する
+    if (branch.type === 'BlockStatement') {
+      reportBlockBranchIssue(kind, branch);
+      return;
+    }
+
+    reportNonBlockBranchIssue(kind, branch);
+  }
+
+  // non-full-non-dangling-if: then 節のみ対象（fullOnly の場合はここには来ない）
+  if (classification === 'non-full-non-dangling-if') {
+    checkBranch('then', node.consequent);
+    return;
+  }
+
+  // full-non-dangling-if: then/else の両方を対象とする
+  if (classification === 'full-non-dangling-if') {
+    checkBranch('then', node.consequent);
+    checkBranch('else', node.alternate);
+    return;
+  }
+
+  // dangling-if: 外側 if の then 節のみ対象とし、else-if 側は別の IfStatement として個別に検査する
+  if (classification === 'dangling-if') {
+    checkBranch('then', node.consequent);
+  }
+}
+
+/**
+ * try/catch/finally の節コメント要件を検査する。
+ * @param {import('eslint').SourceCode} src ソースコード
+ * @param {import('eslint').Rule.RuleContext} context ルールコンテキスト
+ * @param {any} node TryStatement ノード
+ * @param {Set<string>} locations 節コメントとして認める位置の集合
+ * @returns {void}
+ */
+function checkTrySectionComments(src, context, node, locations) {
+  const considerBlockHead = locations.has('block-head');
+  // ブロック先頭コメントを節コメントとして扱わない場合は try/catch/finally の節コメント検査をスキップする
+  if (!considerBlockHead) return;
+
+  // catch 節が存在する場合はブロック先頭に節コメントがあるかを検査する
+  if (node.handler && node.handler.body) {
+    const { ok, previewLine } = hasBlockHeadSectionComment(src, node.handler.body);
+    // catch ブロック先頭にコメントが無い場合は節コメント不足として報告する
+    if (!ok) {
+      context.report({
+        node: node.handler,
+        messageId: 'need_catch_block_head',
+        data: { preview: getLinePreview(src, previewLine) },
+      });
+    }
+  }
+
+  // finally 節が存在する場合も同様にブロック先頭コメントを検査する
+  if (node.finalizer) {
+    const { ok, previewLine } = hasBlockHeadSectionComment(src, node.finalizer);
+    // finally ブロック先頭にコメントが無い場合も節コメント不足として報告する
+    if (!ok) {
+      context.report({
+        node: node.finalizer,
+        messageId: 'need_finally_block_head',
+        data: { preview: getLinePreview(src, previewLine) },
+      });
+    }
+  }
+}
+
+/**
  * ルール実体
  * @type {import('eslint').Rule.RuleModule} ルールモジュール定義
  */
@@ -185,24 +472,37 @@ export const ruleRequireCommentsOnControlStructures = {
           treatChainHeadAs: { enum: ['non-dangling', 'dangling'] },
           similarityThreshold: { type: 'number', minimum: 0.6, maximum: 1.0 },
           enforceMeta: { type: 'boolean' },
+          requireSectionComments: {
+            anyOf: [{ type: 'boolean' }, { enum: ['fullOnly'] }],
+          },
+          sectionCommentLocations: {
+            type: 'array',
+            items: { enum: ['before-if', 'block-head', 'trailing'] },
+          },
         },
         additionalProperties: false,
       },
     ],
     messages: {
       missingComment:
-        "制御構文 '{{kw}}' の直前に、なぜその分岐/ループが必要か（目的・前提・例外方針を1文で）を説明するコメントを書いてください。",
+        "制御構文 '{{kw}}' の直前に、なぜその分岐/ループが必要か（目的・前提・例外方針を1文で）を説明するコメントを書いてください。 対象行: {{preview}}",
       tagMismatch:
-        "制御構文 '{{kw}}' の直前コメントは基準に一致していません: {{pat}}（ja 系では ASCII のみ不可）。",
+        "制御構文 '{{kw}}' の直前コメントは基準に一致していません: {{pat}}（ja 系では ASCII のみ不可）。 対象行: {{preview}}",
       multi_issue_hint_line: '同一行に複数の指摘があります。',
-      need_before_if: 'if キーワード直前行に意図説明コメントが必要です（空行は不可）。',
-      need_then_block_head: 'then ブロックの先頭に意図説明コメントが必要です（{ の行または次行）。',
-      need_then_trailing: 'then の単一文末尾に意図説明コメントが必要です（同行末）。',
-      need_else_block_head: 'else ブロックの先頭に意図説明コメントが必要です（{ の行または次行）。',
-      need_else_trailing: 'else の単一文末尾に意図説明コメントが必要です（同行末）。',
-      need_catch_block_head: 'catch ブロックの先頭に意図説明コメントが必要です（{ の行または次行）。',
+      need_before_if:
+        'if キーワード直前行に意図説明コメントが必要です（空行は不可）。 対象行: {{preview}}',
+      need_then_block_head:
+        'then ブロックの先頭に意図説明コメントが必要です（{ の行または次行）。 対象行: {{preview}}',
+      need_then_trailing:
+        'then の単一文末尾に意図説明コメントが必要です（同行末）。 対象行: {{preview}}',
+      need_else_block_head:
+        'else ブロックの先頭に意図説明コメントが必要です（{ の行または次行）。 対象行: {{preview}}',
+      need_else_trailing:
+        'else の単一文末尾に意図説明コメントが必要です（同行末）。 対象行: {{preview}}',
+      need_catch_block_head:
+        'catch ブロックの先頭に意図説明コメントが必要です（{ の行または次行）。 対象行: {{preview}}',
       need_finally_block_head:
-        'finally ブロックの先頭に意図説明コメントが必要です（{ の行または次行）。',
+        'finally ブロックの先頭に意図説明コメントが必要です（{ の行または次行）。 対象行: {{preview}}',
       meta_like_comment: 'メタ表現のコメントは不可です。',
       removable_before_if: 'Redundant comment before "if" (removable by rule).',
       removable_block_head: 'Redundant comment at block head (then/else) (removable by rule).',
@@ -232,11 +532,17 @@ export const ruleRequireCommentsOnControlStructures = {
         : new Set(['if', 'for', 'while', 'do', 'switch', 'try', 'ternary']);
     const allowBlank = Boolean(options.allowBlankLine);
     const ignoreElseIf = options.ignoreElseIf !== false; // 既定: else if を免除
-    const ignoreCatch = options.ignoreCatch !== false; // 既定: catch を免除
+    const ignoreCatch = options.ignoreCatch !== false; // 既定: catch を免除（本 SnD では catch/finally の節コメント免除には利用しない）
     const re =
       typeof options.requireTagPattern === 'string' && options.requireTagPattern.length > 0
         ? new RegExp(options.requireTagPattern)
         : null;
+    const sectionFlag = options.requireSectionComments;
+    const sectionLocationsRaw =
+      Array.isArray(options.sectionCommentLocations) && options.sectionCommentLocations.length > 0
+        ? options.sectionCommentLocations
+        : ['before-if', 'block-head', 'trailing'];
+    const sectionLocations = new Set(sectionLocationsRaw);
 
     /**
      * else-if 連鎖の else 側ブランチを無視するかどうかを判定する。
@@ -255,6 +561,36 @@ export const ruleRequireCommentsOnControlStructures = {
     }
 
     /**
+     * 直前コメントの存在とパターン適合を検査する。
+     * @param {any} node 対象ノード
+     * @param {string} kw 対象キーワード種別
+     * @returns {string|null} プレーンテキストのプレビュー（必須コメントが無い場合は null）
+     */
+    function runCommentAndPatternChecks(node, kw) {
+      const { ok, last } = hasRequiredPreviousComment(src, node, allowBlank);
+      const preview = node && node.loc && node.loc.start ? getLinePreview(src, node.loc.start.line) : '';
+
+      // 必須コメントが存在しない場合は対象キーワードごとに missingComment を報告する
+      if (!ok) {
+        context.report({ node, messageId: 'missingComment', data: { kw, preview } });
+        return null;
+      }
+
+      // 取得した直前コメントの本文がロケールポリシーなどのパターンに適合しているか検査する
+      const text = typeof last.value === 'string' ? last.value : null;
+      // コメント本文が requireTagPattern に適合しない場合は tagMismatch を報告する
+      if (!matchesPattern(text, re)) {
+        context.report({
+          node,
+          messageId: 'tagMismatch',
+          data: { kw, pat: options.requireTagPattern || '', preview },
+        });
+      }
+
+      return preview;
+    }
+
+    /**
      * 単一ノードに対して直前コメントとパターン適合を検査する。
      * @param {any} node 対象ノード
      * @param {string} kw 対象キーワード種別
@@ -266,23 +602,17 @@ export const ruleRequireCommentsOnControlStructures = {
       // else-if 連鎖の else 側を免除するオプションが有効な場合は検査をスキップする
       if (isIgnoredElseIfBranch(node, kw, ignoreElseIf)) return;
 
-      // 直前コメントの有無と blank 設定に基づき、必須コメントの充足状況を検査する
-      const { ok, last } = hasRequiredPreviousComment(src, node, allowBlank);
-      // 必須コメントが存在しない場合は対象キーワードごとに missingComment を報告する
-      if (!ok) {
-        context.report({ node, messageId: 'missingComment', data: { kw } });
-        return;
-      }
+      const preview = runCommentAndPatternChecks(node, kw);
+      // 直前コメントが存在せず missingComment を報告した場合は、節コメント検査を行わずに早期リターンする
+      if (preview === null) return;
 
-      // 取得した直前コメントの本文がロケールポリシーなどのパターンに適合しているか検査する
-      const text = typeof last.value === 'string' ? last.value : null;
-      // コメント本文が requireTagPattern に適合しない場合は tagMismatch を報告する
-      if (!matchesPattern(text, re)) {
-        context.report({
-          node,
-          messageId: 'tagMismatch',
-          data: { kw, pat: options.requireTagPattern || '' },
-        });
+      // 節コメントオプションが有効な場合は if/try の節コメントも検査する
+      if (kw === 'if') {
+        // if 文に対しては then/else 節コメントの検査ロジックを適用し、節ごとのコメント有無を確認する
+        checkIfSectionComments(src, context, node, sectionFlag, sectionLocations);
+      } else if (kw === 'try' && sectionFlag) {
+        // sectionFlag が有効な場合のみ catch/finally の節コメント検査を適用する
+        checkTrySectionComments(src, context, node, sectionLocations);
       }
     }
 

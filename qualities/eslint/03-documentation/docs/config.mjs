@@ -109,12 +109,102 @@ export const documentation = [
           ignoreCatch: false,
           treatChainHeadAs: 'non-dangling',
           fixMode: true,
+          // SnD-20251118 で導入した節コメントオプションは段階的ロールアウトのため既定では無効化する
+          requireSectionComments: false,
+          sectionCommentLocations: ['block-head', 'trailing'],
           // ja 系なら少なくとも1文字の非ASCIIを要求。それ以外は未設定（無効化）が望ましいが、ここでは動的に切替。
           enforceMeta: false,
           requireTagPattern: (() => {
             const envLocale = (process.env.CHECK_LOCALE || '').trim();
             const lang = (envLocale || Intl.DateTimeFormat().resolvedOptions().locale || '').split(/[-_]/)[0] || '';
             return lang.toLowerCase() === 'ja' ? '[^\\x00-\\x7F]' : ''; // 日本語ロケールでは非ASCIIを必須とし、その他はタグ検証を無効化する意図
+          })()
+        }
+      ]
+    }
+  },
+  // SnD-20251118 フェーズ1: 対象ユニットに節コメント（fullOnly + block-head）を段階適用
+  {
+    files: [
+      'qualities/policy/**',
+      'qualities/eslint/plugins/docs/**'
+    ],
+    plugins: { control: controlStructuresPlugin },
+    rules: {
+      'control/require-comments-on-control-structures': [
+        'error',
+        {
+          targets: ['if', 'for', 'while', 'do', 'switch', 'try'],
+          allowBlankLine: false,
+          ignoreElseIf: true,
+          ignoreCatch: false,
+          treatChainHeadAs: 'non-dangling',
+          fixMode: true,
+          // フェーズ1適用: fullOnly + block-head
+          requireSectionComments: 'fullOnly',
+          sectionCommentLocations: ['block-head'],
+          enforceMeta: false,
+          requireTagPattern: (() => {
+            const envLocale = (process.env.CHECK_LOCALE || '').trim();
+            const lang = (envLocale || Intl.DateTimeFormat().resolvedOptions().locale || '').split(/[-_]/)[0] || '';
+            return lang.toLowerCase() === 'ja' ? '[^\\x00-\\x7F]' : '';
+          })()
+        }
+      ]
+    }
+  },
+  // SnD-20251118 フェーズ2-A: scripts/qualities/** と vibecoding/scripts/qualities/** に適用（fullOnly + block-head）
+  {
+    files: [
+      'scripts/qualities/**',
+      'vibecoding/scripts/qualities/**'
+    ],
+    plugins: { control: controlStructuresPlugin },
+    rules: {
+      'control/require-comments-on-control-structures': [
+        'error',
+        {
+          targets: ['if', 'for', 'while', 'do', 'switch', 'try'],
+          allowBlankLine: false,
+          ignoreElseIf: true,
+          ignoreCatch: false,
+          treatChainHeadAs: 'non-dangling',
+          fixMode: true,
+          requireSectionComments: 'fullOnly',
+          sectionCommentLocations: ['block-head'],
+          enforceMeta: false,
+          requireTagPattern: (() => {
+            const envLocale = (process.env.CHECK_LOCALE || '').trim();
+            const lang = (envLocale || Intl.DateTimeFormat().resolvedOptions().locale || '').split(/[-_]/)[0] || '';
+            return lang.toLowerCase() === 'ja' ? '[^\\x00-\\x7F]' : '';
+          })()
+        }
+      ]
+    }
+  },
+  // SnD-20251118 フェーズ2-B: vibecoding/tests/** に適用（fullOnly + block-head）
+  {
+    files: [
+      'vibecoding/tests/**'
+    ],
+    plugins: { control: controlStructuresPlugin },
+    rules: {
+      'control/require-comments-on-control-structures': [
+        'error',
+        {
+          targets: ['if', 'for', 'while', 'do', 'switch', 'try'],
+          allowBlankLine: false,
+          ignoreElseIf: true,
+          ignoreCatch: false,
+          treatChainHeadAs: 'non-dangling',
+          fixMode: true,
+          requireSectionComments: 'fullOnly',
+          sectionCommentLocations: ['block-head'],
+          enforceMeta: false,
+          requireTagPattern: (() => {
+            const envLocale = (process.env.CHECK_LOCALE || '').trim();
+            const lang = (envLocale || Intl.DateTimeFormat().resolvedOptions().locale || '').split(/[-_]/)[0] || '';
+            return lang.toLowerCase() === 'ja' ? '[^\\x00-\\x7F]' : '';
           })()
         }
       ]

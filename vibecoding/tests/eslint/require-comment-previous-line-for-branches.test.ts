@@ -52,6 +52,13 @@ describe('ESLint rule (smoke): require-comment-previous-line-for-branches', () =
         expect(typeof msg.missingComment).toBe('string');
         expect(typeof msg.tagMismatch).toBe('string');
         expect(typeof msg.meta_like_comment).toBe('string');
+        // 節コメント関連メッセージも公開されていることを確認する
+        expect(typeof msg.need_then_block_head).toBe('string');
+        expect(typeof msg.need_then_trailing).toBe('string');
+        expect(typeof msg.need_else_block_head).toBe('string');
+        expect(typeof msg.need_else_trailing).toBe('string');
+        expect(typeof msg.need_catch_block_head).toBe('string');
+        expect(typeof msg.need_finally_block_head).toBe('string');
         // 形式合わせではなく「意図説明」を促す文言が含まれること
         expect(msg.missingComment).toMatch(/なぜその分岐\/ループが必要か/);
         // ja 系では ASCII のみ不可という指針が含まれること

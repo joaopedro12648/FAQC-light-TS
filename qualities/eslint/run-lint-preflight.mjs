@@ -79,6 +79,9 @@ async function runPreflightLint() {
     'blockfmt/block-comment-formatting:off',
     '--rule',
     'control/require-comments-on-control-structures:off',
+    // 実質1行のブロックコメントを複数行にする禁止は preflight では無効化（本番ゲートで検査）
+    '--rule',
+    'blockfmt/prefer-single-line-block-comment:off',
   ];
 
   await runCommand('npx', args);

@@ -69,6 +69,8 @@ export function cleanupDir(dir: string): void {
     // 深い削除
     fs.rmSync(dir, { recursive: true, force: true });
   } catch {
+    // 後始末失敗はテスト継続のため握り潰し、CI 安定性を優先する
+    /* 削除失敗はテスト継続のため無視する（副作用の漏れはない） */
     // noop（CI の一時的失敗を許容）
   }
 }

@@ -31,6 +31,8 @@ context:
 
 ## ステータス運用
 - 状態: Draft → Review → Ready → Implemented
+  - Draft: PRE-COMMON の `<StartAt> <hash>` を SnD の front matter にまだ記録していない設計中の状態（IMPL フェーズへの承認フレーズはここでは出さない）。
+  - Ready: PRE-COMMON 成功ハッシュを `quality_refresh_hash_at_created` に記録済みで、「未確定事項」が空の状態。Ready へ遷移した直後に、IMPL フェーズ移行用の承認フレーズ `PHASE=IMPL 承認: SnD=<path>`（または `PHASE=IMPL APPROVE: SnD=<path>`）をチャットやレビューコメントで必ず1回提示する。
 - Ready 判定: 次を全て満たすこと
   - 「未確定事項」が空である
   - 必須セクション（背景/目的/非目標/設計構想/用語・境界/公開インタフェース/型設計/例外方針/受け入れ条件）が充足

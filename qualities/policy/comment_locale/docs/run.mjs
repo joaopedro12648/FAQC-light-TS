@@ -62,6 +62,7 @@ function getOsLocale() {
   try {
     return Intl.DateTimeFormat().resolvedOptions().locale || '';
   } catch {
+    /* OS ロケール取得失敗時は既定（空文字）へフォールバックする */
     return '';
   }
 }
@@ -124,6 +125,7 @@ function listFilesRecursive(dir) {
     let entries;
     // ファイルシステムの状態が変化しても全体の検査を継続するため、読み取り失敗は局所的に無視する
     try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch {
+      /* ディレクトリ読み取り失敗は対象のみスキップして探索を継続する */
       continue;
     }
 
@@ -394,6 +396,7 @@ function analyzeFileForViolations(fp, strictness) {
   try {
     content = fs.readFileSync(fp, 'utf8');
   } catch {
+    /* 読み取り不能ファイルは検査対象外として扱う（安定性のため継続） */
     return [];
   }
 
@@ -467,6 +470,7 @@ function main() {
 
 // ランナー全体のエントリポイントを保護し、想定外の例外が発生した場合でも原因を明示して終了させる
 try { main(); } catch (e) {
+  /* エントリポイントでの致命的例外は理由を明示して異常終了する */
   const msg = e instanceof Error && typeof e.message === 'string' ? e.message : String(e);
   // ランナー自体の致命的な例外はポリシー失敗として扱い、原因メッセージを明示して異常終了する
   process.stderr.write(`[policy:comment_locale] fatal: ${msg}\n`);

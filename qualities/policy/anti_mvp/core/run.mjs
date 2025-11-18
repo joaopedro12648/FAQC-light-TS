@@ -241,6 +241,7 @@ async function runAll(rootDir) {
     // banned_terms の各違反を 1 件ずつ violations 配列へ集約し、レポート経路を統一する
     for (const v of bannedTermsCheck(rootDir, cfg)) violations.push(v);
   } catch (e) {
+    // ランナー内部例外を違反として扱い、全体の検査を継続する
     violations.push({ ruleId: 'banned_terms', message: `checker crashed: ${e && e.message ? e.message : String(e)}` });
   }
 
@@ -249,6 +250,7 @@ async function runAll(rootDir) {
     // todo_ticket_required の各違反を 1 件ずつ violations 配列へ集約し、レポート経路を統一する
     for (const v of todoTicketRequiredCheck(rootDir, cfg)) violations.push(v);
   } catch (e) {
+    // ランナー内部例外を違反として扱い、後続処理を継続する
     violations.push({ ruleId: 'todo_ticket_required', message: `checker crashed: ${e && e.message ? e.message : String(e)}` });
   }
 

@@ -378,7 +378,7 @@ async function handleTestStep(cmd: string, args: readonly string[]): Promise<boo
         const tmpDir = path.join(process.cwd(), 'tmp');
         // 内製テスト用の一時ディレクトリを準備して専用設定を配置する
         try { mkdirSync(tmpDir, { recursive: true }); } catch {
-          // 一時ディレクトリ作成に失敗した場合は追加テストをスキップして通常経路を継続する
+          // 一時ディレクトリ作成失敗は非致命。内製テストの追加はスキップして通常経路を継続する
         }
 
         const internalCfg = path.join('tmp', 'vitest.internal.config.cjs');
@@ -394,7 +394,7 @@ async function handleTestStep(cmd: string, args: readonly string[]): Promise<boo
         ].join('\n');
         // 一時設定ファイルを書き込む
         try { writeFileSync(internalCfg, cfgContent, 'utf8'); } catch {
-          // 一時設定の書き込みに失敗した場合は既定設定で継続する
+          // 一時設定ファイルの書き込み失敗は非致命。既定設定で継続する
         }
 
         await runCommand('npx', ['vitest', 'run', '--config', internalCfg, '--silent']);
@@ -454,7 +454,7 @@ if (isMain) {
 
   // 明示的エントリポイントとして起動されたときのみ実行（ユニットテストの import では実行しない）
   runQualityGate().catch((e) => {
-    // 例外を標準エラーで明確化して終了コードを非0にする
+    // 実行時例外はメッセージを整形して失敗として扱い、呼び出し側で原因追跡を容易にする
     const msg =
       // 例外の型に応じてユーザー向けメッセージ文字列を抽出する
       e instanceof Error ? e.message : String(e);

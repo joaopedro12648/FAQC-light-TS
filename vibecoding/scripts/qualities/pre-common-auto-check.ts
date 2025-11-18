@@ -213,7 +213,7 @@ function getMaxMtimeMs(filePaths: string[]): number {
       // 数値として妥当かつ最大を更新する場合だけ採用する
       if (Number.isFinite(ms) && ms > maxMs) maxMs = ms;
     } catch {
-      // 無視
+      // 更新時刻取得の失敗は評価に影響しないため無視する（安全側）
     }
   }
 
@@ -311,6 +311,7 @@ function collectUnitSources(): UnitSources[] {
       const eslintDir = path.join(QUALITIES_DIR, 'eslint');
       // bucket 単位で core/types/docs エリアを検出し、各ユニットの入力ディレクトリとして登録する
       if (bucketOrSpecial && bucketOrSpecial !== 'plugins') {
+        // バケット単位の core/types/docs をユニット入力として登録する
         const bucketDir = path.join(eslintDir, bucketOrSpecial);
         addUnitDir('core', path.join(bucketDir, 'core'));
         addUnitDir('types', path.join(bucketDir, 'types'));
@@ -457,7 +458,7 @@ function writeLastUpdated(): string {
   try {
     writeFileEnsured(LAST_UPDATED_FILE, `${startAt}\n`);
   } catch (e) {
-    // 鮮度マーカーの書き出し失敗は致命とし、理由を出力して終了する
+    /* 鮮度マーカーの書き出し失敗は致命とし、理由を出力して終了する */
     process.stderr.write(`pre-common-auto-check: failed to write last_updated: ${String((e as Error)?.message || e)}\n`);
     process.exit(1);
   }
@@ -598,7 +599,7 @@ function runGateCommandsWithKata(_pkgJson: unknown): string[] {
   } finally {
     // 一時ファイルを削除してクリーンアップの確実性を高める
     try { fs.unlinkSync(kataPath); } catch {
-      // 削除失敗は致命でないため後続の後始末のみ継続する
+      // 一時ファイル削除の失敗は致命ではないため継続する
     }
 
     // ディレクトリが空であれば撤去して痕跡を最小化する
@@ -607,7 +608,7 @@ function runGateCommandsWithKata(_pkgJson: unknown): string[] {
       // 空ディレクトリのみ削除して安全にクリーンアップする
       if (remains.length === 0) fs.rmdirSync(kataDir);
     } catch {
-      // 撤去に失敗した場合は影響が小さいため処理を継続する
+      // ディレクトリ撤去に失敗しても致命ではないため継続する
     }
   }
 }
@@ -963,7 +964,7 @@ function main(): void {
 try {
   main();
 } catch (e) {
-  // 実行全体の想定外例外は致命としてログ出力し異常終了する
+  /* 実行全体の想定外例外は致命としてログ出力し異常終了する */
   process.stderr.write(`pre-common-auto-check: fatal error: ${String((e as Error)?.message || e)}\n`);
   process.exit(1);
 }
