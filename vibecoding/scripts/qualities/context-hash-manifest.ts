@@ -3,22 +3,23 @@
  * @file 品質コンテキスト用ファイルマニフェストとユニットダイジェスト生成スクリプト
  * - PRE-COMMON 実行フローから呼び出され、qualities/** → vibecoding/var/contexts/qualities/** の対応を内容ハッシュで記録する
  * - mtime ではなく内容ハッシュに基づく鮮度判定の土台となるシグネチャを生成する
- * - core/types/docs 各ユニットごとに入力ディレクトリ集合を検出し manifest.yaml を出力する
- * - manifest.yaml には unit/algo/generatedAt/files/unitDigest を含めて機械可読にする
- * - unitDigest はファイル一覧と個別ハッシュから導出されるユニット全体の代表ハッシュとする
- * - SnD からは manifest 本体ではなく unitDigest と manifest パスのみを参照する
+ * - core/types/docs 各ユニットごとに入力ディレクトリ集合を検出し、対応する context.md 内に YAML manifest を埋め込む
+ * - YAML manifest には unit/algo/generatedAt/unitDigest/files を含めて機械可読にする
+ * - unitDigest はファイル一覧と個別ハッシュから導出されるユニット全体の代表ハッシュとし、context.md 内の YAML ブロックを hash manifest の単一情報源とする
  * - 値はすべて PRE-COMMON 実行時に本スクリプトから自動生成し、手動編集や別スクリプトによる生成を禁止する
  * - 失敗時は PRE-COMMON 自体の失敗として扱い、理由を標準エラー出力に記録する
+ * - 本スクリプトは単体実行およびモジュールとしてのインポートの両方に対応する（CLI 実行判定は import.meta.url と argv[1] の実パス比較で行う）
  */
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /** リポジトリのプロジェクトルート（cwd） */
 const PROJECT_ROOT = process.cwd();
 /** qualities/** のベースディレクトリ */
 const QUALITIES_DIR = path.join(PROJECT_ROOT, 'qualities');
-/** マニフェスト出力先ベースディレクトリ */
+/** コンテキスト出力先ベースディレクトリ（各ユニットの context.md を格納する） */
 const OUTPUT_BASE = path.join(PROJECT_ROOT, 'vibecoding', 'var', 'contexts', 'qualities');
 
 /** PRE-COMMON で扱うユニット ID 型（命名規約に従う任意のユニット名） */
@@ -26,7 +27,9 @@ export type UnitId = string;
 
 /** 各ユニットに紐づく qualities/** 側のソースディレクトリ群 */
 export interface UnitSources {
+  /** ユニット ID（qualities/** の bucket/unit 名に対応する論理名） */
   unit: UnitId;
+  /** ユニットに対応する qualities/** 側のソースディレクトリ群（絶対パス） */
   srcDirs: string[];
 }
 
@@ -197,13 +200,33 @@ function calcFileHash(absPath: string): string {
 }
 
 /**
- * ユニットごとの manifest.yaml を生成する
- * - 各 manifest には unit/algo/generatedAt/files/unitDigest を含める
+ * ユニットごとの hash manifest 情報（unitDigest とファイル一覧）を表す構造。
+ * PRE-COMMON 実行時の鮮度判定や DoD 判定で、各ユニットがどの入力ファイル集合に基づいているかを追跡するために利用する。
  */
-export function generateContextHashManifests(): void {
-  const units = collectUnitSources();
-  // 対象ユニットが無ければ何もせず静かに戻る
-  if (units.length === 0) return;
+export interface UnitDigestInfo {
+  /** 対象ユニット ID（UnitSources.unit と同一キー） */
+  unit: UnitId;
+  /** 当該ユニット全体を表す代表ハッシュ（unitDigest） */
+  unitDigest: string;
+  /** ハッシュ計算対象となったファイル一覧（リポジトリルートからの相対パスと内容ハッシュ） */
+  files: Array<{
+    /** ハッシュ対象ファイルのリポジトリルートからの相対パス */
+    path: string;
+    /** ファイル内容の sha256 ハッシュ（hex） */
+    hash: string;
+  }>;
+}
+
+/**
+ * ユニットごとに現在の hash manifest 情報（unitDigest とファイル一覧）を計算して返す。
+ * PRE-COMMON からの鮮度判定や DoD 判定の主語として利用する。
+ * @param units ユニット定義（省略時は collectUnitSources() で検出）
+ * @returns ユニット ID / unitDigest / ファイル一覧からなる配列
+ */
+export function computeUnitDigests(units: UnitSources[] = collectUnitSources()): UnitDigestInfo[] {
+  const results: UnitDigestInfo[] = [];
+  // 対象ユニットが無ければ空配列を返す
+  if (units.length === 0) return results;
   // 各ユニットごとに入力ディレクトリをたどり、hash manifest を構築する
   for (const { unit, srcDirs } of units) {
     const allFiles: string[] = [];
@@ -247,31 +270,143 @@ export function generateContextHashManifests(): void {
 
     const unitDigest = digestHash.digest('hex');
 
-    const destDir = path.join(OUTPUT_BASE, unit);
-    const destFile = path.join(destDir, 'manifest.yaml');
-    fs.mkdirSync(destDir, { recursive: true });
+    results.push({
+      unit,
+      unitDigest,
+      files: relAndHash.map((entry) => ({
+        path: entry.rel,
+        hash: entry.hash,
+      })),
+    });
+  }
 
+  return results;
+}
+
+/**
+ * ユニットごとの hash manifest を生成し、派生した unitDigest を各ユニットの context.md 内 YAML ブロックとして記録する。
+ * @returns なし（副作用として context.md を更新する）
+ */
+export function generateContextHashManifests(): void {
+  const units = collectUnitSources();
+  const digests = computeUnitDigests(units);
+  // 対象ユニットが無ければ何もせず静かに戻る
+  if (digests.length === 0) return;
+
+  // 各ユニットの digest 情報を対応する context.md に書き戻し、Quality Context Hash Manifest セクションを最新化する
+  for (const info of digests) {
     const generatedAt = new Date().toISOString();
-    const lines: string[] = [];
-    lines.push(`unit: ${unit}`);
-    lines.push('algo: sha256');
-    lines.push(`generatedAt: "${generatedAt}"`);
-    lines.push(`unitDigest: "${unitDigest}"`);
-    lines.push('files:');
-    // ファイル単位のエントリを列挙し、マニフェストから qualities/** 側の具体的な構成とハッシュをたどれるようにする
-    for (const entry of relAndHash) {
-      // YAML を機械可読に保つため、パスは生文字列、ハッシュは明示的な文字列リテラルとして出力する
-      lines.push(`  - path: ${entry.rel}`);
-      lines.push(`    hash: "${entry.hash}"`);
-    }
+    const unitContextDir = path.join(OUTPUT_BASE, info.unit);
+    const contextMdPath = path.join(unitContextDir, 'context.md');
 
-    fs.writeFileSync(destFile, `${lines.join('\n')}\n`, 'utf8');
+    // context.md が存在する場合は、ユニットの hash manifest を YAML ブロックとして記録する
+    if (fs.existsSync(contextMdPath)) {
+      syncHashManifestMd(contextMdPath, {
+        unit: info.unit,
+        generatedAt,
+        unitDigest: info.unitDigest,
+        files: info.files,
+      });
+    }
   }
 }
 
+/**
+ * context.md に Quality Context Hash Manifest セクションを同期する。
+ * @param contextMdPath 対象 context.md のパス
+ * @param payload hash manifest の内容（ユニット ID / 生成時刻 / unitDigest / ファイル一覧）
+ * @param payload.unit ユニット ID
+ * @param payload.generatedAt manifest 生成時刻（ISO 8601 形式）
+ * @param payload.unitDigest ユニット全体の代表ハッシュ
+ * @param payload.files ファイル一覧（パスとハッシュのペア）
+ */
+function syncHashManifestMd(
+  contextMdPath: string,
+  payload: {
+    unit: string;
+    generatedAt: string;
+    unitDigest: string;
+    files: Array<{ path: string; hash: string }>;
+  },
+): void {
+  let mdText: string;
+  // digest を同期するために context.md を読み込む
+  try {
+    mdText = fs.readFileSync(contextMdPath, 'utf8');
+  } catch {
+    // 読み取り不能な context.md は digest 記録の対象外とし、他ユニットの処理を継続する
+    return;
+  }
+
+  // 読み取り結果が空でない場合のみ digest 記録の更新処理を行う
+  if (!mdText) {
+    return;
+  }
+
+  const headingPattern = /^###\s*Quality Context Hash Manifest\b/m;
+  const sectionLines: string[] = [];
+  sectionLines.push('### Quality Context Hash Manifest');
+  sectionLines.push('');
+  sectionLines.push('```yaml');
+  sectionLines.push(`unit: ${payload.unit}`);
+  sectionLines.push('algo: sha256');
+  sectionLines.push(`generatedAt: "${payload.generatedAt}"`);
+  sectionLines.push(`unitDigest: "${payload.unitDigest}"`);
+  sectionLines.push('files:');
+
+  // 各ファイルのパスとハッシュを YAML リスト形式で追記する
+  for (const file of payload.files) {
+    sectionLines.push(`  - path: ${file.path}`);
+    sectionLines.push(`    hash: "${file.hash}"`);
+  }
+
+  sectionLines.push('```');
+
+  // 既存の Quality Context Hash Manifest セクションの有無を確認し、置換または追記を選択する
+  if (headingPattern.test(mdText)) {
+    // 既存セクションがある場合は、セクション全体を新しい内容で置き換える
+    const lines = mdText.split(/\r?\n/);
+    const startIdx = lines.findIndex((ln) => headingPattern.test(ln));
+    let endIdx = startIdx + 1;
+
+    // 既存セクションの終端（次の同レベル見出し以降）を探索する
+    while (endIdx < lines.length) {
+      const line = lines[endIdx] ?? '';
+
+      // 次の見出しが見つかった場合、その直前までを既存セクションの範囲とする
+      if (/^###\s+/.test(line)) {
+        break;
+      }
+
+      endIdx += 1;
+    }
+
+    lines.splice(startIdx, endIdx - startIdx, ...sectionLines);
+    mdText = lines.join('\n');
+  } else {
+    // 既存セクションが無い場合は末尾に追記する
+    mdText = `${mdText.replace(/\s*$/, '')}\n\n${sectionLines.join('\n')}\n`;
+  }
+
+  fs.writeFileSync(contextMdPath, mdText, 'utf8');
+}
+
 // ESM 環境でも直接実行できるようにエントリポイントを分岐する
-const entryArg = process.argv[1];
-const isDirectRun = typeof entryArg === 'string' && import.meta.url === `file://${entryArg}`;
+const isDirectRun = (() => {
+  const entryArg = process.argv[1];
+  // ESM / tsx ローダ経由の CLI 実行かどうかを判定し、副作用付きのマニフェスト生成を許可するか決める
+  if (typeof entryArg !== 'string') return false;
+  // import.meta.url と argv[1] の実パス比較で CLI 実行かどうかを判定し、例外はライブラリ利用時の誤検知回避のため握りつぶす
+  try {
+    // import.meta.url から得られる実ファイルパスと argv[1] の実パスを比較し、同一ファイルであれば「直接実行」とみなす
+    const fromUrl = fileURLToPath(import.meta.url);
+    const fromArg = path.resolve(entryArg);
+    return path.resolve(fromUrl) === fromArg;
+  } catch {
+    // 変換に失敗した場合は保守的に「直接実行ではない」とみなす（ライブラリ利用時の誤検知を避ける）
+    return false;
+  }
+})();
 // 直接実行された場合のみ CLI としてマニフェスト生成を行い、モジュールインポート時は副作用を避ける
 if (isDirectRun) {
   // CLI 実行時はマニフェスト生成の成否を標準出力/標準エラーに明示し、PRE-COMMON 側で扱いやすいようにする

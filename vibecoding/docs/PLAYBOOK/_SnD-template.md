@@ -7,8 +7,8 @@ author: <your-name>
 owners: [<team-or-person>]
 tags: [<tag1>, <tag2>]
 locale: <ja-JP|en-US|...>
-quality_refresh_hash_at_created: <StartAt> <sha256(StartAt+SECRET)>
-quality_refresh_hash_before_impl: <StartAt> <sha256(StartAt+SECRET)>
+quality_refresh_hash_at_created: "<StartAt> <hash>" # PRE-COMMON (`npm run -s check:pre-common`) が出力する1行をそのまま記録する
+quality_refresh_hash_before_impl: "<StartAt> <hash>" # PRE-IMPL 直前に再実行した PRE-COMMON の出力を記録する
 context:
   Role: "Architect / Implementer / Reviewer"
   inputFiles: [<関連SPECや既存コード>]
@@ -21,11 +21,11 @@ context:
 本SnDの実装（コード生成・編集）を行う際は、以下を単一情報源かつ必達目的として扱うこと：
 
 - ゲート実行の参照設定（ESLint/tsconfig/policy 等）の SoT は `qualities/**`。
-- コード生成時に参照する品質ゲートコンテキストの SoT は `vibecoding/var/contexts/qualities/**/{context.yaml,context.md}`（参照元は `qualities/**`）。品質ゲートコンテキストは高精度な「品質ゲートの地図」であり、コード生成/編集前に内容を把握しないと後続タスクの未達や品質低下、時間やトークンの浪費に直結する。特に事項の品質ゲート通過のネックとなる。また、テスト通過のためにも必要。必ず事前に全体の内容を把握すること。
+- コード生成時に参照する品質ゲートコンテキストの SoT は `vibecoding/var/contexts/qualities/**/context.md`（参照元は常に `qualities/**`）。`context.md` は人間可読な説明と、`### Quality Context Hash Manifest` セクション配下の YAML などの機械可読な情報を兼ね備えた「品質ゲートの地図」であり、コード生成/編集前に内容を把握しないと後続タスクの未達や品質低下、時間やトークンの浪費に直結する。特に事項の品質ゲート通過のネックとなる。また、テスト通過のためにも必要。必ず事前に全体の内容を把握すること。
 - 実装は必ず `npm run check`（品質ゲート）を通過しなければならない。
 - 品質ゲートに抵触する場合は、仕様を曖昧なまま実装しない。SnDを更新し、再承認を経て続行する。
 - SnDはチャット履歴や非永続コンテキストに依存せず、後続モデルが単体で高精度実装できるだけの必要十分な情報を自己完結的に記述する。
-- 用語注: 本SnDで言及する「対象」は実装対象を指し、品質コンテキストの適用対象（評価対象のコードパス）とは別概念である。`unit_path` は SPEC では定義せず、`vibecoding/var/contexts/qualities/**/context.yaml` に記述された値が最長一致規則で適用される（参照元は `qualities/**`）。
+- 用語注: 本SnDで言及する「対象」は実装対象を指し、品質コンテキストの適用対象（評価対象のコードパス）とは別概念である。`unit_path` は SPEC では定義せず、`vibecoding/var/contexts/qualities/**/context.*` に記述された値が最長一致規則で適用される（参照元は `qualities/**`）。hash manifest / unitDigest などの機械可読なシグネチャの SoT は、各ユニットの `context.md` 内 `### Quality Context Hash Manifest` セクション直下の YAML ブロックである。
 
 ---
 
@@ -116,8 +116,8 @@ context:
 
 ## Quality Context Hash Manifest <!-- 品質系 SnD で必須。その他の SnD では任意。 -->
 - 対象ユニット ID（例: `core/types/docs` 等）
-- 各ユニットの hash manifest パス（例: `vibecoding/var/contexts/qualities/docs/manifest.yaml`）
-- 各ユニットの unitDigest 値（manifest から導出された 1 行のダイジェスト）
+- 参照した品質コンテキストの `context.md` パス（例: `vibecoding/var/contexts/qualities/docs/context.md` の `### Quality Context Hash Manifest` セクション）
+- 各ユニットの unitDigest 値（`context.md` 内の YAML manifest に記録されたユニット全体の代表ハッシュ）
 
 ## マイグレーション / ロールアウト計画
 - データ / API / 設定の移行手順
@@ -149,7 +149,7 @@ context:
 - 例外・エラー方針: <該当すれば>
 - 影響範囲 / 非目標の変化: <該当すれば>
 - テスト / 受け入れ条件の更新: <該当すれば>
-- 参照品質コンテキスト: <vibecoding/var/contexts/qualities/.../context.yaml>
+- 参照品質コンテキスト: <vibecoding/var/contexts/qualities/.../context.md>
 - 未確定事項: <残タスク・要判断>
 
 ### 記録

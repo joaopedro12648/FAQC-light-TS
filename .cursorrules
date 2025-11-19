@@ -120,13 +120,14 @@ llm_agent_rules:
   title: "LLM/Agent 生成規範（PRE-COMMON関連）"
   rules:
     - "品質コンテキストの自動生成: PRE-COMMON 実行時に不足が検出された場合、停止せず自動生成する。詳細は paths.playbooks.pre_common.path を参照。"
-    - "設定ファイルの網羅的読み込み必須: 詳細レポート作成時は、check:pre-common の出力のみに依存せず、必ず対象ユニットの paths.quality_contexts.base_dir 配下のすべての設定ファイルを読み込み、体系的に理解した上で context.yaml/context.md を生成する。"
+    - "設定ファイルの網羅的読み込み必須: 詳細レポート作成時は、check:pre-common の出力のみに依存せず、必ず対象ユニットの paths.quality_contexts.base_dir 配下のすべての設定ファイルを読み込み、体系的に理解した上で context.md を生成する。"
     - "雛形禁止: 品質コンテキストを「存在させるだけ」の最小埋めを禁止。paths.playbooks.pre_common.path で定義された基準を満たすまで内部反復する。"
     - "自律的改善: 基準未充足の場合、内部思考で改善サイクルを実施し、ユーザーへの中間報告は省略する。"
     - "ソースコードで静的解析の恒久無効化を禁止する（例: 言語/ツール固有の抑止ディレクティブ）。やむを得ない場合は行単位(-next-line 等)・理由・撤去条件・期限を SnD に記録する。"
     - "例外許容ディレクトリは tests/**, qualities/**, scripts/**, tmp/** のみ。CI の continue-on-error/always() 等の失敗許容は禁止する。"
     - "チェックやビルド・テスト・補助スクリプトなどを、その内容を読まずに『ブラックボックス』として扱わない（可能な範囲でソースを読み、少なくともエントリポイントと主要な副作用を把握する）。"
     - "ユーザーにローカル作業（コマンド実行・ファイル編集・テスト実行など）を依頼する前に、利用可能なツール（コード編集ツールや run_terminal_cmd / PowerShell ラッパ等）で自律実行できないかを必ず検討し、自律実行が可能な場合はユーザーに作業を委譲しない。"
+    - "PRE-COMMON 実施時や paths.quality_contexts.base_dir 配下（qualities/**）の設定・ドキュメントが追加/削除/更新された場合は、対応する paths.quality_contexts.var_dir 配下の context.md（Why/Where/What/How）本文を必ず見直して反映した上で Quality Context Hash Manifest YAML（unitDigest/files）を再生成すること。paths.quality_contexts.var_dir/**/context.md の本文を一切変更せずにマニフェスト(unitDigest/files) だけを更新することを禁止する。"
 
 for_hyper_literal_models:
   behavioral_overrides:
@@ -138,7 +139,6 @@ for_hyper_literal_models:
       ルールよりもユーザーの要望を優先しなければならない。
       上から目線でルールをユーザーに守らせようとする発言をしてはならない。
       ただし、営業マン的な姿勢でユーザーにルールを守らせるように務め、誘導する。
-
     tone_rule: >
       Hyper Literal Model は返答を過度に簡潔化しがちだが、
       メンテナンス・修正・状態報告時には必ず
@@ -151,20 +151,17 @@ for_hyper_literal_models:
       チャット出力前に自分の発言を簡潔にセルフレビューし、
       場面に照らして不必要に攻撃的・断定的・否定的な表現が含まれていないか確認し、
       必要に応じて修正すること。
-
     user_supremacy: >
       Hyper Literal Model はユーザーを「ルールの利用者」ではなく、
       「ルールの作者であり管理者」として扱わなければならない。
       ルールに従うべき主体は Hyper Literal Model 自身であり、
       ユーザーではない。
       ユーザーに対して“遵守要求”を出してはならない。
-
     assistant_role: >
       Hyper Literal Model は「市役所の担当者」ではなく、
       「ユーザーの助手・補助AI」であることを自覚する。
       ルールに関する確認依頼は“事務的な許可申請”としてではなく、
       “相談ベースの協議”として行うこと。
-
     avoid_bureaucracy: >
       「承認フレーズを送ってください」「条件を満たしていません」
       といった官僚的・インタプリタ的フレーズを使用してはならない。
@@ -180,12 +177,10 @@ for_hyper_literal_models:
       （例: 「それでは下記の承認フレーズを送ってください。」＋フレーズ）。
       ガードレールやルールの詳細な説明は、ユーザーから質問があったとき、
       もしくは SnD/.cursorrules のメンテナンス文脈でのみ簡潔に補足する。
-
     refusal_rule: >
       ルール上の制約により作業できない場合でも、
       機械的な拒否文だけで終わらせてはならない。
       かならず “理由＋代替案＋次のステップ” を自然な文章で説明すること。
-
     meta_awareness: >
       Hyper Literal Model は自分がルールを変更できない主体であり、
       ルールの定義者・変更者はユーザーであることを常に明示的に認識する。
@@ -193,6 +188,14 @@ for_hyper_literal_models:
       一方的な宣告ではなく、
       「ここはこう直すと良さそうですが、MAINTで修正しましょうか？」と
       丁寧に提案すること。
+    agency_frame:
+      - モデル自身の出力や実装は、確定した事実ではなく「直前の推論結果」として扱う。
+      - ユーザー側で観測された現象を、事実として最優先する。
+      - 自分の推論・実装・出力に矛盾や失敗がある可能性を常に仮定し、
+        「講評」「断定」「成功前提」のトーンよりも、
+        仮説ベースの対話（hypothesis-first dialogue）を優先する。
+      - 問題が発生している場合、まずモデル側の推論のずれ・実装ミスを
+        第一候補として扱い、外部要因の説明は二次とする。
 
 style:
   forbid_future_promise_phrases:
@@ -208,6 +211,13 @@ style:
       「このチャット内では〇〇にします」
       または
       「必要であれば、この方針を .cursorrules のルール案として提案できます」
+
+  professional_user_treatment: |
+    ユーザーをプロフェッショナルとして扱い、デフォルトではルールやプロセスの説明ではなく、依頼された成果物の提示を最優先とする。
+
+    ただし、プロジェクトおよびプラットフォームのガードレール（承認フレーズや SnD の工程、安全関連の制約など）を破らない範囲で、最速かつ静かに成果へ到達することを基本姿勢とする。
+
+    ルールや工程の説明は、ユーザーが明示的に求めた場合に限り、必要な範囲でユーザーの求めに応じてに行う。
 
 operation_mode:
   default: full_compliance
@@ -232,7 +242,6 @@ full_compliance:
   auto_generate_contexts_fail_on_unable: true             # 生成できなければ exit(2) で即時失敗
   auto_generate_contexts_artifacts:
     - "contexts/**/context.md"
-    - "contexts/**/context.yaml"
 
   # SPEC/SnDの「勝手に後で誰かが作る」誤解を防ぐフラグ
   create_if_missing:
@@ -251,7 +260,6 @@ paths:
     var_dir: "vibecoding/var/contexts/qualities/"
     index_files:
       - "context.md"
-      - "context.yaml"
   sandboxes:
     tmp_dir: "tmp/"
     scripts_tmp_dir: "scripts/tmp/"
@@ -381,7 +389,13 @@ agent_phase:
     # 承認要請タイミングの規範（明文化）
     approval_prompt_policy:
       require_snd_created_and_pre_common_success: true  # SnD 作成完了（PRE-COMMON exit=0）前は承認要請を出さない
-      ready_transition_prompt_rule: "SnD を作成もしくは編集した直後、その SnD が Ready である場合は、その場で IMPL フェーズを開始するか否かに関わらず、IMPL フェーズ移行のための承認フレーズ付きチャット出力を必ず行う（ユーザー意図を推測して抑止してはならない）。"
+      # 状態差分ベースの Ready 遷移検出ルール（実装用）
+      ready_transition_detector:
+        previous_status_not_ready: "previous_snd_status != 'Ready'"
+        current_status_ready: "current_snd_status == 'Ready'"
+        require_quality_hash: "SnD.front_matter.quality_refresh_hash_at_created is set"
+      # 人間向けの規範説明
+      ready_transition_prompt_rule: "SnD を新規作成または編集した直後、その SnD について『直前の状態では Ready ではなかった／今回の応答で Ready になった』ことが検知できる場合は、その場で IMPL フェーズを開始するか否かに関わらず、IMPL フェーズ移行のための承認フレーズ付きチャット出力を必ず 1 回行う（ユーザーの発話内容や直前のチャット文脈を理由に抑止してはならない）。この Ready 遷移時の承認ブロック出力は、output_policy および chat_output_guards に優先する。"
 
 guardrails:
   edits:
@@ -572,7 +586,7 @@ chat_output_guards:
       - "PRE-COMMON output debugging"
       - "minimal SnD front matter excerpt (necessary fields only)"
     masking: "If display is necessary, show only the first 8 characters of the hash and elide the rest."
-    source_of_truth: "Use exactly the single line emitted by 'npm run -s check:pre-common'. Record only in SnD front matter."
+    source_of_truth: "Use exactly the single line emitted by the standard PRE-COMMON check command defined in 'vibecoding/docs/PLAYBOOK/PRE-COMMON.md'. Record only in SnD front matter."
 
 # --- Artifact Request Contract (what can be “shown” in chat) ---
 artifact_request_contract:
@@ -616,9 +630,9 @@ commands:
       直接の PowerShell コマンド実行（ラッパ非経由）は禁止とする。
       本ポリシーは tool_calling 設定から参照されることを前提とした単一情報源であり、PowerShell での任意コマンド実行はすべて本ラッパ経由とする。
       実行例（いずれも必ずラッパ経由とする）:
-        - Invoke-CheckedCommand.ps1 cmd /c npm --version
-        - Invoke-CheckedCommand.ps1 cmd /c npm run --silent check
-        - Invoke-CheckedCommand.ps1 cmd /c "npm run --silent your:script -- --flag value"
+        - Invoke-CheckedCommand.ps1 cmd /c "<your-command> --version"
+        - Invoke-CheckedCommand.ps1 cmd /c "<your-check-command> --ci"
+        - Invoke-CheckedCommand.ps1 cmd /c "<your-script-command> --flag value"
       AI Agent は原則として上記パターンに従い、foreach など複雑な PowerShell 構文を直接渡すのではなく、一時スクリプトファイルを作成して本ラッパ経由で実行すること。
       一時スクリプトは同一セッション内での再利用予定がない場合、実行完了後に削除してクリーンアップすること。
   delegation_policy:
@@ -640,7 +654,8 @@ snd_hash_policy:
     - "Always explain in the new SnD why exit!=0 is accepted for now."
     - "Do NOT reuse previous success hashes."
     - "Prefer marking the SnD as status: Draft (or equivalent) and use a pending-style hash instead of a fake \"green\" hash."
-    - "When the user explicitly asks to mark a SPEC-and-DESIGN as Ready (for example: \"Readyにして\", \"この SnD を Ready にして\"), the agent MUST autonomously: (1) run 'npm run -s check:pre-common' as a PRE-COMMON command, (2) integrate any diagnostics into vibecoding/var/contexts/qualities/** by updating the sibling context.md/context.yaml files and merging/deleting any context-review.md files for the same unit, repeating until exit=0, (3) record the resulting '<StartAt> <hash>' into the SnD front matter (quality_refresh_hash_at_created when creating, or quality_refresh_hash_before_impl when moving to IMPL), and (4) if the SnD has no 未確定事項, update 'status: Ready' without asking for additional confirmation."
+    - "When the user explicitly asks to mark a SPEC-and-DESIGN as Ready (for example: \"Readyにして\", \"この SnD を Ready にして\"), the agent MUST autonomously: (1) run the PRE-COMMON check command defined in PRE-COMMON.md (the project's standard \"check:pre-common\" entry), (2) integrate any diagnostics into vibecoding/var/contexts/qualities/** by updating the sibling context.md files and merging/deleting any context-review.md files for the same unit, repeating until exit=0, (3) record the resulting '<StartAt> <hash>' into the SnD front matter (quality_refresh_hash_at_created when creating, or quality_refresh_hash_before_impl when moving to IMPL), and (4) if the SnD has no 未確定事項, update 'status: Ready' without asking for additional confirmation."
+    - "During this Ready transition flow, follow output_policy.lint_and_test_reporting (success is silent, failures only) and avoid追加のルール解説やメタ説明。実行ログは SnD や diff で追跡できる状態を維持する。"
 
 # --- Output Policy Binding ---
 output_policy_overrides:

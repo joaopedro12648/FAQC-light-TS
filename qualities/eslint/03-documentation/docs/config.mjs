@@ -29,7 +29,7 @@ import { typedefPlugin } from '../../plugins/types/require-options-typedef.js';
  * @returns Flat Config 配列
  */
 export const documentation = [
-  // TS/TSX の基本 JSDoc 要件
+  // TS/TSX の基本 JSDoc 要件（interface/type/enum/export const を一括でカバー）
   {
     files: FILES_ALL_CODE,
     plugins: { jsdoc },
@@ -46,10 +46,15 @@ export const documentation = [
             FunctionExpression: false
           },
           contexts: [
+            // 型レベルの宣言（interface / type alias / enum メンバー）
             'TSInterfaceDeclaration',
             'TSTypeAliasDeclaration',
-            // すべての enum メンバーに JSDoc を要求する
-            'TSEnumDeclaration > TSEnumMember'
+            'TSEnumDeclaration > TSEnumMember',
+            // interface メンバ（プロパティ / メソッド）にも JSDoc を要求する
+            'TSInterfaceDeclaration TSPropertySignature',
+            'TSInterfaceDeclaration TSMethodSignature',
+            // エクスポートされた const（JSDoc は export 文の直上に付与する）
+            'ExportNamedDeclaration[declaration.type="VariableDeclaration"]'
           ]
         }
       ],
@@ -225,31 +230,6 @@ export const documentation = [
     files: FILES_ALL_CODE,
     plugins: { blockfmt: blockCommentFormattingPlugin },
     rules: { 'blockfmt/require-describe-comment': 'error' }
-  },
-  // プロダクトコードのトップレベル const に JSDoc を要求（src/** のみ）
-  {
-    files: FILES_ALL_CODE,
-    plugins: { jsdoc },
-    rules: {
-      'jsdoc/require-jsdoc': [
-        'error',
-        {
-          publicOnly: false,
-          require: {
-            FunctionDeclaration: true,
-            MethodDefinition: true,
-            ClassDeclaration: true,
-            ArrowFunctionExpression: false,
-            FunctionExpression: false
-          },
-          contexts: [
-            // エクスポートされた const（JSDoc は export 文の直上に付与する）
-            'ExportNamedDeclaration[declaration.type="VariableDeclaration"]'
-          ]
-        }
-      ]
-    },
-    settings: { jsdoc: { mode: 'typescript' } }
   },
   // リポジトリ全体に Options typedef を適用（一般 JS/MJS 対象、グローバル ignores は eslint.config.mjs の IGNORES に従う）
   {

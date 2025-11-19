@@ -22,8 +22,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { stepDefs } from '../../../qualities/check-steps.ts';
-import type { UnitSources } from './context-hash-manifest.ts';
-import { collectUnitSources, generateContextHashManifests } from './context-hash-manifest.ts';
+import {
+  collectUnitSources,
+  computeUnitDigests,
+  type UnitDigestInfo,
+  type UnitSources,
+} from './context-hash-manifest.ts';
 
 /** リポジトリのプロジェクトルート（cwd） */
 const PROJECT_ROOT = process.cwd();
@@ -185,77 +189,97 @@ function listFilesRecursive(dir: string): string[] {
   return files;
 }
 
-/**
- * ファイル群の mtime の最大値を求める。
- * @param filePaths ファイルパス配列
- * @returns 最大小数ミリ秒
- */
-function getMaxMtimeMs(filePaths: string[]): number {
-  let maxMs = 0;
-  // 対象ファイルの更新時刻を走査して最大値を算出する
-  for (const fp of filePaths) {
-    // ファイルの stat を取得して更新時刻を評価する
-    try {
-      const st = fs.statSync(fp);
-      const ms = st.mtimeMs ?? new Date(st.mtime).getTime();
-      // 数値として妥当かつ最大を更新する場合だけ採用する
-      if (Number.isFinite(ms) && ms > maxMs) maxMs = ms;
-    } catch {
-      // 更新時刻取得の失敗は評価に影響しないため無視する（安全側）
-    }
-  }
+// NOTE: mtime ベースの鮮度判定は unitDigest ベースへ移行済みのため、過去実装の getMaxMtimeMs は削除した。
 
-  return maxMs;
+/**
+ * ユニットごとの src ラベルと context.md パスを生成する。
+ * @param unit ユニット ID
+ * @param srcDirs 対象 qualities/** ディレクトリ群
+ * @returns src 表示ラベル / context.md パス / 出力用パス
+ */
+function buildMappingLabel(unit: string, srcDirs: string[]): { srcLabel: string; contextMdPath: string; destOut: string } {
+  const destDir = path.join(OUTPUT_BASE, unit);
+  const contextMdPath = path.join(destDir, 'context.md');
+  const srcOutBases = srcDirs.map((d) => normalizePathForOutput(path.relative(PROJECT_ROOT, d)));
+  const srcLabel = srcOutBases.length > 0 ? `qualities/* (${unit}): ${srcOutBases.join(', ')}` : `qualities/* (${unit})`;
+  const destOut = normalizePathForOutput(path.relative(PROJECT_ROOT, contextMdPath));
+  return { srcLabel, contextMdPath, destOut };
 }
 
 /**
- * context 再生成が必要な qualities ディレクトリを算出する。
- * @param unitSources ユニットごとの qualities/** ソースディレクトリ群
- * @returns 更新が必要な src->dest の対応表
+ * 単一ユニットの context.md が unitDigest ベースで更新不要かどうかを判定する。
+ * @param contextMdPath 対象 context.md のパス
+ * @param digestInfo 現在の hash manifest 情報（null の場合は未整備扱い）
+ * @returns 更新が必要なら true、最新なら false
  */
-function computeNeededMappings(unitSources: UnitSources[]): Array<{ srcDir: string; destDir: string }> {
+function shouldUpdateContextForUnit(contextMdPath: string, digestInfo: UnitDigestInfo | undefined): boolean {
+  // context.md が存在しない、または digest 情報自体が無い場合は hash manifest が未整備のため更新が必要
+  if (!fs.existsSync(contextMdPath) || !digestInfo) {
+    return true;
+  }
+
+  const text = readFileIfExists(contextMdPath);
+  // context.md が空や読み取り不能な場合も、鏡像が未整備として再生成を要求する
+  if (!text) return true;
+
+  const digestMatch = text.match(/###\s*Quality Context Hash Manifest[\s\S]*?```yaml([\s\S]*?)```/m);
+  const yamlBlock = digestMatch?.[1] ?? '';
+  const recordedDigestMatch = yamlBlock.match(/^\s*unitDigest:\s*"?(?<digest>[0-9a-fA-F]+)"?\s*$/m);
+  const recordedDigest = recordedDigestMatch?.groups?.digest;
+
+  // unitDigest 欄の存在と形式だけを切り出して判定し、内容バージョン識別が可能かどうかを確認する
+  const hasValidDigest = hasValidUnitDigest(digestMatch, recordedDigest);
+  // unitDigest が不正な場合はそのユニットの鏡像全体を再生成して品質コンテキストを最新化する
+  if (!hasValidDigest) return true;
+
+  // qualities/** 側から再計算した digest と context.md 内の unitDigest が一致しない場合は再生成が必要
+  if (recordedDigest !== digestInfo.unitDigest) return true;
+
+  return false;
+}
+
+/**
+ * manifest セクションと unitDigest の組が「形式的に有効かどうか」を判定する。
+ * @param digestMatch Quality Context Hash Manifest セクションのマッチ結果
+ * @param recordedDigest unitDigest フィールドに記録された文字列
+ * @returns 有効な unitDigest が存在する場合は true、それ以外は false
+ */
+function hasValidUnitDigest(digestMatch: RegExpMatchArray | null, recordedDigest: string | undefined): boolean {
+  // manifest セクションが存在しない場合は hash manifest 自体が欠落しているとみなす
+  if (!digestMatch) return false;
+  // unitDigest フィールドが欠落している場合は内容バージョンを一意に識別できない
+  if (!recordedDigest) return false;
+  // unitDigest が 16 進文字列以外の場合は破損として扱い再生成の対象とする
+  if (!/^[0-9a-fA-F]+$/.test(recordedDigest)) return false;
+  return true;
+}
+
+/**
+ * context 再生成が必要なユニットを unitDigest ベースで算出する。
+ * @param unitSources ユニットごとの qualities/** ソースディレクトリ群
+ * @param digests 現在の hash manifest 情報
+ * @returns 更新が必要な src->dest の対応表（context.md ファイルパスを含む）
+ */
+function computeNeededMappingsByDigest(unitSources: UnitSources[], digests: UnitDigestInfo[]): Array<{ srcDir: string; destDir: string }> {
   const mappings: Array<{ srcDir: string; destDir: string }> = [];
-  // 各ユニットごとに関連する qualities/** 側のファイル群を集約し、対応する var/contexts/qualities/<unit>/ を 1 ユニットとして評価する
-  // ユニット定義ごとに対応する qualities/** 入力エリアを走査し、鏡像の更新要否を評価する
-  // 各ユニット定義に対し同じ処理を適用し、ユニットごとの鏡像更新判定を一括で行うための反復処理
-  unitSources.forEach(({ unit, srcDirs }) => {
-    const allFiles: string[] = [];
-    // ユニットごとの入力エリア全体で gate 設定やポリシー実装の更新時刻を集約し、鏡像の鮮度判定に使うために走査する
-    for (const srcDir of srcDirs) {
-      // qualities/** 側の各ディレクトリに対して設定変更がないかを再帰的に確認し、ユニット単位の更新判定に反映する
-      allFiles.push(...listFilesRecursive(srcDir));
-    }
+  const digestByUnit = new Map<string, UnitDigestInfo>();
+  // 各ユニットの unitDigest 情報をマップ化し、後続のループで高速に参照できるようにする
+  digests.forEach((d) => {
+    digestByUnit.set(d.unit, d);
+  });
 
-    const compareFiles = allFiles.filter((f) => {
-      const b = path.basename(f).toLowerCase();
-      return !(b === 'context.yaml' || b === 'context.md');
-    });
-    const maxMtime = getMaxMtimeMs(compareFiles);
+  // 各ユニットごとに hash manifest と context.md の unitDigest の整合性を確認し、更新が必要な鏡像のみを GATE 出力へ載せる
+  for (const { unit, srcDirs } of unitSources) {
+    const digestInfo = digestByUnit.get(unit);
+    const { srcLabel, contextMdPath, destOut } = buildMappingLabel(unit, srcDirs);
 
-    const destDir = path.join(OUTPUT_BASE, unit);
-    const destYaml = path.join(destDir, 'context.yaml');
-    const destMd = path.join(destDir, 'context.md');
-    const requiresUpdate = (targetPath: string): boolean => {
-      // 出力が存在しないか古い場合に再生成を要求する
-      try {
-        const st = fs.statSync(targetPath);
-        const ms = st.mtimeMs ?? new Date(st.mtime).getTime();
-        return !(Number.isFinite(ms) && ms > maxMtime);
-      } catch {
-        // 比較対象の取得に失敗した場合は更新が必要と判断する
-        return true;
-      }
-    };
-
-    // YAML または MD のいずれかが不足/古い場合のみ更新対象として対応表へ追加する
-    if (requiresUpdate(destYaml) || requiresUpdate(destMd)) {
-      const srcOutBases = srcDirs.map((d) => normalizePathForOutput(path.relative(PROJECT_ROOT, d)));
-      const srcLabel = srcOutBases.length > 0 ? `qualities/* (${unit}): ${srcOutBases.join(', ')}` : `qualities/* (${unit})`;
-      const destOut = normalizePathForOutput(path.relative(PROJECT_ROOT, destDir));
-      // ユニット単位の src=>dest 対応を1件として列挙し、PRE-COMMON 実行時の GATE 出力に反映する
+    // 各ユニット単位で context.md の内容が現在の qualities/** に対応しているかを判定し、更新が必要なものだけを mappings に追加する
+    const needsUpdate = shouldUpdateContextForUnit(contextMdPath, digestInfo);
+    // 再生成が必要なユニットのみを mappings に追加し、利用者へ明示的に更新対象を伝える
+    if (needsUpdate) {
       mappings.push({ srcDir: srcLabel, destDir: destOut });
     }
-  });
+  }
 
   return mappings;
 }
@@ -290,43 +314,107 @@ function writeLastUpdated(): string {
 }
 
 /**
- * ルーブリックチェッカーを実行する。違反がある場合に true を返す。
- * @returns ルーブリック違反が検出されたか
+ * ルーブリックチェックの結果を表す構造体。
+ * exit code と標準出力・標準エラーから要約された代表行を保持し、PRE-COMMON 実行結果の判定とログ出力に利用する。
  */
-function checkRubric(): boolean {
+interface RubricResult {
+  /** ルーブリック違反が 1 件以上存在する場合は true */
+  hasViolation: boolean;
+  /** PRE-COMMON 出力へ載せる要約行（代表メッセージ）の配列 */
+  summaryLines: string[];
+}
+
+/** rubric 要約として PRE-COMMON 出力へ載せる最大行数 */
+const RUBRIC_SUMMARY_MAX_LINES = 10;
+
+/**
+ * rubric 実行結果から RubricResult を構築する（status が未定義のケースは null を返す）。
+ * @param status プロセス終了コード
+ * @param stdout 標準出力
+ * @param stderr 標準エラー
+ * @returns RubricResult または判定不能時は null
+ */
+function buildRubricResultFromProcess(status: number | null, stdout: string, stderr: string): RubricResult | null {
+  // プロセス終了コードが取得できない場合は判定不能扱いとし、呼び出し側へ null を返す
+  if (status === null) return null;
+  // 正常終了時は違反なしとして扱い、要約行を持たない結果を返す
+  if (status === 0) return { hasViolation: false, summaryLines: [] };
+
+  const summary = formatCap((stderr || stdout || '').trim(), DEFAULT_FORMAT_CAP);
+  const firstLines = summary
+    .split('\n')
+    .slice(0, RUBRIC_SUMMARY_MAX_LINES)
+    .map((ln) => `[RUBRIC] ${ln}`);
+
+  return { hasViolation: true, summaryLines: firstLines };
+}
+
+/**
+ * Node の公式ローダ（tsx ローダ）経由で rubric を実行し、結果を RubricResult として返す。
+ * @param rubricChecker 実行対象スクリプトパス
+ * @param tsxLoaderArg tsx ローダの URL
+ * @returns 判定結果。プロセス起動失敗時などは null
+ */
+function runRubricWithLoader(rubricChecker: string, tsxLoaderArg: string): RubricResult | null {
+  const res = spawnSync(process.execPath, ['--import', tsxLoaderArg, rubricChecker], { stdio: 'pipe', encoding: 'utf8' });
+  return buildRubricResultFromProcess(
+    typeof res.status === 'number' ? res.status : null,
+    res.stdout || '',
+    res.stderr || '',
+  );
+}
+
+/**
+ * npx tsx 経由で rubric を実行し、結果を RubricResult として返す。
+ * @param rubricChecker 実行対象スクリプトパス
+ * @returns 判定結果。プロセス起動失敗時などは null
+ */
+function runRubricWithNpx(rubricChecker: string): RubricResult | null {
+  const res = spawnSync('npx', ['-y', 'tsx', rubricChecker], { stdio: 'pipe', encoding: 'utf8', shell: true });
+  return buildRubricResultFromProcess(
+    typeof res.status === 'number' ? res.status : null,
+    res.stdout || '',
+    res.stderr || '',
+  );
+}
+
+/**
+ * ルーブリックチェッカーを実行する。違反がある場合に true と要約行を返す。
+ * @returns ルーブリック違反の有無と要約
+ */
+function checkRubric(): RubricResult {
   const rubricChecker = path.join(PROJECT_ROOT, 'vibecoding', 'scripts', 'qualities', 'context-md-rubric.ts');
   // チェッカー実体が無い場合は非対応としてスキップ（即時に非違反扱いで戻る）
-  if (!fs.existsSync(rubricChecker)) return false;
+  if (!fs.existsSync(rubricChecker)) return { hasViolation: false, summaryLines: [] };
   const scriptDir = path.dirname(fileURLToPath(import.meta.url));
   const repoRootFromScript = path.resolve(scriptDir, '../../..');
   const tsxLoaderFsPath = path.join(repoRootFromScript, 'node_modules', 'tsx', 'dist', 'loader.mjs');
-  // Windows の Node >=20 では file:// URL を優先
-  // ローダ存在時のみ公式ローダのURLを用いる
+  // Windows の Node >=20 では file:// URL を優先（ローダ存在時のみ公式ローダのURLを用いる）
   const tsxLoaderArg = fs.existsSync(tsxLoaderFsPath) ? pathToFileURL(tsxLoaderFsPath).href : null /* ローダの有無で選択（存在時はURL、無ければnull） */; // ローダがあればURLに変換、無ければ null
+  let result: RubricResult | null = null;
 
-  // 公式ローダが利用可能なら rubric を直接実行し、成功なら即時に準拠として戻る
+  // 公式ローダが利用可能な場合は、そちらを優先して rubric を実行し、結果が得られた場合はそのまま返す
   if (tsxLoaderArg) {
-
-    // ローダ経由の rubric 実行結果を評価して準拠を判定する
-    const res1 = spawnSync(process.execPath, ['--import', tsxLoaderArg, rubricChecker], { stdio: 'pipe', encoding: 'utf8' });
-    // 公式ローダ経由で rubric が成功した場合は非違反として即時に成功を返す
-    if (typeof res1.status === 'number' && res1.status === 0) return false;
+    // 公式ローダ経由で rubric を実行し、成功・失敗を含めた結果を収集する
+    result = runRubricWithLoader(rubricChecker, tsxLoaderArg);
   }
 
-  // 試行2: npx -y tsx rubric.ts（クロスプラットフォーム代替）
-  const res2 = spawnSync('npx', ['-y', 'tsx', rubricChecker], { stdio: 'pipe', encoding: 'utf8', shell: true });
-  return !(typeof res2.status === 'number' && res2.status === 0);
+  // 公式ローダ経由で結果が得られなかった場合にのみ npx tsx をフォールバックとして使用する
+  result ||= runRubricWithNpx(rubricChecker);
+
+  // 両方の経路で判定不能だった場合のみ「違反なし」とみなす（それ以外は得られた結果を優先する）
+  return result ?? { hasViolation: false, summaryLines: [] };
 }
 
 /**
  * ゲートアクションを出力し適切に終了する。
  * @param startAt 開始時刻（ISO）
  * @param mappings 必要な src->dest の対応
- * @param rubricViolation ルーブリック違反の有無
+ * @param rubric 結果（違反有無と要約）
  */
-function outputAndExit(startAt: string, mappings: Array<{ srcDir: string; destDir: string }>, rubricViolation: boolean): void {
+function outputAndExit(startAt: string, mappings: Array<{ srcDir: string; destDir: string }>, rubric: RubricResult): void {
   // 再生成の必要も違反も無ければハッシュを出力して成功終了する
-  if (mappings.length === 0 && !rubricViolation) {
+  if (mappings.length === 0 && !rubric.hasViolation) {
 
     // ミラー生成も違反も無い状態のため、開始時刻から導出したハッシュを出力して終了する
     const hash = crypto.createHash('sha256').update(startAt + SECRET).digest('hex');
@@ -338,18 +426,28 @@ function outputAndExit(startAt: string, mappings: Array<{ srcDir: string; destDi
   const total = mappings.length;
   process.stdout.write(`PRE-COMMON: ${total} unit(s) require mirror update or rubric fix.\n`);
   process.stdout.write(`Next steps:\n`);
-  process.stdout.write(`  1) Create/refresh mirrors at vibecoding/var/contexts/qualities/** (context.yaml/context.md)\n`);
+  process.stdout.write(
+    // PRE-COMMON 自体は context.md を変更しないため、本文(Why/Where/What/How等)と YAML manifest の両方を利用者側で更新してから再実行してもらう
+    '  1) Update vibecoding/var/contexts/qualities/**/context.md (Why/Where/What/How) AND refresh its "Quality Context Hash Manifest" YAML (unitDigest/files) using context-hash-manifest.ts or an equivalent documented flow.\n',
+  );
   process.stdout.write(`  2) Run rubric: npx -y tsx vibecoding/scripts/qualities/context-md-rubric.ts\n`);
   process.stdout.write(`  3) Re-run: npm run -s check:pre-common  # success prints "<StartAt> <hash>"\n`);
   process.stdout.write(`(diagnostics: tmp/pre-common-diagnostics.md when generated)\n`);
 
-  // 必要なミラー生成・更新対象を列挙して作業指示を明確化する
+  // rubric による違反がある場合は、要約行を PRE-COMMON 出力にも含めて修正対象の手がかりを提示する
+  if (rubric.hasViolation && rubric.summaryLines.length > 0) {
+    rubric.summaryLines.forEach((ln) => {
+      process.stdout.write(`${ln}\n`);
+    });
+  }
+
+  // 必要なミラー生成・更新対象を列挙して作業指示を明確化する（どの context.md を更新するかをファイル単位で示す）
   for (const m of mappings) {
     process.stdout.write(`[GATE] ${m.srcDir} => ${m.destDir}\n`);
   }
 
-  // ルーブリック違反のみ検出された場合にも同期対象の提示を行う
-  if (rubricViolation && mappings.length === 0) {
+  // ルーブリック違反のみ検出された場合にも同期対象の提示を行う（少なくとも 1 つは context 更新が必要であることを明示する）
+  if (rubric.hasViolation && mappings.length === 0) {
 
     // ルーブリックの不足に対する修正アクションを明示して利用者を誘導する
     process.stdout.write('[GATE] contexts/qualities => vibecoding/var/contexts/qualities  # rubric noncompliant\n');
@@ -517,12 +615,12 @@ function emitDiagnostics(): void {
     const diagnostics: string[] = [];
     diagnostics.push('----- PRE-COMMON: example code & diagnostics (exit=2) -----');
     diagnostics.push('');
-    diagnostics.push('[SAMPLE] Note: The following output is a calibration sample intended to help generate the quality gate context (context.yaml/context.md).');
+    diagnostics.push('[SAMPLE] Note: The following output is a calibration sample intended to help generate the quality gate context (context.md).');
     diagnostics.push('[SAMPLE] It is not a gate violation. These are example outputs that reflect your actual qualities/** settings.');
     diagnostics.push('[SAMPLE] Diagnostics for auto-check/** do NOT block product code.');
     diagnostics.push('[SAMPLE] First create/update the mirrors at vibecoding/var/contexts/qualities/**, then re-run to obtain <start_at> <hash> (exit=0).');
     diagnostics.push('[ATTENTION PLEASE!] This is diagnostics for a temporary example file (auto-check/kata_for_auth_check.ts). It does NOT block product code.');
-    diagnostics.push('[ATTENTION PLEASE!] The ONLY way to reduce diagnostics is to add/edit mirrors under vibecoding/var/contexts/** (context.yaml/context.md). No other path exists.');
+    diagnostics.push('[ATTENTION PLEASE!] The ONLY way to reduce diagnostics is to add/edit mirrors under vibecoding/var/contexts/** (context.md). No other path exists.');
     diagnostics.push('');
     diagnostics.push('=== Example: kata.ts (auto-generated at auto-check/kata_for_auth_check.ts for diagnostics) ===');
     diagnostics.push(KATA_TS);
@@ -535,111 +633,6 @@ function emitDiagnostics(): void {
     // 生成時の例外は警告として記録し処理を継続する
     process.stderr.write(`pre-common-auto-check: diagnostics error: ${String((e as Error)?.message || e)}\n`);
   }
-}
-
-/**
- * vibecoding/var/contexts/(...)/context.yaml を走査し、対象ファイル一覧を返す。
- * @returns context.yaml のパス配列
- */
-function collectVarContextYamlFiles(): string[] {
-  const base = OUTPUT_BASE; // vibecoding/var/contexts/qualities
-  const otherRoots = [
-    path.resolve(PROJECT_ROOT, 'vibecoding', 'var', 'contexts'),
-  ];
-  const roots = Array.from(new Set([base, ...otherRoots]));
-  const files: string[] = [];
-  // 監視ルートごとに存在確認し、context.yaml を再帰探索して重複なく収集する
-  for (const r of roots) {
-    // ルートが存在しない場合は対象外としてスキップする
-    if (!fs.existsSync(r)) continue;
-    const all = listFilesRecursive(r);
-    // 発見ファイル群から context.yaml のみを抽出して蓄積する
-    for (const f of all) {
-      // トップレベルの context.yaml のみ対象にして重複を避ける
-      if (path.basename(f) === 'context.yaml') files.push(f);
-    }
-  }
-
-  return Array.from(new Set(files));
-}
-
-/**
- * 単一 YAML ファイルからインデント0のキー出現を抽出し、重複を返す。
- * @param filePath 対象ファイル
- * @returns 重複配列（keyと行番号）
- */
-function detectTopLevelKeyDuplicates(filePath: string): Array<{ key: string; lines: number[] }> {
-  let content = '';
-  // 重複検出のためにファイル内容を読み込む
-  try {
-    content = fs.readFileSync(filePath, 'utf8');
-  } catch {
-    // 読み取りに失敗したファイルは重複検出の対象外とする
-    return [];
-  }
-
-  const lines = content.split(/\r?\n/);
-  const keyToLines = new Map<string, number[]>();
-  // 各行を評価してトップレベルキーの出現を集計する
-  for (let i = 0; i < lines.length; i++) processTopLevelYamlLine(String(lines[i] ?? ''), i, keyToLines);
-  const dups: Array<{ key: string; lines: number[] }> = [];
-  // 集計結果から重複キーのみを抽出して報告対象にする
-  for (const [k, occ] of keyToLines.entries()) {
-    // 同一キーが複数回出現した場合だけ重複と見なす
-    if (occ.length > 1) dups.push({ key: k, lines: occ });
-  }
-
-  return dups;
-}
-
-/**
- * 単一行のトップレベルYAMLキーを集計
- * @param ln 行文字列
- * @param idx 行番号0始まり
- * @param keyToLines キー→出現行のマップ
- */
-function processTopLevelYamlLine(ln: string, idx: number, keyToLines: Map<string, number[]>): void {
-  // 空行やコメント行は対象外として読み飛ばす
-  if (!ln || /^\s*$/.test(ln) || /^\s*#/.test(ln)) return;
-  // インデント付き行はトップレベルではないので除外する
-  if (/^[\t\s]/.test(ln)) return;
-  const m = ln.match(/^([A-Za-z0-9_\-]+)\s*:/);
-  // キーの抽出に失敗した行は非対象として終了する
-  if (!m || typeof m[1] !== 'string') return;
-  const key: string = m[1];
-  const arr = keyToLines.get(key) ?? [];
-  arr.push(idx + 1);
-  keyToLines.set(key, arr);
-}
-
-/**
- * 重複検出の結果を表示用メッセージに整形する。
- * @returns メッセージ配列
- */
-function buildDuplicateMessages(): string[] {
-  const files = collectVarContextYamlFiles();
-  const out: string[] = [];
-  // 各ファイルの重複状況を評価してメッセージを構築する
-  for (const fp of files) {
-    const dups = detectTopLevelKeyDuplicates(fp);
-    // 重複が無い場合は出力を抑制してノイズを避ける
-    if (dups.length === 0) continue;
-    const rel = normalizePathForOutput(path.relative(PROJECT_ROOT, fp));
-    out.push(`[GATE] Duplicate top-level keys detected in ${rel}`);
-    // 重複キーの詳細を列挙して修正位置を明確に示す
-    for (const d of dups) {
-      out.push(` - key: ${d.key} @ lines ${d.lines.join(', ')}`);
-    }
-  }
-
-  // 1件以上の重複が検出された場合は共通アクションを追記する
-  if (out.length > 0) {
-
-    // 重複キーの統合を促し、単一 YAML へ集約する指針を提示する
-    out.push('[GATE] Action: Merge into a single YAML document without repeating top-level keys.');
-  }
-
-  return out;
 }
 
 /**
@@ -755,10 +748,9 @@ function emitReviewConflictMessages(pairs: Array<{ contextMd: string; reviewMd: 
 function handleReviewConflicts(
   mappings: Array<{ srcDir: string; destDir: string }>,
   rubricViolation: boolean,
-  dupViolation: boolean,
 ): void {
   // ミラーやルーブリック、重複に未解決要素が残っている場合は review 検査は後段に回す
-  if (mappings.length !== 0 || rubricViolation || dupViolation) {
+  if (mappings.length !== 0 || rubricViolation) {
     return;
   }
 
@@ -772,54 +764,18 @@ function handleReviewConflicts(
   }
 }
 
-/**
- * 重複検出のみが残っているケースをハンドリングする
- * - ミラーと Rubric が揃っているが重複だけ検出されている場合は exit=2 で一時 Fail とする
- * @param mappings まだ同期が必要な SRC=>DEST マッピング一覧
- * @param rubricViolation Rubric 未充足があるかどうか
- * @param dupViolation 重複検出があるかどうか
- */
-function handleDuplicateOnlyCase(
-  mappings: Array<{ srcDir: string; destDir: string }>,
-  rubricViolation: boolean,
-  dupViolation: boolean,
-): void {
-  // ルーブリックは満たすが重複が残る状況を明確化し是正を促すため一時 Fail（重複のみのケース）
-  if (mappings.length === 0 && !rubricViolation && dupViolation) {
-    process.exit(2);
-  }
-}
-
 /** エントリポイント。鮮度チェックを実行して終了する。 */
 function main(): void {
   ensurePreconditions();
-  // qualities/** 側のファイルマニフェストとユニットダイジェストを生成する（hash ベースの鮮度判断用シグネチャ）
-  try {
-    generateContextHashManifests();
-  } catch (e) {
-    /* マニフェスト生成の失敗は PRE-COMMON 自体の失敗として扱い、理由を出力して終了する */
-    process.stderr.write(`pre-common-auto-check: context-hash-manifest failed: ${String((e as Error)?.message || e)}\n`);
-    process.exit(1);
-  }
-
   const startAt = writeLastUpdated();
-  const mappings = computeNeededMappings(collectUnitSources());
-  const rubricViolation = checkRubric();
-  const dupMsgs = buildDuplicateMessages();
-  const dupViolation = dupMsgs.length > 0;
-  // 重複検出がある場合はメッセージを列挙して可視化する
-  if (dupViolation) {
-    // 重複検出の詳細を順に出力して是正作業を促す（ユーザー行動を案内）
-    for (const m of dupMsgs) process.stdout.write(`${m  }\n`);
-  }
-
+  const unitSources = collectUnitSources();
+  const digests = computeUnitDigests(unitSources);
+  const mappings = computeNeededMappingsByDigest(unitSources, digests);
+  const rubric = checkRubric();
   // 他要件が揃った場合のみレビュー衝突を検査する（post-pass review detection）
-  handleReviewConflicts(mappings, rubricViolation, dupViolation);
+  handleReviewConflicts(mappings, rubric.hasViolation);
 
-  // 重複のみ検出された場合は情報提示後に一時 Fail とする
-  handleDuplicateOnlyCase(mappings, rubricViolation, dupViolation);
-
-  outputAndExit(startAt, mappings, rubricViolation);
+  outputAndExit(startAt, mappings, rubric);
 }
 
 // 終了方針: 実行全体の例外処理を一元化し致命時は明確に失敗させる

@@ -30,13 +30,12 @@
 #### ハッシュ記録のSoT（明確化）
 - SnD の `quality_refresh_hash_*` に記録する値は、`npm run -s check:pre-common` の標準出力1行（`<start_at> <hash>`）のみを用いる。
 - 手計算・独自スクリプトによる生成や改変は禁止。
-- 「設定ファイルの網羅的読み込み」や「診断出力の参照」は、詳細レポート作成（`context.yaml`/`context.md` 生成）時の要件であり、ハッシュ記録の SoT とは切り離して扱う。
+- 「設定ファイルの網羅的読み込み」や「診断出力の参照」は、詳細レポート作成（`context.md` 生成）時の要件であり、ハッシュ記録の SoT とは切り離して扱う。
 
 ### 詳細レポート作成（detailed quality report generation）の定義
 - 参照元（normative）: `qualities/**` の実設定
-- 生成物（derived）: `vibecoding/var/contexts/qualities/**/{context.yaml,context.md}`
+- 生成物（derived）: `vibecoding/var/contexts/qualities/**/context.md`
 - 最小要件:
-  - `context.yaml` に gate.commands/configs, checks/coverage
   - `context.md` に Why/Where/What/How 節（詳細は後述）
 - 検知: mtime 最低検知＋実質変更検知
 - 実装方針: LLMの能力を活用して詳細レポートを生成。詳細レポートにて「品質ゲートを考慮しない設計・実装」の問題点を明らかにし、その問題を回避するための方策を定義する。
@@ -71,12 +70,14 @@
    - カバレッジ範囲と除外パターンの確認
 
 4. **hash manifest / unitDigest の生成（必須・自動）**
-   - PRE-COMMON 実行時には、`vibecoding/scripts/qualities/context-hash-manifest.ts` を通じて、各ユニットの hash manifest（`vibecoding/var/contexts/qualities/<unit>/manifest.yaml`）および unitDigest を必ず生成・更新する。
-   - hash manifest には、少なくとも次の情報を含める（詳細仕様はスクリプト側の SoT とし、本プレイブックでは構造のみを規定する）:
+   - PRE-COMMON 実行時には、`vibecoding/scripts/qualities/context-hash-manifest.ts` を通じて、各ユニットの hash manifest と unitDigest を必ず生成・更新し、その内容を `vibecoding/var/contexts/qualities/<unit>/context.md` 内の `### Quality Context Hash Manifest` セクション直下の **YAML fenced ブロック** として記録する。
+   - YAML manifest には、少なくとも次の情報を含める（詳細仕様はスクリプト側の SoT とし、本プレイブックでは構造のみを規定する）:
      - `unit`: ユニット ID（例: `docs/core/types` など）
      - `algo`: 使用するダイジェストアルゴリズム名（例: `sha256`）
+     - `generatedAt`: 当該 manifest を生成した UTC-ISO8601 時刻
+     - `unitDigest`: 当該ユニットの hash manifest から導出される「ユニット全体の代表ハッシュ」
      - `files`: `qualities/**` 配下から収集した入力ファイルの一覧（正規化済み相対パス＋内容ダイジェスト）
-   - unitDigest は、当該ユニットの hash manifest から導出される「ユニット全体の代表ハッシュ」とし、SnD や関連ドキュメントが「どのバージョンの品質コンテキストに基づいているか」を記録するために用いる。
+  - hash manifest / unitDigest の単一情報源（SoT）は常に `context.md` 内の YAML manifest とし、過去の `manifest.yaml` などの派生情報が残存している場合も参照・更新の対象とはせず、PRE-COMMON における生成・整合チェック対象からは除外してよい。CI や SnD からは、この YAML manifest を通じて「どのバージョンの品質コンテキストに基づいているか」を追跡できるようにする。  
 
 ### context.md の節構成と責務
 各 `context.md` は以下の4節で構成され、各節は明確な責務を持つ：
@@ -120,32 +121,6 @@
 
 ---
 
-## context.yaml スキーマ（固定）
-```yaml
-name: <string>
-unit_path: <string>
-gate:
-  type: <lint|typecheck|policy|test|build|other>
-  enforce: <block|warn>
-  commands:
-    - <string>
-  configs:
-    - <path>
-checks:
-  - id: <string>
-    description: <string?>
-    path: <path?>
-coverage:
-  include:
-    - <glob>
-  exclude:
-    - <glob>
-updated_from:
-  since: <UTC-ISO8601 start_at of last successful mirror>
-updated_at: <UTC-ISO8601 start_at>
-```
-※ glob は micromatch 互換。`coverage.exclude` が include と重複した場合は exclude 優先。
-
 ### commands/configs の典拠
 - commands の典拠: `package.json` のスクリプト。
   - 代表例: `npm run check`（内部でポリシー/型検査/Lint/テストを実行）。
@@ -153,36 +128,16 @@ updated_at: <UTC-ISO8601 start_at>
 - configs の典拠: qualities 配下の実設定。
   - 代表例: `qualities/eslint/eslint.config.mjs`（ESLint）, `qualities/tsconfig/tsconfig/types/tsconfig.json`（TypeScript）, `qualities/policy/baseline.yaml` および `qualities/policy/**`（Policy）。
 
-参考例（ESLint ユニットの context.yaml 抜粋）:
-```yaml
-name: eslint
-unit_path: /qualities/eslint/
-gate:
-  type: lint
-  enforce: block
-  commands:
-    - npm run -s lint  # --max-warnings=0 が package.json で指定済み
-  configs:
-    - qualities/eslint/eslint.config.mjs
-coverage:
-  include:
-    - "**/*.ts"
-  exclude:
-    - "**/node_modules/**"
-updated_at: <UTC-ISO8601>
-```
-
----
-
 ## Context-First 実務規範（教訓の制度化）
 
 本節は過去の反復から得られた「手戻り最小化」の実務規範を、PRE-COMMON の一部として明文化する。以下は PRE-SnD/PRE-IMPL に先立って必ず満たす。
 
-1. 実装や SnD を書く前に、必ず `npm run -s check:pre-common` を実行し、`vibecoding/var/contexts/qualities/**` の鏡像（context.yaml/context.md）を更新して exit=0 を得る。
+1. 実装や SnD を書く前に、必ず `npm run -s check:pre-common` を実行し、`vibecoding/var/contexts/qualities/**` の鏡像（context.md）を更新して exit=0 を得る。
 2. **初回作成と更新の判定**（LLM/Agent向け）:
    - `context.md` が存在しない、または10行未満 → **初回作成モード**（60-100行厳守）
    - `context.md` が既に60行以上存在 → **更新モード**（下限60行のみ、上限なし）
    - 判定は各エージェントが自律的に実施（スクリプト不介入）
+   - 初回作成モードでは、Rubric で要求される「設定閾値一覧」「glob パターン例」を含めた Why/Where/What/How 構成を一度で満たすこと（特定ユニット名ではなく、各ユニットが参照する gate 設定値と coverage に基づいて埋める）
 3. 各ユニットの `context.md` の How 節には、次の「実装ガードレール」を必ず含める（LLM/人間どちらにも効く即効性のある指針）：
    - JSDoc 必須とファイル概要（`jsdoc/require-jsdoc`, `require-file-overview`）
    - マジックナンバー禁止（専用 `constants.ts` へ集約）
@@ -250,7 +205,7 @@ const audio = new Ctx();
    - ユニット候補ディレクトリ: `qualities/{eslint,policy,tsconfig,...}/<bucket>/<unit>` の **第3階層ディレクトリ** をユニット候補とみなす。  
    - ユニット名の命名規約: `<unit>` は次の正規表現に一致する ASCII 名とする（先頭 `_` 禁止）。  
      - `^[a-z][a-z0-9_-]*$`  
-   - 上記命名規約を満たす `<unit>` だけを PRE-COMMON のユニット ID として扱い、`vibecoding/var/contexts/qualities/<unit>/` 配下に `context.yaml/context.md` および hash manifest（`manifest.yaml`）を生成する。  
+   - 上記命名規約を満たす `<unit>` だけを PRE-COMMON のユニット ID として扱い、`vibecoding/var/contexts/qualities/<unit>/` 配下に `context.md` を生成・更新する。  
    - `core` / `docs` / `types` は従来どおり canonical なユニットとして扱うが、命名規約を満たすユニット名であれば追加ユニット（例: `perf`, `security` など）も将来的に許容される。  
 
 3. **exit=2 の自動診断（example code & diagnostics）**  
@@ -265,7 +220,7 @@ const audio = new Ctx();
    
 
 4. **詳細レポート作成**  
-   各ユニットに context.yaml/md 生成。以下の手順で実施：
+   各ユニットに context.md を生成する。以下の手順で実施：
    
    a. **設定ファイルの網羅的読み込み**（必須）
       - 対象ユニットの `qualities/**` 配下の全設定ファイルを読み込む
@@ -275,9 +230,8 @@ const audio = new Ctx();
       - `pre-common-diagnostics.md` の内容を参照（exit=2時）
       - Calibration Kata の結果から具体的なNG例を抽出
    
-   c. **context.yaml/md 生成**
-      - 設定ファイルの理解に基づき context.yaml を生成
-      - Why/Where/What/How 各節を含む context.md を生成
+   c. **context.md 生成**
+      - 設定ファイルの理解に基づき、gate.commands/configs, checks/coverage などの機械可読な gate 情報と、Why/Where/What/How 各節を含む context.md を生成（hash manifest / unitDigest は `### Quality Context Hash Manifest` セクション直下の YAML として埋め込む）
       - Rubric満足までLLM内部3サイクル
    
    d. **Rubric検証**（必須）
@@ -290,7 +244,7 @@ const audio = new Ctx();
    `npm run -s check:pre-common` → `<start_at> <hash>` 出力・exit=0。
    - ドリフト検知: `qualities/**` の mtime/内容が前回の出典（context.md の引用/値）と不整合の場合、鏡像を再生成して整合を回復する。整合が取れるまで exit=2 相当の扱いとし、SnD 記録を保留する。
    - 出典整合: `context.md` の各ルール・閾値には必ず「出典（相対パス＋抜粋/値）」を併記し、PRE-COMMON 実行時点の現行設定と一致していること。
-   - hash manifest 整合: `vibecoding/var/contexts/qualities/<unit>/manifest.yaml` および unitDigest は、PRE-COMMON 実行時点の `qualities/**` の内容をもとに最新化されていることを前提とし、これが満たされない場合は exit=0 を返さず、再生成と再実行によって整合を回復する。
+   - hash manifest 整合: 各ユニットの `context.md` 内 `### Quality Context Hash Manifest` セクションに埋込まれた YAML manifest（unit / algo / generatedAt / unitDigest / files）が、PRE-COMMON 実行時点の `qualities/**` の内容をもとに最新化されていることを前提とし、これが満たされない場合は exit=0 を返さず、再生成と再実行によって整合を回復する（過去に生成された `manifest.yaml` などの派生ファイルの有無や内容は判定に用いない）。
 
 6. **SnD連携記録**  
    `npm run -s check:pre-common` が exit=0 時に出力する `<start_at> <hash>` をそのまま SnD の front matter に記録。
@@ -315,7 +269,7 @@ quality_refresh_hash_before_impl: "2025-11-05T12:34:56.789Z 012345...abcd"
 - [ ] **手戻りコストの定量化**：トークン・時間・認知負荷の観点で記述
 
 ### Where節
-- [ ] **適用範囲の明示**：`context.yaml` の `coverage` と整合
+- [ ] **適用範囲の明示**：`context.md` に記述した coverage（include/exclude）と整合
 - [ ] **包含・除外パターン**：glob パターンを例示
 
 ### What節
@@ -353,7 +307,7 @@ Rubric照合は `check:pre-common` による機械的最低限のチェックに
 - [ ] 手戻りコストを3観点（トークン・時間・認知負荷）で記述
 
 ### Where節
-- [ ] `context.yaml` の `coverage` と整合
+- [ ] `context.md` に記述した coverage（include/exclude）と整合
 - [ ] glob パターンを具体例で示す
 
 ### What節
@@ -372,6 +326,7 @@ Rubric照合は `check:pre-common` による機械的最低限のチェックに
 - [ ] 修正方針あり
  - [ ] Reasoning Hooks（生成前の自問チェック）を明記
  - [ ] 反パターン（スタータのコピペのみ等）をNGとして明記
+ - [ ] How 節の先頭に「設定閾値一覧」小節があり、対応する Where 節に少なくとも1つは glob パターン例（例: `src/**/*.ts` 等）が記載されている（特定のユニット名ではなく、各ユニットが参照する gate 設定値と coverage から導出する）
 
 ---
 
@@ -523,7 +478,7 @@ exit=2 の場合、以下を順に実施：
    - `pre-common-diagnostics.md` から具体的なNG例を抽出
    - Calibration Kata の結果を How節に反映
 
-3. **context.yaml/md 生成**
+3. **context.md 生成**
    - **初回作成モード**の場合：
      - 60-100行の範囲で生成
      - コード例は各8-12行、NGパターン5項目（各2-3行）
@@ -549,7 +504,6 @@ exit=2 の場合、以下を順に実施：
 
 ### 必須成果物
 - [ ] `last_updated` 最新化
-- [ ] 各ユニット `context.yaml` 完備（スキーマ準拠）
 - [ ] 各ユニット `context.md` 完備（Rubric満足）
 
 ### context.md のRubric充足
@@ -574,7 +528,7 @@ exit=2 の場合、以下を順に実施：
 ### 品質ゲート通過
 - [ ] `npm run -s check:pre-common` → exit=0
 - [ ] SnD記録完了（`quality_refresh_hash_*` に `<start_at> <hash>` 記録）  
-- [ ] 各ユニットの hash manifest（`vibecoding/var/contexts/qualities/<unit>/manifest.yaml`）および unitDigest が、PRE-COMMON 実行時点の `qualities/**` の内容に基づき最新化されている  
+- [ ] 各ユニットの `context.md` 内 `### Quality Context Hash Manifest` セクションに埋め込まれた YAML manifest（`unit` / `algo` / `generatedAt` / `unitDigest` / `files[*].path` / `files[*].hash`）が、PRE-COMMON 実行時点の `qualities/**` の内容に基づき最新化されている  
 
 ---
 

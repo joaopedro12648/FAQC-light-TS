@@ -58,9 +58,6 @@ import path from 'node:path';
 const repoRoot = process.cwd();
 /** 解析対象の品質コンテキスト（var 配下）の基底ディレクトリ */
 const VAR_BASE = path.join(repoRoot, 'vibecoding', 'var', 'contexts', 'qualities');
-/** 品質系 SnD（SPEC-and-DESIGN）配置ディレクトリの基底パス */
-const SND_BASE = path.join(repoRoot, 'vibecoding', 'var', 'SPEC-and-DESIGN');
-
 // しきい値
 /** コードブロック（```）の最低個数 */
 const MIN_CODE_FENCES = 4;
@@ -222,16 +219,22 @@ function extractSection(content: string, headingPatterns: RegExp[]): string {
   let inSection = false;
   let sectionLevel = 0;
   let sectionContent = '';
+  let inCodeBlock = false;
   
   // 行を順に評価し指定見出しから次の同レベル見出し手前までを抽出する
   for (const line of lines) {
-    // セクション開始の見出しに一致したら抽出モードへ移行する
-    if (headingPatterns.some((re) => re.test(line))) {
+    // コードブロックの開始/終了を追跡（``` で始まる行）
+    if (/^```/.test(line)) {
+      inCodeBlock = !inCodeBlock;
+    }
+    
+    // セクション開始の見出しに一致したら抽出モードへ移行する（コードブロック外のみ）
+    if (!inCodeBlock && headingPatterns.some((re) => re.test(line))) {
       inSection = true;
       sectionLevel = getHeadingLevel(line);
+      
       // 見出しレベルが取得できない場合は既定レベルでフェイルセーフにする
       if (sectionLevel === 0) {
-
         sectionLevel = 2;
       }
 
@@ -240,11 +243,10 @@ function extractSection(content: string, headingPatterns: RegExp[]): string {
     
     // セクション内に入っている間のみ本文を収集する
     if (inSection) {
-
-      const currentLevel = getHeadingLevel(line);
+      // コードブロック外でのみ見出しレベルをチェック
+      const currentLevel = !inCodeBlock ? getHeadingLevel(line) : 0;
       // 同レベル以下の新しい見出しが現れたら抽出を終了する
       if (currentLevel > 0 && currentLevel <= sectionLevel) {
-
         break;
       }
 
@@ -426,6 +428,125 @@ function checkThresholdSectionForKeyUnits(filePath: string, text: string): strin
 }
 
 /**
+ * YAML manifest の必須フィールドを検証する補助関数。
+ * @param lines YAML 行の配列
+ * @returns エラーメッセージ配列
+ */
+function validateManifestFields(lines: string[]): string[] {
+  const errs: string[] = [];
+  const unitLine = lines.find((l) => l.startsWith('unit:'));
+  const algoLine = lines.find((l) => l.startsWith('algo:'));
+  const generatedAtLine = lines.find((l) => l.startsWith('generatedAt:'));
+  const unitDigestLine = lines.find((l) => l.startsWith('unitDigest:'));
+
+  // unit フィールドが存在しない場合はエラーとする
+  if (!unitLine) {
+    errs.push('hash_manifest: missing unit in yaml manifest');
+  }
+
+  // algo フィールドが存在しない場合はエラーとする
+  if (!algoLine) {
+    errs.push('hash_manifest: missing algo in yaml manifest');
+  }
+
+  // generatedAt フィールドが存在しない場合はエラーとする
+  if (!generatedAtLine) {
+    errs.push('hash_manifest: missing generatedAt in yaml manifest');
+  }
+
+  // unitDigest フィールドの存在と形式を検証する
+  if (!unitDigestLine) {
+    // unitDigest フィールドが無い場合はエラーとする
+    errs.push('hash_manifest: missing unitDigest in yaml manifest');
+  } else {
+    // unitDigest が hex 文字列形式であることを確認する
+    const digestMatch = unitDigestLine.match(/unitDigest:\s*"?([0-9a-f]{32,})"?\s*$/i);
+
+    // unitDigest の形式が不正な場合はエラーとする
+    if (!digestMatch) {
+      errs.push('hash_manifest: invalid unitDigest (expected hex string) in yaml manifest');
+    }
+  }
+
+  return errs;
+}
+
+/**
+ * YAML manifest の files リストを検証する補助関数。
+ * @param lines YAML 行の配列
+ * @param filesIndex files リストの開始インデックス
+ * @returns エラーメッセージ配列
+ */
+function validateFilesList(lines: string[], filesIndex: number): string[] {
+  const errs: string[] = [];
+
+  // files リストが存在しない場合はエラーとする
+  if (filesIndex === -1) {
+    errs.push('hash_manifest: missing files list in yaml manifest');
+    return errs;
+  }
+
+  const fileLines = lines.slice(filesIndex + 1);
+  const pathLines = fileLines.filter((l) => l.startsWith('- path:') || l.startsWith('path:'));
+  const hashLines = fileLines.filter((l) => l.startsWith('hash:'));
+
+  // files リストに少なくとも1つのエントリが必要
+  if (pathLines.length === 0) {
+    errs.push('hash_manifest: files list has no entries in yaml manifest');
+  }
+
+  // 各ハッシュ値が hex 文字列形式であることを確認する
+  const invalidHashLines = hashLines.filter((l) => !/hash:\s*"?[0-9a-f]{32,}"?\s*$/i.test(l));
+
+  // 不正な形式のハッシュ値が存在する場合はエラーとする
+  if (invalidHashLines.length > 0) {
+    errs.push('hash_manifest: invalid hash value(s) in files list (expected hex string)');
+  }
+
+  return errs;
+}
+
+/**
+ * context.md 内の「### Quality Context Hash Manifest」節に YAML manifest が正しく記録されているか検査する。
+ * @param text context.md の本文
+ * @returns エラーメッセージ配列
+ */
+function checkInlineHashManifestSection(text: string): string[] {
+  const errs: string[] = [];
+  const headingPatterns = [/^###\s*Quality Context Hash Manifest\b/m];
+
+  // セクション見出しが存在するか検査する
+  if (!hasHeading(text, headingPatterns)) {
+    errs.push('hash_manifest: missing "### Quality Context Hash Manifest" section');
+    return errs;
+  }
+
+  const section = extractSection(text, headingPatterns);
+
+  // セクション内の fenced YAML ブロックを抽出する（最初の1個のみ対象）
+  const yamlBlockMatch = section.match(/```yaml([\s\S]*?)```/);
+
+  // YAML ブロックが存在しない場合はエラーとする
+  if (!yamlBlockMatch) {
+    errs.push('hash_manifest: missing yaml fenced block in Quality Context Hash Manifest section');
+    return errs;
+  }
+
+  const yamlBody = yamlBlockMatch[1] ?? '';
+  const lines = yamlBody
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+
+  const filesIndex = lines.findIndex((l) => l === 'files:' || l.startsWith('files:'));
+
+  errs.push(...validateManifestFields(lines));
+  errs.push(...validateFilesList(lines, filesIndex));
+
+  return errs;
+}
+
+/**
  * 単一の context.md に対してルーブリック検査を実行する。
  * @param filePath 絶対パス
  * @returns エラーメッセージ配列
@@ -439,65 +560,18 @@ function checkContextMd(filePath: string): string[] {
   errs.push(...checkWhatSection(text));
   errs.push(...checkHowSection(text));
   errs.push(...checkThresholdSectionForKeyUnits(filePath, text));
+  errs.push(...checkInlineHashManifestSection(text));
 
   return errs;
 }
 
 /**
- * 品質系 SnD に対して Quality Context Hash Manifest セクションの存在を検査する
- * @param filePath 対象 SnD ファイルの絶対パス
- * @returns 検出された違反メッセージ配列（問題が無ければ空配列）
- */
-function checkQualitySnd(filePath: string): string[] {
-  const text = fs.readFileSync(filePath, 'utf8');
-  const errs: string[] = [];
-
-  // front matter を抽出できない、もしくは qualities タグを含まない SnD は本検査の対象外とする
-  const frontMatterMatch = text.match(/^---([\s\S]*?)---/);
-  // front matter ブロックが存在しない SnD は品質系情報を持たないため、Hash Manifest 検査の対象外とする
-  if (!frontMatterMatch) {
-    return errs;
-  }
-
-  const frontMatter = frontMatterMatch[1] ?? '';
-  // qualities タグを含まない SnD は品質系コンテキストを扱わないため、Hash Manifest セクション検査の対象外とする
-  if (!/^\s*tags:\s*\[.*qualities.*\]/m.test(frontMatter)) {
-    return errs;
-  }
-
-  // Quality Context Hash Manifest セクションの存在を確認し、品質系 SnD と hash manifest の紐付けが記録されていることを保証する
-  const qchmHeadingPatterns = [/^\s*##\s*Quality Context Hash Manifest\b/m];
-  // Hash Manifest セクションの見出しが無い場合は、品質系 SnD と品質コンテキストの対応が追跡できないため不足として扱う
-  if (!hasHeading(text, qchmHeadingPatterns)) {
-    errs.push('SnD: missing `## Quality Context Hash Manifest` section for qualities-tagged SnD');
-    return errs;
-  }
-
-  // 対象セクションのみを抽出し、manifest パスと unitDigest の存在を個別に検査する
-  const qchmSection = extractSection(text, qchmHeadingPatterns);
-  const hasManifestPath = /vibecoding\/var\/contexts\/qualities\/.+manifest\.yaml/.test(qchmSection);
-  const hasUnitDigest = /(unitDigest|[0-9a-f]{8,})/i.test(qchmSection);
-
-  // manifest パスが無い場合は、SnD から実際の hash manifest をたどれないため不足として扱う
-  if (!hasManifestPath) {
-    errs.push('SnD: Quality Context Hash Manifest section missing manifest path (vibecoding/var/contexts/qualities/**/manifest.yaml)');
-  }
-
-  // unitDigest が無い場合は、「どの内容バージョンの品質コンテキストに基づくか」が追跡できないため不足として扱う
-  if (!hasUnitDigest) {
-    errs.push('SnD: Quality Context Hash Manifest section missing unitDigest-like value');
-  }
-
-  return errs;
-}
-
-/**
- * context.md に対するルーブリック検査を実行する
+ * context.md に対するルーブリック検査を実行する。
  * @param includeGlobs --include で指定されたパターン一覧
  * @param allErrors 収集した違反メッセージの出力先
  */
 function runContextMdChecks(includeGlobs: string[], allErrors: Array<{ file: string; errs: string[] }>): void {
-  // var 配下のコンテキストミラーが未整備なリポジトリでは、SnD 側のみを対象に検査を続行する
+  // var 配下のコンテキストミラーが未整備なリポジトリでは、context.md 検査をスキップする
   if (!fs.existsSync(VAR_BASE)) {
     process.stdout.write('context-md-rubric: no var contexts found, skipping context.md checks\n');
     return;
@@ -530,39 +604,16 @@ function runContextMdChecks(includeGlobs: string[], allErrors: Array<{ file: str
   }
 }
 
-/**
- * 品質系 SnD に対する Quality Context Hash Manifest セクション検査を実行する
- * @param allErrors 収集した違反メッセージの出力先
- */
-function runQualitySndChecks(allErrors: Array<{ file: string; errs: string[] }>): void {
-  // 品質系 SnD が存在しないリポジトリでは、Hash Manifest セクション検査をスキップする
-  if (!fs.existsSync(SND_BASE)) {
-    return;
-  }
-
-  // SnD ベース配下の SnD-*.md を走査し、tags に qualities を含むものだけを対象として Hash Manifest セクションを検査する
-  const sndFiles = listFilesRecursive(SND_BASE).filter((f) => /SnD-.*\.md$/i.test(f));
-  // 各 SnD について hash manifest セクションに必要な情報が揃っているかを確認する
-  for (const f of sndFiles) {
-    const errs = checkQualitySnd(f);
-    // Hash Manifest セクションに不足がある SnD のみを allErrors に追加し、対象を品質系に限定する
-    if (errs.length) {
-      allErrors.push({ file: path.relative(repoRoot, f).replace(/\\/g, '/'), errs });
-    }
-  }
-}
-
-/** エントリポイント: すべての context.md および品質系 SnD を検証して終了する。 */
+/** エントリポイント: すべての context.md を検証して終了する。 */
 function main(): void {
   const allErrors: Array<{ file: string; errs: string[] }> = [];
 
-  // 引数処理（--include / 位置引数）— 現状は context.md 用のみ。SnD は常に全体チェック。
+  // 引数処理（--include / 位置引数）— context.md 用のフィルタとして扱う。
   const argv = process.argv.slice(2);
   const includeGlobs = parseIncludeArgs(argv);
 
-  // context.md と SnD の検査を順に実行し、違反を allErrors に集約する
+  // context.md の検査を実行し、違反を allErrors に集約する
   runContextMdChecks(includeGlobs, allErrors);
-  runQualitySndChecks(allErrors);
 
   // 全件合格なら成功終了（ルーブリック準拠）
   if (allErrors.length === 0) {

@@ -237,7 +237,7 @@ rg -n '^\s*(//|/\*|\*)\s*[A-Za-z]{4,}' src
 
 ## 完了前必須手順 — コンテキストのバックフィル（条件付き必須）
 
-目的: 実装中に得られた知見（lint/complexity/JSDoc/ポリシー回避やテスト安定化ノウハウ）を、後続モデル・実装者が一発でゲートを通せるよう `vibecoding/var/contexts/qualities/**/{context.md,context.yaml}` に反映する。
+目的: 実装中に得られた知見（lint/complexity/JSDoc/ポリシー回避やテスト安定化ノウハウ）を、後続モデル・実装者が一発でゲートを通せるよう `vibecoding/var/contexts/qualities/**/context.md` に反映する。
 
 ### 必須判定基準（Self-Check）
 実装完了時、以下のいずれか1つでも該当すれば**必須実施**:
@@ -259,8 +259,7 @@ rg -n '^\s*(//|/\*|\*)\s*[A-Za-z]{4,}' src
    - 今回遭遇した**LLM NGパターン 1〜2件**（回避策付き）
    - 必要時のみ: コマンド↔設定↔対象範囲の対応表の差分
 2) coverage の include/exclude を見直し、gate の実適用範囲と鏡像になるよう整合
-3) context.yaml は gate/coverage に実質的な変更がある場合のみ更新（不用意に変更しない）
-4) `npm run -s check:pre-common` を再実行し、`"<StartAt> <hash>"` を確認（exit=0）
+3) `npm run -s check:pre-common` を再実行し、`"<StartAt> <hash>"` を確認（exit=0）
 
 ガードレール:
 - 分量は箇条書き中心で 10 分以内、長文禁止
