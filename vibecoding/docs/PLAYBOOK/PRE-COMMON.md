@@ -70,6 +70,14 @@
    - ルール間の関連性・優先順位を把握
    - カバレッジ範囲と除外パターンの確認
 
+4. **hash manifest / unitDigest の生成（必須・自動）**
+   - PRE-COMMON 実行時には、`vibecoding/scripts/qualities/context-hash-manifest.ts` を通じて、各ユニットの hash manifest（`vibecoding/var/contexts/qualities/<unit>/manifest.yaml`）および unitDigest を必ず生成・更新する。
+   - hash manifest には、少なくとも次の情報を含める（詳細仕様はスクリプト側の SoT とし、本プレイブックでは構造のみを規定する）:
+     - `unit`: ユニット ID（例: `docs/core/types` など）
+     - `algo`: 使用するダイジェストアルゴリズム名（例: `sha256`）
+     - `files`: `qualities/**` 配下から収集した入力ファイルの一覧（正規化済み相対パス＋内容ダイジェスト）
+   - unitDigest は、当該ユニットの hash manifest から導出される「ユニット全体の代表ハッシュ」とし、SnD や関連ドキュメントが「どのバージョンの品質コンテキストに基づいているか」を記録するために用いる。
+
 ### context.md の節構成と責務
 各 `context.md` は以下の4節で構成され、各節は明確な責務を持つ：
 
@@ -238,10 +246,12 @@ const audio = new Ctx();
    - フォーマット: UTC-ISO8601 を1行（末尾改行付き）で保存
 
 2. **対象ユニット列挙**  
-   - 共通除外: 先頭が `_` のディレクトリは全ルールで対象外（例: `_shared`, `_draft`）。
-   - `qualities/policy/*` ディレクトリ（ただし先頭 `_` は除外）。
-   - `qualities/eslint/*` ディレクトリ（ただし先頭 `_` は除外）。
-   - `qualities/*` ディレクトリ（`policy`/`eslint` を除き、かつ先頭 `_` は除外）。
+   - 共通除外: 先頭が `_` のディレクトリは全ルールで対象外（例: `_shared`, `_draft`）。  
+   - ユニット候補ディレクトリ: `qualities/{eslint,policy,tsconfig,...}/<bucket>/<unit>` の **第3階層ディレクトリ** をユニット候補とみなす。  
+   - ユニット名の命名規約: `<unit>` は次の正規表現に一致する ASCII 名とする（先頭 `_` 禁止）。  
+     - `^[a-z][a-z0-9_-]*$`  
+   - 上記命名規約を満たす `<unit>` だけを PRE-COMMON のユニット ID として扱い、`vibecoding/var/contexts/qualities/<unit>/` 配下に `context.yaml/context.md` および hash manifest（`manifest.yaml`）を生成する。  
+   - `core` / `docs` / `types` は従来どおり canonical なユニットとして扱うが、命名規約を満たすユニット名であれば追加ユニット（例: `perf`, `security` など）も将来的に許容される。  
 
 3. **exit=2 の自動診断（example code & diagnostics）**  
    `npm run -s check:pre-common` が exit=2 の場合、スクリプトは以下を自動出力する。
@@ -280,6 +290,7 @@ const audio = new Ctx();
    `npm run -s check:pre-common` → `<start_at> <hash>` 出力・exit=0。
    - ドリフト検知: `qualities/**` の mtime/内容が前回の出典（context.md の引用/値）と不整合の場合、鏡像を再生成して整合を回復する。整合が取れるまで exit=2 相当の扱いとし、SnD 記録を保留する。
    - 出典整合: `context.md` の各ルール・閾値には必ず「出典（相対パス＋抜粋/値）」を併記し、PRE-COMMON 実行時点の現行設定と一致していること。
+   - hash manifest 整合: `vibecoding/var/contexts/qualities/<unit>/manifest.yaml` および unitDigest は、PRE-COMMON 実行時点の `qualities/**` の内容をもとに最新化されていることを前提とし、これが満たされない場合は exit=0 を返さず、再生成と再実行によって整合を回復する。
 
 6. **SnD連携記録**  
    `npm run -s check:pre-common` が exit=0 時に出力する `<start_at> <hash>` をそのまま SnD の front matter に記録。
@@ -563,6 +574,7 @@ exit=2 の場合、以下を順に実施：
 ### 品質ゲート通過
 - [ ] `npm run -s check:pre-common` → exit=0
 - [ ] SnD記録完了（`quality_refresh_hash_*` に `<start_at> <hash>` 記録）  
+- [ ] 各ユニットの hash manifest（`vibecoding/var/contexts/qualities/<unit>/manifest.yaml`）および unitDigest が、PRE-COMMON 実行時点の `qualities/**` の内容に基づき最新化されている  
 
 ---
 

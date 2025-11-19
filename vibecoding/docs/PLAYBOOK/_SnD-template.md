@@ -113,6 +113,12 @@ context:
 - 仕様を満たすテスト観点と具体例
 - `npm run check` が成功すること（定義されたゲート全通過）
 - 本SnDの「品質ゲート（このSnDの定義）」で定義した追加ゲート・閾値を満たすこと
+
+## Quality Context Hash Manifest <!-- 品質系 SnD で必須。その他の SnD では任意。 -->
+- 対象ユニット ID（例: `core/types/docs` 等）
+- 各ユニットの hash manifest パス（例: `vibecoding/var/contexts/qualities/docs/manifest.yaml`）
+- 各ユニットの unitDigest 値（manifest から導出された 1 行のダイジェスト）
+
 ## マイグレーション / ロールアウト計画
 - データ / API / 設定の移行手順
 - フィーチャーフラグ（命名例: `migrate_<domain>_to_<target>`）

@@ -1,0 +1,287 @@
+#!/usr/bin/env node
+/**
+ * @file 品質コンテキスト用ファイルマニフェストとユニットダイジェスト生成スクリプト
+ * - PRE-COMMON 実行フローから呼び出され、qualities/** → vibecoding/var/contexts/qualities/** の対応を内容ハッシュで記録する
+ * - mtime ではなく内容ハッシュに基づく鮮度判定の土台となるシグネチャを生成する
+ * - core/types/docs 各ユニットごとに入力ディレクトリ集合を検出し manifest.yaml を出力する
+ * - manifest.yaml には unit/algo/generatedAt/files/unitDigest を含めて機械可読にする
+ * - unitDigest はファイル一覧と個別ハッシュから導出されるユニット全体の代表ハッシュとする
+ * - SnD からは manifest 本体ではなく unitDigest と manifest パスのみを参照する
+ * - 値はすべて PRE-COMMON 実行時に本スクリプトから自動生成し、手動編集や別スクリプトによる生成を禁止する
+ * - 失敗時は PRE-COMMON 自体の失敗として扱い、理由を標準エラー出力に記録する
+ */
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+
+/** リポジトリのプロジェクトルート（cwd） */
+const PROJECT_ROOT = process.cwd();
+/** qualities/** のベースディレクトリ */
+const QUALITIES_DIR = path.join(PROJECT_ROOT, 'qualities');
+/** マニフェスト出力先ベースディレクトリ */
+const OUTPUT_BASE = path.join(PROJECT_ROOT, 'vibecoding', 'var', 'contexts', 'qualities');
+
+/** PRE-COMMON で扱うユニット ID 型（命名規約に従う任意のユニット名） */
+export type UnitId = string;
+
+/** 各ユニットに紐づく qualities/** 側のソースディレクトリ群 */
+export interface UnitSources {
+  unit: UnitId;
+  srcDirs: string[];
+}
+
+/**
+ * パスを POSIX 形式（/ 区切り）へ正規化する
+ * @param p 対象パス
+ * @returns `/` 区切りへ正規化したパス
+ */
+function toPosix(p: string): string {
+  return p.replace(/\\/g, '/');
+}
+
+/**
+ * qualities/** のフォルダ構成からユニットごとのソースディレクトリを自動抽出する。
+ * @returns ユニット ID と対応するソースディレクトリ配列の一覧
+ */
+export function collectUnitSources(): UnitSources[] {
+  const unitToDirs = new Map<UnitId, Set<string>>();
+  const unitNamePattern = /^[a-z][a-z0-9_-]*$/;
+
+  // qualities/ 以下の相対パス文字列から「先頭が '_' のセグメント」を含むかどうかを判定する
+  const hasUnderscoreSegment = (relPath: string): boolean => {
+    const segments = relPath.split(path.sep).filter(Boolean);
+    return segments.some((seg) => seg.startsWith('_'));
+  };
+
+  const addUnitDir = (unit: UnitId, dir: string): void => {
+    // 設定側のディレクトリが存在しない場合やファイルだった場合は、対象外としてスキップする
+    if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return;
+    const existing = unitToDirs.get(unit) ?? new Set<string>();
+    existing.add(dir);
+    unitToDirs.set(unit, existing);
+  };
+
+  /**
+   * qualities 直下のドメインディレクトリを列挙する（_ 始まりは除外）
+   * @returns ドメインディレクトリの絶対パス配列
+   */
+  const getDomainDirs = (): string[] => {
+    // qualities ディレクトリが存在しない環境（部分チェックなど）ではユニット検出をスキップする
+    if (!fs.existsSync(QUALITIES_DIR)) return [];
+    const entries = fs.readdirSync(QUALITIES_DIR, { withFileTypes: true });
+    return entries
+      .filter((e) => e.isDirectory() && !e.name.startsWith('_'))
+      .map((e) => path.join(QUALITIES_DIR, e.name));
+  };
+
+  /**
+   * ドメイン直下のバケットディレクトリを列挙する（_ 始まりや `_` セグメントを含むものは除外）
+   * @param domainDir ドメインディレクトリの絶対パス
+   * @returns バケットディレクトリの絶対パス配列
+   */
+  const getBucketDirs = (domainDir: string): string[] => {
+    const rel = path.relative(QUALITIES_DIR, domainDir);
+    // ドメイン階層に '_' 始まりのセグメントが含まれる場合は、そのサブツリー全体をユニット候補から除外する
+    if (hasUnderscoreSegment(rel)) return [];
+    const entries = fs.readdirSync(domainDir, { withFileTypes: true });
+    return entries
+      .filter((e) => e.isDirectory() && !e.name.startsWith('_'))
+      .map((e) => path.join(domainDir, e.name));
+  };
+
+  /**
+   * バケット直下のユニットディレクトリ候補を列挙する（命名規約を満たすもののみ返す）
+   * @param bucketDir バケットディレクトリの絶対パス
+   * @returns ユニットディレクトリの絶対パス配列
+   */
+  const getUnitDirs = (bucketDir: string): string[] => {
+    const rel = path.relative(QUALITIES_DIR, bucketDir);
+    // バケット階層に '_' 始まりのセグメントが含まれる場合は、このバケット配下をユニット候補から除外する
+    if (hasUnderscoreSegment(rel)) return [];
+
+    let areaEntries: fs.Dirent[];
+    // バケット配下を読み取り、命名規約に従うユニット候補だけを抽出する
+    try {
+      areaEntries = fs.readdirSync(bucketDir, { withFileTypes: true });
+    } catch {
+      // 読み取り不能なバケットは一時的な不整合としてスキップし、他のバケットの検査を優先する
+      return [];
+    }
+
+    const unitDirs: string[] = [];
+    // バケット直下のディレクトリを走査し、ユニット名の命名規約に合致するものだけを候補とする
+    for (const areaEntry of areaEntries) {
+      // ファイルはユニット候補ではないため除外し、ディレクトリのみをユニット候補として扱う
+      if (!areaEntry.isDirectory()) continue;
+      const areaName = areaEntry.name;
+      // '_' 始まりや命名規約に反するディレクトリはユニット候補から除外する
+      if (areaName.startsWith('_') || !unitNamePattern.test(areaName)) continue;
+      unitDirs.push(path.join(bucketDir, areaName));
+    }
+
+    return unitDirs;
+  };
+
+  const domainDirs = getDomainDirs();
+  // qualities/{domain}/{bucket}/{unit} という3階層目のディレクトリをユニット候補として探索する
+  for (const domainDir of domainDirs) {
+    const bucketDirs = getBucketDirs(domainDir);
+    // 各バケット配下のユニットディレクトリを収集し、ユニット ID ごとに入力ディレクトリを登録する
+    for (const bucketDir of bucketDirs) {
+      const unitDirs = getUnitDirs(bucketDir);
+      // ユニット候補ディレクトリを順に登録し、PRE-COMMON が参照するユニット→入力ディレクトリ集合を構築する
+      for (const unitDir of unitDirs) {
+        const unitName = path.basename(unitDir);
+        addUnitDir(unitName, unitDir);
+      }
+    }
+  }
+
+  const units: UnitSources[] = [];
+  // ユニットごとに収集済みディレクトリ集合を配列へ変換し、呼び出し側が扱いやすい構造へ整形する
+  for (const [unit, dirs] of unitToDirs.entries()) {
+    units.push({ unit, srcDirs: Array.from(dirs) });
+  }
+
+  return units;
+}
+
+/**
+ * ディレクトリ配下のファイルを再帰的に列挙する
+ * @param dir 起点ディレクトリ
+ * @returns 配下に存在するすべてのファイルの絶対パス配列
+ */
+function listFilesRecursive(dir: string): string[] {
+  const files: string[] = [];
+  const stack: string[] = [dir];
+  // ディレクトリツリーを明示的なスタックでたどり、深さに依存しない列挙を行う
+  while (stack.length > 0) {
+    const current = stack.pop();
+    // スタックから取り出した値が空の場合は異常状態と見なし、ループを中断する
+    if (!current) break;
+    let entries: fs.Dirent[] | undefined;
+    // 読み取りに失敗するディレクトリがあっても全体の列挙を継続できるようにする
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true });
+    } catch {
+      // アクセス権や一時的な I/O エラーで読み取れないディレクトリは、鮮度判定の対象外として安全にスキップする
+      continue;
+    }
+
+    // ディレクトリであればスタックへ積み、ファイルであれば結果リストへ追加する
+    for (const e of entries) {
+      const full = path.join(current, e.name);
+      // ディレクトリとファイルを分岐させ、探索キューと結果コレクションへそれぞれ振り分ける
+      if (e.isDirectory()) {
+        // ディレクトリの場合は後で中身を列挙するためにスタックへ積む
+        stack.push(full);
+      } else if (e.isFile()) {
+        files.push(full);
+      }
+    }
+  }
+
+  return files;
+}
+
+/**
+ * 単一ファイルの内容ハッシュを計算する（sha256, hex）
+ * @param absPath 対象ファイルの絶対パス
+ * @returns sha256 ハッシュ文字列（hex）
+ */
+function calcFileHash(absPath: string): string {
+  const buf = fs.readFileSync(absPath);
+  const h = crypto.createHash('sha256');
+  h.update(buf);
+  return h.digest('hex');
+}
+
+/**
+ * ユニットごとの manifest.yaml を生成する
+ * - 各 manifest には unit/algo/generatedAt/files/unitDigest を含める
+ */
+export function generateContextHashManifests(): void {
+  const units = collectUnitSources();
+  // 対象ユニットが無ければ何もせず静かに戻る
+  if (units.length === 0) return;
+  // 各ユニットごとに入力ディレクトリをたどり、hash manifest を構築する
+  for (const { unit, srcDirs } of units) {
+    const allFiles: string[] = [];
+    // 各 src ディレクトリ配下の全ファイルを列挙し、後続のハッシュ計算対象とする
+    for (const src of srcDirs) {
+      // 設定の追加や削除により存在しないディレクトリが混ざっても安全にスキップできるようにする
+      if (!fs.existsSync(src) || !fs.statSync(src).isDirectory()) continue;
+      allFiles.push(...listFilesRecursive(src));
+    }
+
+    // context.yaml/context.md は qualities 側には通常存在しないが、念のため除外する
+    const compareFiles = allFiles.filter((f) => {
+      const b = path.basename(f).toLowerCase();
+      return !(b === 'context.yaml' || b === 'context.md');
+    });
+
+    // パス順で安定化
+    const relAndHash = compareFiles
+      .map((abs) => {
+        const rel = toPosix(path.relative(PROJECT_ROOT, abs));
+        const hash = calcFileHash(abs);
+        return { rel, hash };
+      })
+      .sort((a, b) => {
+        // マニフェストの差分が安定するよう、相対パスの昇順でソートする
+        if (a.rel < b.rel) return -1;
+        // 逆順の場合は後ろへ回し、辞書順に従った安定ソートを実現する
+        if (a.rel > b.rel) return 1;
+        return 0;
+      });
+
+    // ユニットダイジェスト（パス＋ハッシュ列から導出）
+    const digestHash = crypto.createHash('sha256');
+    // unitDigest はパスと個別ハッシュの組み合わせから一意に導出し、ユニット単位のシグネチャとして利用する
+    for (const entry of relAndHash) {
+      digestHash.update(entry.rel);
+      digestHash.update('\n');
+      digestHash.update(entry.hash);
+      digestHash.update('\n');
+    }
+
+    const unitDigest = digestHash.digest('hex');
+
+    const destDir = path.join(OUTPUT_BASE, unit);
+    const destFile = path.join(destDir, 'manifest.yaml');
+    fs.mkdirSync(destDir, { recursive: true });
+
+    const generatedAt = new Date().toISOString();
+    const lines: string[] = [];
+    lines.push(`unit: ${unit}`);
+    lines.push('algo: sha256');
+    lines.push(`generatedAt: "${generatedAt}"`);
+    lines.push(`unitDigest: "${unitDigest}"`);
+    lines.push('files:');
+    // ファイル単位のエントリを列挙し、マニフェストから qualities/** 側の具体的な構成とハッシュをたどれるようにする
+    for (const entry of relAndHash) {
+      // YAML を機械可読に保つため、パスは生文字列、ハッシュは明示的な文字列リテラルとして出力する
+      lines.push(`  - path: ${entry.rel}`);
+      lines.push(`    hash: "${entry.hash}"`);
+    }
+
+    fs.writeFileSync(destFile, `${lines.join('\n')}\n`, 'utf8');
+  }
+}
+
+// ESM 環境でも直接実行できるようにエントリポイントを分岐する
+const entryArg = process.argv[1];
+const isDirectRun = typeof entryArg === 'string' && import.meta.url === `file://${entryArg}`;
+// 直接実行された場合のみ CLI としてマニフェスト生成を行い、モジュールインポート時は副作用を避ける
+if (isDirectRun) {
+  // CLI 実行時はマニフェスト生成の成否を標準出力/標準エラーに明示し、PRE-COMMON 側で扱いやすいようにする
+  try {
+    generateContextHashManifests();
+    process.stdout.write('context-hash-manifest: manifests generated successfully\n');
+  } catch (e) {
+    // マニフェスト生成で想定外の例外が発生した場合は PRE-COMMON 全体の失敗として扱い、詳細を標準エラーに出力する
+    const msg = e instanceof Error ? e.message : String(e);
+    process.stderr.write(`context-hash-manifest: fatal error: ${msg}\n`);
+    process.exit(1);
+  }
+}

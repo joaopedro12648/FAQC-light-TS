@@ -58,6 +58,8 @@ import path from 'node:path';
 const repoRoot = process.cwd();
 /** 解析対象の品質コンテキスト（var 配下）の基底ディレクトリ */
 const VAR_BASE = path.join(repoRoot, 'vibecoding', 'var', 'contexts', 'qualities');
+/** 品質系 SnD（SPEC-and-DESIGN）配置ディレクトリの基底パス */
+const SND_BASE = path.join(repoRoot, 'vibecoding', 'var', 'SPEC-and-DESIGN');
 
 // しきい値
 /** コードブロック（```）の最低個数 */
@@ -441,53 +443,131 @@ function checkContextMd(filePath: string): string[] {
   return errs;
 }
 
-/** エントリポイント: すべての context.md を検証して終了する。 */
-function main(): void {
-  // 対象ディレクトリが存在しない場合は非該当として早期終了する
-  if (!fs.existsSync(VAR_BASE)) {
-    process.stdout.write('context-md-rubric: no var contexts found, skipping\n');
-    process.exit(0);
+/**
+ * 品質系 SnD に対して Quality Context Hash Manifest セクションの存在を検査する
+ * @param filePath 対象 SnD ファイルの絶対パス
+ * @returns 検出された違反メッセージ配列（問題が無ければ空配列）
+ */
+function checkQualitySnd(filePath: string): string[] {
+  const text = fs.readFileSync(filePath, 'utf8');
+  const errs: string[] = [];
+
+  // front matter を抽出できない、もしくは qualities タグを含まない SnD は本検査の対象外とする
+  const frontMatterMatch = text.match(/^---([\s\S]*?)---/);
+  // front matter ブロックが存在しない SnD は品質系情報を持たないため、Hash Manifest 検査の対象外とする
+  if (!frontMatterMatch) {
+    return errs;
   }
 
-  // 引数処理（--include / 位置引数）
-  const argv = process.argv.slice(2);
-  const includeGlobs = parseIncludeArgs(argv);
+  const frontMatter = frontMatterMatch[1] ?? '';
+  // qualities タグを含まない SnD は品質系コンテキストを扱わないため、Hash Manifest セクション検査の対象外とする
+  if (!/^\s*tags:\s*\[.*qualities.*\]/m.test(frontMatter)) {
+    return errs;
+  }
 
-  // 走査とフィルタ
+  // Quality Context Hash Manifest セクションの存在を確認し、品質系 SnD と hash manifest の紐付けが記録されていることを保証する
+  const qchmHeadingPatterns = [/^\s*##\s*Quality Context Hash Manifest\b/m];
+  // Hash Manifest セクションの見出しが無い場合は、品質系 SnD と品質コンテキストの対応が追跡できないため不足として扱う
+  if (!hasHeading(text, qchmHeadingPatterns)) {
+    errs.push('SnD: missing `## Quality Context Hash Manifest` section for qualities-tagged SnD');
+    return errs;
+  }
+
+  // 対象セクションのみを抽出し、manifest パスと unitDigest の存在を個別に検査する
+  const qchmSection = extractSection(text, qchmHeadingPatterns);
+  const hasManifestPath = /vibecoding\/var\/contexts\/qualities\/.+manifest\.yaml/.test(qchmSection);
+  const hasUnitDigest = /(unitDigest|[0-9a-f]{8,})/i.test(qchmSection);
+
+  // manifest パスが無い場合は、SnD から実際の hash manifest をたどれないため不足として扱う
+  if (!hasManifestPath) {
+    errs.push('SnD: Quality Context Hash Manifest section missing manifest path (vibecoding/var/contexts/qualities/**/manifest.yaml)');
+  }
+
+  // unitDigest が無い場合は、「どの内容バージョンの品質コンテキストに基づくか」が追跡できないため不足として扱う
+  if (!hasUnitDigest) {
+    errs.push('SnD: Quality Context Hash Manifest section missing unitDigest-like value');
+  }
+
+  return errs;
+}
+
+/**
+ * context.md に対するルーブリック検査を実行する
+ * @param includeGlobs --include で指定されたパターン一覧
+ * @param allErrors 収集した違反メッセージの出力先
+ */
+function runContextMdChecks(includeGlobs: string[], allErrors: Array<{ file: string; errs: string[] }>): void {
+  // var 配下のコンテキストミラーが未整備なリポジトリでは、SnD 側のみを対象に検査を続行する
+  if (!fs.existsSync(VAR_BASE)) {
+    process.stdout.write('context-md-rubric: no var contexts found, skipping context.md checks\n');
+    return;
+  }
+
+  // var 配下が存在する場合のみ context.md のルーブリック検査対象を列挙する
   let files = listFilesRecursive(VAR_BASE).filter((f) => /context\.md$/i.test(f));
-  // 絞り込み指定がある場合は対象ファイル集合をフィルタする
+  // --include が指定されている場合は簡易グロブに基づいて対象を絞り込む
   if (includeGlobs.length > 0) {
-
     const relToRepo = (abs: string) => toPosix(path.relative(repoRoot, abs));
     const regs = includeGlobs.map(globToRegex);
-    // include パターンに一致するファイルのみを残して走査対象を絞り込む
     files = files.filter((abs) => {
       const rel = relToRepo(abs);
       return regs.some((re) => re.test(rel));
     });
-    // マッチ0件ならスキップとして即時終了（不要な走査を避ける）
+    // 絞り込み結果が 0 件の場合はスキップ扱いとして早期終了する
     if (files.length === 0) {
-
       process.stdout.write('context-md-rubric: no files matched by --include\n');
       process.exit(0);
     }
   }
 
-  const allErrors: Array<{ file: string; errs: string[] }> = [];
-  // 対象ファイルを順に検査して違反を収集する
+  // ルーブリック対象の context.md を順に検査し、違反があるもののみを結果へ追加する
   for (const f of files) {
     const errs = checkContextMd(f);
-    // 違反がある場合のみ結果へ追加（無いファイルはノイズ削減でスキップ）
+    // ルーブリック違反が存在するファイルのみを allErrors に追加し、出力をノイズレスに保つ
     if (errs.length) {
-
       allErrors.push({ file: path.relative(repoRoot, f).replace(/\\/g, '/'), errs });
     }
   }
+}
+
+/**
+ * 品質系 SnD に対する Quality Context Hash Manifest セクション検査を実行する
+ * @param allErrors 収集した違反メッセージの出力先
+ */
+function runQualitySndChecks(allErrors: Array<{ file: string; errs: string[] }>): void {
+  // 品質系 SnD が存在しないリポジトリでは、Hash Manifest セクション検査をスキップする
+  if (!fs.existsSync(SND_BASE)) {
+    return;
+  }
+
+  // SnD ベース配下の SnD-*.md を走査し、tags に qualities を含むものだけを対象として Hash Manifest セクションを検査する
+  const sndFiles = listFilesRecursive(SND_BASE).filter((f) => /SnD-.*\.md$/i.test(f));
+  // 各 SnD について hash manifest セクションに必要な情報が揃っているかを確認する
+  for (const f of sndFiles) {
+    const errs = checkQualitySnd(f);
+    // Hash Manifest セクションに不足がある SnD のみを allErrors に追加し、対象を品質系に限定する
+    if (errs.length) {
+      allErrors.push({ file: path.relative(repoRoot, f).replace(/\\/g, '/'), errs });
+    }
+  }
+}
+
+/** エントリポイント: すべての context.md および品質系 SnD を検証して終了する。 */
+function main(): void {
+  const allErrors: Array<{ file: string; errs: string[] }> = [];
+
+  // 引数処理（--include / 位置引数）— 現状は context.md 用のみ。SnD は常に全体チェック。
+  const argv = process.argv.slice(2);
+  const includeGlobs = parseIncludeArgs(argv);
+
+  // context.md と SnD の検査を順に実行し、違反を allErrors に集約する
+  runContextMdChecks(includeGlobs, allErrors);
+  runQualitySndChecks(allErrors);
 
   // 全件合格なら成功終了（ルーブリック準拠）
   if (allErrors.length === 0) {
 
-    process.stdout.write(`context-md-rubric ✅ all ${files.length} file(s) compliant\n`);
+    process.stdout.write('context-md-rubric ✅ no violations\n');
     process.exit(0);
   }
 

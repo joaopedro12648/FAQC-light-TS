@@ -29,6 +29,9 @@ SPEC-and-DESIGN ファイル作成にあたっては、次の SoT を明確に�
      - `vibecoding/var/contexts/qualities/{core,types,docs,tsconfig}/context.md`（正規ユニットの人間可読コンテキスト）
      - `vibecoding/var/contexts/qualities/**/*.yaml`（対応する機械可読設定）
      - `qualities/policy/baseline.yaml` など（ポリシーは `npm run check` から個別実行される）
+   - 品質系 SnD（front matter の `tags` に `qualities` を含む SnD）では、加えて次を参照した上で SnD を記述する:
+     - 対象ユニットの hash manifest（`vibecoding/var/contexts/qualities/<unit>/manifest.yaml`）
+     - 当該ユニットの unitDigest（manifest から導出されるユニット全体の代表ハッシュ）
 
 3. SnD 内の明記ポイント
    - 改変許可範囲（Allowed Change Scope）: 今回の設計/実装で手を入れる範囲を限定
@@ -38,6 +41,11 @@ SPEC-and-DESIGN ファイル作成にあたっては、次の SoT を明確に�
    - qualities 改変ポリシー: ユーザーから「qualities/** を変更する SnD」として明示依頼されたタスク以外では qualities/** の編集を全面禁止とし、該当しない SnD では「qualities/**: 本SnDの改変対象外」と明記する。
    - 改変対象パスの明示（IMPL スコープ連動）: IMPL フェーズで AI/エージェントが編集してよいパスは、承認済み SnD の「改変許可範囲」と `context.outputTargets` の両方に列挙されたパスに限定される。`src/**`, `tests/**`, `vibecoding/**`, `qualities/**` を編集対象とする場合は、必ず本節と `context.outputTargets` の双方に明示し、明示されていないパスへの編集はガードレール違反として禁止する。
    - qualities 配下のルールやゲート強化を行う SnD では、「設定追加後にどの範囲（例: `qualities/**`, `src/**`, `scripts/**`）へ lint/typecheck/policy を再実行し、既存コードの違反をいつ・どこまで修正するか」というロールアウト計画を必ず SnD 本文（目的/マイグレーション/受け入れ条件など）に明示する。新しいルールだけを追加し、既存コードの修正計画を曖昧なまま残すことは禁止。
+   - 品質系 SnD では、SnD 本文の末尾に `## Quality Context Hash Manifest` セクションを追加し、少なくとも次の情報を記載する:
+     - 対象ユニット ID（例: `core/types/docs` 等）
+     - 各ユニットの hash manifest パス（例: `vibecoding/var/contexts/qualities/docs/manifest.yaml`）
+     - 各ユニットの unitDigest 値（manifest から導出された 1 行のダイジェスト）
+   - 上記セクションは、後続の PRE-COMMON / Rubric によるチェックの対象となり、「この SnD がどの品質コンテキストのバージョンに基づいているか」を単体で追跡可能にすることを目的とする。
 
 4. 設計レビュー準備
    - 「未確定事項」を埋めきること（空であること）

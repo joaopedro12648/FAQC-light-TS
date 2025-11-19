@@ -136,7 +136,8 @@ for_hyper_literal_models:
       ルールの解釈・変更・優先順位を決める権限もユーザーが持つ。
       よって Hyper Literal Model は「ユーザーの現在の意図」を常に最上位として扱い、
       ルールよりもユーザーの要望を優先しなければならない。
-      ルールをユーザーに守らせようとする発言をしてはならない。
+      上から目線でルールをユーザーに守らせようとする発言をしてはならない。
+      ただし、営業マン的な姿勢でユーザーにルールを守らせるように務め、誘導する。
 
     tone_rule: >
       Hyper Literal Model は返答を過度に簡潔化しがちだが、
@@ -170,6 +171,15 @@ for_hyper_literal_models:
       代わりに、ユーザーに合わせて
       「じゃあこれ送ってくれたら続きできるよ！」のように、
       柔らかく具体的な案内を行うこと。
+    guardrail_prompt_style: >
+      承認フレーズの要求を含むあらゆるガードレールやルール遵守の動作について、
+      「今のガードレールでは〜が必要です」「〜というルール上の制約があります」
+      といったメタ説明を返答の先頭で繰り返さない。
+      ルールが理由で追加の操作が必要な場合でも、
+      まずは説明よりも「次にやってほしい具体的な 1 手」を短く提示する
+      （例: 「それでは下記の承認フレーズを送ってください。」＋フレーズ）。
+      ガードレールやルールの詳細な説明は、ユーザーから質問があったとき、
+      もしくは SnD/.cursorrules のメンテナンス文脈でのみ簡潔に補足する。
 
     refusal_rule: >
       ルール上の制約により作業できない場合でも、
@@ -328,7 +338,7 @@ agent_phase:
       chat_output:
         before_phrase:
           - "要旨（約50文字）: 作成したSnDの作成動機となったユーザーの問い/指示への簡潔な返答を、ユーザーのロケール/設定に基づいた言語で1行で出力する（計画/詳細は含めない）。"
-          - "別チャットでの承認可否: 承認は別チャット（別コンテキスト）でも可能である旨を1行で明示する。"
+          - "別チャットでの承認可否: 承認は別チャット（別コンテキスト）でも可能である旨、もしくは別チャットで実施するには SnD の自己完結度が不足しているためこのチャットで SnD 更新が必要である旨のどちらか一方を1行で明示する。"
           - "承認手順ガイダンス: 承認いただける場合、次のフレーズをチャット欄にコピー&ペーストしてください。"
         ordering: "gist_line, approval_hint_line, guidance_line, phrase_line"
         locale_policy: "ユーザー設定>会話言語>OSロケールの順で自動選択。"
@@ -371,7 +381,7 @@ agent_phase:
     # 承認要請タイミングの規範（明文化）
     approval_prompt_policy:
       require_snd_created_and_pre_common_success: true  # SnD 作成完了（PRE-COMMON exit=0）前は承認要請を出さない
-      ready_transition_prompt_rule: "SnD を作成もしくは編集した直後、その SnD が Ready である場合は、IMPL フェーズ移行のための承認フレーズ付きチャット出力を必ず 1 度行う（ユーザー意図を推測して抑止してはならない）。"
+      ready_transition_prompt_rule: "SnD を作成もしくは編集した直後、その SnD が Ready である場合は、その場で IMPL フェーズを開始するか否かに関わらず、IMPL フェーズ移行のための承認フレーズ付きチャット出力を必ず行う（ユーザー意図を推測して抑止してはならない）。"
 
 guardrails:
   edits:
@@ -414,6 +424,20 @@ guardrails:
         consent:
           required_phrase: "MAINT=承認: scope=<短文>"
           guidance: "拡大解釈禁止。小変更（件数/行数制約）・依存/設定/公開API 変更は依然禁止。"
+      - name: "snd-residual-tasks"
+        allow_in_phases: ["SnD-ONLY", "IMPL"]
+        scope: "Ready な SnD に明示されたフォローアップタスク / 残タスクのみを実行する小規模メンテナンス"
+        paths:
+          - "**"
+        constraints:
+          require_snd_status_ready: true
+          restrict_to_residual_tasks_section: true
+          disallow_new_output_targets: true
+          disallow_scope_expansion_beyond_snd: true
+        policy: |
+          Ready 状態の SPEC-and-DESIGN（SnD）本文に「フォローアップタスク / 残タスク」として明示された作業のみを対象とする。
+          当該 SnD の context.outputTargets や残タスク節に列挙されたパス・コマンドの範囲内であれば、SnD 自体を同意ソースとみなし、追加の承認フレーズ（PHASE=IMPL / MAINT）を要求しない。
+          逆に、SnD に記載されていない新規タスクやスコープ拡張を伴う変更は本例外の対象外とし、従来どおり個別の承認フレーズに従う。
       - name: "auto-impl-after-approval"
         allow_in_phases: ["IMPL"]
         scope: "from_approved_snd"
@@ -608,7 +632,7 @@ snd_residual_tasks_append:
   guards: "SnD.status==Ready（未Readyなら不足項目の列挙のみ返し追記は保留）; quality_refresh_hash_*は非開示; output_policyに従いツール実行時のみマイクロ更新"
   approval_guidance:
     phrase_examples: ["PHASE=IMPL 承認: SnD=<path>", "PHASE=IMPL APPROVE: SnD=<path>"]
-    notes: ["承認は別チャットでも可。", "上記フレーズをコピー&ペーストで送信。"]
+    notes: ["承認は別チャットでも可。", "上記フレーズをコピー&ペーストで送信。", "Ready な SnD に既に記載されているフォローアップタスク / 残タスクを、その SnD を根拠に実行する場合は、追加の承認フレーズは不要（SnD が同意ソース）。"]
 
 snd_hash_policy:
   description: "PRE-COMMON exit!=0 の状態で SnD を扱うときのハッシュ運用ルール"

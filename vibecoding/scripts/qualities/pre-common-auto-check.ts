@@ -22,6 +22,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { stepDefs } from '../../../qualities/check-steps.ts';
+import type { UnitSources } from './context-hash-manifest.ts';
+import { collectUnitSources, generateContextHashManifests } from './context-hash-manifest.ts';
 
 /** リポジトリのプロジェクトルート（cwd） */
 const PROJECT_ROOT = process.cwd();
@@ -145,20 +147,6 @@ function normalizePathForOutput(p: string): string {
 }
 
 /**
- * 直下のサブディレクトリ一覧を取得する。
- * @param baseDir ディレクトリパス
- * @returns サブディレクトリの絶対パス配列
- */
-function getImmediateSubdirs(baseDir: string): string[] {
-  // ベースディレクトリが無ければ探索を行わず空配列として扱う
-  if (!fs.existsSync(baseDir)) return [];
-  return fs
-    .readdirSync(baseDir, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
-    .map((d) => path.join(baseDir, d.name));
-}
-
-/**
  * ディレクトリ配下のファイルを再帰的に列挙する。
  * @param dir ルートディレクトリ
  * @returns ファイルの絶対パス配列
@@ -218,171 +206,6 @@ function getMaxMtimeMs(filePaths: string[]): number {
   }
 
   return maxMs;
-}
-
-/**
- * ミラー対象となる qualities/** 配下のディレクトリを収集する。
- * @returns ディレクトリの絶対パス配列
- */
-function collectTargetDirs(): string[] {
-  const result: string[] = [];
-  const isUnderscoreDir = (p: string): boolean => path.basename(p).startsWith('_');
-
-  // 1) qualities/policy/*
-  const policyDir = path.join(QUALITIES_DIR, 'policy');
-  const policyChildren = getImmediateSubdirs(policyDir).filter((d) => !isUnderscoreDir(d));
-  result.push(...policyChildren);
-
-  // 2) qualities/eslint/* (exclude _shared)
-  const eslintDir = path.join(QUALITIES_DIR, 'eslint');
-  const eslintChildren = getImmediateSubdirs(eslintDir).filter((d) => !isUnderscoreDir(d));
-  result.push(...eslintChildren);
-
-  // 3) qualities/*（'policy' と 'eslint' を除外）。既存と重複しないよう追加する
-  const topLevel = getImmediateSubdirs(QUALITIES_DIR).filter((d) => {
-    const name = path.basename(d);
-    return name !== 'policy' && name !== 'eslint' && !name.startsWith('_');
-  });
-  result.push(...topLevel);
-
-  // 順序を保ったまま重複を除去
-  const seen = new Set<string>();
-  // 既出ディレクトリを除去して重複を抑制する
-  return result.filter((d) => {
-    // 既出ディレクトリは結果から除外して重複を抑制する
-    if (seen.has(d)) return false;
-    seen.add(d);
-    return true;
-  });
-}
-
-/** PRE-COMMON で扱う正規ユニット ID を表す型（TypeScript gate は types ユニットへ集約し、tsconfig 専用ユニットは廃止） */
-type UnitId = 'core' | 'types' | 'docs';
-
-/** 各ユニットに紐づく qualities/** 側のソースディレクトリ群 */
-interface UnitSources {
-  unit: UnitId;
-  srcDirs: string[];
-}
-
-/**
- * qualities/** のフォルダ構成からユニットごとのソースディレクトリを自動抽出する。
- * - eslint/policy/tsconfig の bucket 構造を走査し、末端の core/types/docs エリアを検出する（tsconfig は types ユニットへ集約）。
- * - 新しい bucket や policy が追加されても、core/types/docs エリアが追加されれば自動的に対象へ含まれる。
- * @returns ユニットごとのソースディレクトリ定義
- */
-function collectUnitSources(): UnitSources[] {
-  const unitToDirs = new Map<UnitId, Set<string>>();
-  const targets = collectTargetDirs();
-
-  /**
-   * 指定ユニットに対応する入力ディレクトリを登録するヘルパー。
-   * qualities/** 側に実在するディレクトリのみをユニット単位の集合へ追加する。
-   *
-   * @param unit 集約先となるコンテキストユニット ID（core/types/docs/tsconfig）
-   * @param dir  ユニットにひも付ける qualities/** 側のディレクトリパス
-   */
-  const addUnitDir = (unit: UnitId, dir: string): void => {
-    // PRE-COMMON の対象は qualities/** の実在ディレクトリに限定し、壊れた参照はここで除外する
-    if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return;
-    const existing = unitToDirs.get(unit) ?? new Set<string>();
-    existing.add(dir);
-    unitToDirs.set(unit, existing);
-  };
-
-  /**
-   * eslint ドメインの bucket 構造から core/types/docs エリアを抽出し、ユニットへひも付ける。
-   * plugins 配下の docs/types も docs/types ユニットの入力として扱う。
-   */
-  const collectFromEslint = (): void => {
-    // eslint ドメインに属するターゲットだけを抽出し、bucket/plugins ごとに core/types/docs エリアをユニット入力へ集約する
-    const eslintTargets = targets.filter((srcDir) => {
-      const rel = path.relative(QUALITIES_DIR, srcDir);
-      const parts = rel.split(path.sep).filter(Boolean);
-      const domain = parts[0];
-      return domain === 'eslint';
-    });
-
-    // 抽出された eslint 関連ディレクトリを順に巡回し、bucket 単位または plugins 単位でユニット入力へひも付ける
-    for (const srcDir of eslintTargets) {
-      const rel = path.relative(QUALITIES_DIR, srcDir);
-      const parts = rel.split(path.sep).filter(Boolean);
-      const bucketOrSpecial = parts[1];
-      const eslintDir = path.join(QUALITIES_DIR, 'eslint');
-      // bucket 単位で core/types/docs エリアを検出し、各ユニットの入力ディレクトリとして登録する
-      if (bucketOrSpecial && bucketOrSpecial !== 'plugins') {
-        // バケット単位の core/types/docs をユニット入力として登録する
-        const bucketDir = path.join(eslintDir, bucketOrSpecial);
-        addUnitDir('core', path.join(bucketDir, 'core'));
-        addUnitDir('types', path.join(bucketDir, 'types'));
-        addUnitDir('docs', path.join(bucketDir, 'docs'));
-      } else if (bucketOrSpecial === 'plugins') {
-        const pluginsDir = path.join(eslintDir, 'plugins');
-        addUnitDir('docs', path.join(pluginsDir, 'docs'));
-        addUnitDir('types', path.join(pluginsDir, 'types'));
-      }
-    }
-  };
-
-  /** policy ドメインの各ポリシーディレクトリから core/types/docs エリアを抽出し、ユニットへひも付ける。 */
-  const collectFromPolicy = (): void => {
-    // policy ドメインに属するターゲットだけを走査し、各ポリシーごとの core/types/docs エリアを core/types/docs ユニットへ束ねる
-    // 各 policy ディレクトリを順に確認し、core/types/docs の下位構造をユニット入力として拾い上げるためのループ
-    for (const srcDir of targets) {
-      const rel = path.relative(QUALITIES_DIR, srcDir);
-      const parts = rel.split(path.sep).filter(Boolean);
-      const domain = parts[0];
-      // policy ドメイン以外はこのフェーズの対象外とし、ループだけを維持して次の候補へ進める
-      if (domain !== 'policy') continue;
-
-      const policyDir = srcDir;
-      addUnitDir('core', path.join(policyDir, 'core'));
-      addUnitDir('types', path.join(policyDir, 'types'));
-      addUnitDir('docs', path.join(policyDir, 'docs'));
-    }
-  };
-
-  /** tsconfig ドメインから TypeScript 設定ディレクトリを抽出し、types ユニットへひも付ける（tsconfig 専用ユニットは持たない）。 */
-  const collectFromTsconfig = (): void => {
-    // tsconfig ドメインに属するターゲットだけを走査し、tsconfig 全体を types ユニットの入力として扱う
-    // tsconfig 関連の設定ディレクトリをすべて巡回し、型設定の変更が types ユニットの鮮度判定に反映されるようにするためのループ
-    for (const srcDir of targets) {
-      const rel = path.relative(QUALITIES_DIR, srcDir);
-      const parts = rel.split(path.sep).filter(Boolean);
-      const domain = parts[0];
-      // tsconfig ドメイン以外は TypeScript 設定とは無関係なので、この条件で早期にスキップして探索コストを抑える
-      if (domain !== 'tsconfig') continue;
-
-      const tsconfigBase = path.join(QUALITIES_DIR, 'tsconfig');
-      addUnitDir('types', tsconfigBase);
-    }
-  };
-
-  /** 将来のドメイン追加時に、末端の core/types/docs エリアを自動的にユニット入力へひも付ける拡張検出処理。 */
-  const collectFallback = (): void => {
-    // 既知ドメイン以外についても、末端ディレクトリ名が core/types/docs であれば対応ユニットへ自動登録し PRE-COMMON の拡張に追従できるようにする
-    // すべての candidates を確認し、既知ドメインに属さない core/types/docs エリアも漏らさず検出するためのループ
-    for (const srcDir of targets) {
-      const last = path.basename(srcDir);
-      // 末端名が core/types/docs のものだけを補完対象とし、それぞれを対応ユニットへ自動登録する
-      if (last === 'core' || last === 'types' || last === 'docs') {
-        addUnitDir(last as UnitId, srcDir);
-      }
-    }
-  };
-
-  collectFromEslint();
-  collectFromPolicy();
-  collectFromTsconfig();
-  collectFallback();
-
-  const units: UnitSources[] = [];
-  // unitToDirs に保持したユニットごとの入力ディレクトリ集合を配列へ展開し、後続処理で扱いやすい構造へ変換するための反復処理
-  for (const [unit, dirs] of unitToDirs.entries()) {
-    units.push({ unit, srcDirs: Array.from(dirs) });
-  }
-
-  return units;
 }
 
 /**
@@ -825,7 +648,7 @@ function buildDuplicateMessages(): string[] {
  */
 function allTargetContextMdExist(): boolean {
   const units = collectUnitSources();
-  const seenUnits = new Set<UnitId>();
+  const seenUnits = new Set<string>();
   // 各ユニットごとに context.md の存在を確認して整合性を判断する
   // 取得済みユニット一覧を順に確認し、var 配下に対応する context.md が存在するかを検査する
   for (const { unit } of units) {
@@ -921,9 +744,64 @@ function emitReviewConflictMessages(pairs: Array<{ contextMd: string; reviewMd: 
   }
 }
 
+/**
+ * review ファイルの存在に起因する PRE-COMMON 一時 Fail をハンドリングする
+ * - context mirror / rubric / duplicate がすべてクリアになった場合のみ review 衝突を検査する
+ * - review が残っている場合は統合を促すメッセージを出力し、exit=2 で一時 Fail とする
+ * @param mappings まだ同期が必要な SRC=>DEST マッピング一覧
+ * @param rubricViolation Rubric 未充足があるかどうか
+ * @param dupViolation 重複検出があるかどうか
+ */
+function handleReviewConflicts(
+  mappings: Array<{ srcDir: string; destDir: string }>,
+  rubricViolation: boolean,
+  dupViolation: boolean,
+): void {
+  // ミラーやルーブリック、重複に未解決要素が残っている場合は review 検査は後段に回す
+  if (mappings.length !== 0 || rubricViolation || dupViolation) {
+    return;
+  }
+
+  // まずミラーとルーブリックの要件が揃っている場合にのみレビュー有無を確認する
+  const reviewPairs = findContextReviewPairs();
+  // レビューが存在する場合は統合作業を促して一時的に Fail とする
+  if (reviewPairs.length > 0) {
+    // レビュー統合の必要性を明示し、完了まで一時 Fail とする
+    emitReviewConflictMessages(reviewPairs);
+    process.exit(2);
+  }
+}
+
+/**
+ * 重複検出のみが残っているケースをハンドリングする
+ * - ミラーと Rubric が揃っているが重複だけ検出されている場合は exit=2 で一時 Fail とする
+ * @param mappings まだ同期が必要な SRC=>DEST マッピング一覧
+ * @param rubricViolation Rubric 未充足があるかどうか
+ * @param dupViolation 重複検出があるかどうか
+ */
+function handleDuplicateOnlyCase(
+  mappings: Array<{ srcDir: string; destDir: string }>,
+  rubricViolation: boolean,
+  dupViolation: boolean,
+): void {
+  // ルーブリックは満たすが重複が残る状況を明確化し是正を促すため一時 Fail（重複のみのケース）
+  if (mappings.length === 0 && !rubricViolation && dupViolation) {
+    process.exit(2);
+  }
+}
+
 /** エントリポイント。鮮度チェックを実行して終了する。 */
 function main(): void {
   ensurePreconditions();
+  // qualities/** 側のファイルマニフェストとユニットダイジェストを生成する（hash ベースの鮮度判断用シグネチャ）
+  try {
+    generateContextHashManifests();
+  } catch (e) {
+    /* マニフェスト生成の失敗は PRE-COMMON 自体の失敗として扱い、理由を出力して終了する */
+    process.stderr.write(`pre-common-auto-check: context-hash-manifest failed: ${String((e as Error)?.message || e)}\n`);
+    process.exit(1);
+  }
+
   const startAt = writeLastUpdated();
   const mappings = computeNeededMappings(collectUnitSources());
   const rubricViolation = checkRubric();
@@ -931,31 +809,15 @@ function main(): void {
   const dupViolation = dupMsgs.length > 0;
   // 重複検出がある場合はメッセージを列挙して可視化する
   if (dupViolation) {
-
     // 重複検出の詳細を順に出力して是正作業を促す（ユーザー行動を案内）
     for (const m of dupMsgs) process.stdout.write(`${m  }\n`);
   }
 
   // 他要件が揃った場合のみレビュー衝突を検査する（post-pass review detection）
-  if (mappings.length === 0 && !rubricViolation && !dupViolation) {
-
-    // まずミラーとルーブリックの要件が揃っている場合にのみレビュー有無を確認する
-    const reviewPairs = findContextReviewPairs();
-    // レビューが存在する場合は統合作業を促して一時的に Fail とする
-    if (reviewPairs.length > 0) {
-
-      // レビュー統合の必要性を明示し、完了まで一時 Fail とする
-      emitReviewConflictMessages(reviewPairs);
-      process.exit(2);
-    }
-  }
+  handleReviewConflicts(mappings, rubricViolation, dupViolation);
 
   // 重複のみ検出された場合は情報提示後に一時 Fail とする
-  if (mappings.length === 0 && !rubricViolation && dupViolation) {
-
-    // ルーブリックは満たすが重複が残る状況を明確化し是正を促すため一時 Fail（重複のみのケース）
-    process.exit(2);
-  }
+  handleDuplicateOnlyCase(mappings, rubricViolation, dupViolation);
 
   outputAndExit(startAt, mappings, rubricViolation);
 }
