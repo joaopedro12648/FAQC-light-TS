@@ -116,7 +116,7 @@ export const documentation = [
           ignoreElseIf: true,
           ignoreCatch: false,
           treatChainHeadAs: 'non-dangling',
-          fixMode: true,
+          fixMode: false,
           // SnD-20251118 で導入した節コメントオプションは段階的ロールアウトのため既定では無効化する
           requireSectionComments: false,
           sectionCommentLocations: ['block-head', 'trailing'],
@@ -147,7 +147,7 @@ export const documentation = [
           ignoreElseIf: true,
           ignoreCatch: false,
           treatChainHeadAs: 'non-dangling',
-          fixMode: true,
+          fixMode: false,
           // フェーズ1適用: fullOnly + block-head
           requireSectionComments: 'fullOnly',
           sectionCommentLocations: ['block-head'],
@@ -177,7 +177,7 @@ export const documentation = [
           ignoreElseIf: true,
           ignoreCatch: false,
           treatChainHeadAs: 'non-dangling',
-          fixMode: true,
+          fixMode: false,
           requireSectionComments: 'fullOnly',
           sectionCommentLocations: ['block-head'],
           enforceMeta: false,

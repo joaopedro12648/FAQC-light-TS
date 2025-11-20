@@ -14,7 +14,8 @@
     "check": "tsx scripts/qualities/check.ts",
     "check:fast": "tsx scripts/qualities/check.ts --fast",
     "verify:policy": "node qualities/policy/anti_mvp/core/run.mjs && node qualities/policy/no_relaxation/core/run.mjs",
-    "context:manifest": "tsx vibecoding/scripts/qualities/context-hash-manifest.ts"
+    "context:manifest": "tsx vibecoding/scripts/qualities/context-hash-manifest.ts",
+    "context:rubric": "tsx vibecoding/scripts/qualities/context-md-rubric.ts"
   },
   "author": "cozyupk",
   "license": "MIT",

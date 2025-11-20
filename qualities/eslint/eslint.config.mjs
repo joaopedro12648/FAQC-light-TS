@@ -20,6 +20,7 @@ import { typeSafety } from './02-type-safety/types/config.mjs';
 import { documentation } from './03-documentation/docs/config.mjs';
 import { complexityAndMagic } from './04-complexity-and-magic/core/config.mjs';
 import { environmentExceptions } from './05-environment-exceptions/core/config.mjs';
+import { testsOverrides } from './tests-overrides/tests/config.mjs';
 
 export default [
   // Ignores（グローバル）
@@ -30,6 +31,8 @@ export default [
   ...typeSafety,
   ...documentation,
   ...complexityAndMagic,
-  ...environmentExceptions
+  ...environmentExceptions,
+  // tests 用の最小緩和（関数長のみ）
+  ...testsOverrides
 ];
 

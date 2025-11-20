@@ -1,8 +1,8 @@
 /**
- * @file @console-handler ディレクティブ検証（環境例外: console 使用の厳格運用）
+ * @file consoleHandler ディレクティブ検証（環境例外: console 使用の厳格運用）
  * 備考: 特記事項なし
- * - 先頭JSDocに @console-handler を付与したファイルのみ console.warn/error を許可する
- * - リポジトリ全体で @console-handler は1ファイルのみ（重複はエラー）
+ * - 先頭JSDocに consoleHandler タグを付与したファイルのみ console.warn/error を許可する
+ * - リポジトリ全体で consoleHandler タグは1ファイルのみ（重複はエラー）
  * - no-console は warn/error を許容し log/info 等は従来通り禁止とする
  * - タグ未設定での warn/error 使用は本ルールでエラーとして検出する
  * - 解析は AST ベースで行い MemberExpression(console.warn/error) を対象とする
@@ -24,7 +24,7 @@ const filesWithConsoleHandlerTag = new Set();
  */
 
 /**
- * 先頭のファイルレベル JSDoc に @console-handler が含まれるかを判定する。
+ * 先頭のファイルレベル JSDoc に @consoleHandler が含まれるかを判定する。
  * @param {import('eslint').Rule.RuleContext} context ルール実行のコンテキスト
  * @returns {boolean} ファイルレベル JSDoc にタグが存在する場合は true
  */
@@ -36,7 +36,7 @@ function hasConsoleHandlerTag(context) {
   // 理由: ファイルレベル JSDoc が無い場合はタグも存在し得ないため早期終了
   if (!firstBlock) return false;
   const raw = `/*${firstBlock.value}*/`;
-  return /@console-handler\b/.test(raw);
+  return /@consoleHandler\b/.test(raw);
 }
 
 /**
@@ -70,7 +70,7 @@ function isConsoleMemberCall(node) {
 }
 
 /**
- * @description @console-handler ディレクティブの検証ルール本体。
+ * @description @consoleHandler ディレクティブの検証ルール本体。
  * - 役割: ファイルレベル JSDoc のタグ検証と warn/error 使用制御
  * - 一意性: タグの付与は1ファイルのみ（重複はエラー）
  */
@@ -78,7 +78,7 @@ export const ruleConsoleHandler = {
   meta: {
     type: 'problem',
     docs: {
-      description: '@console-handler ディレクティブの検証と使用制御（warn/error のみ対象）',
+      description: '@consoleHandler ディレクティブの検証と使用制御（warn/error のみ対象）',
       category: 'Best Practices'
     },
     schema: [
@@ -96,9 +96,9 @@ export const ruleConsoleHandler = {
     ],
     messages: {
       multipleConsoleHandlers:
-        'リポジトリ全体で @console-handler は1ファイルのみ許可されています。現在 {{count}} ファイルで使用: {{files}}',
+        'リポジトリ全体で @consoleHandler は1ファイルのみ許可されています。現在 {{count}} ファイルで使用: {{files}}',
       warnOrErrorRequiresTag:
-        'console.{{method}} を使用するにはファイル先頭の JSDoc に @console-handler を付与してください。'
+        'console.{{method}} を使用するにはファイル先頭の JSDoc に @consoleHandler を付与してください。'
     }
   },
   create(context) {
@@ -144,7 +144,7 @@ export const ruleConsoleHandler = {
 /**
  * @fileoverview Flat Config 用コンテナプラグイン
  * - ルールID: env/console-handler
- * - 用途: @console-handler ディレクティブの一意性検証と warn/error 使用制御
+ * - 用途: @consoleHandler ディレクティブの一意性検証と warn/error 使用制御
  */
 export const consoleHandlerPlugin = {
   rules: {

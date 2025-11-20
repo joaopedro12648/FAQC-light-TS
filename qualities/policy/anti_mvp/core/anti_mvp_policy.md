@@ -22,13 +22,14 @@
 
 ## 実行と活用
 
-- 実行コマンド:
-  - `node qualities/policy/anti_mvp/core/run.mjs`
+- 実行コマンド（推奨順）:
+  - `npm run -s verify:policy`（複数ポリシーをまとめて検査）
+  - 個別に実行したい場合: `node qualities/policy/anti_mvp/core/run.mjs`
 - 設定ファイル:
   - `qualities/policy/anti_mvp/core/anti_mvp_policy.yaml`
 - 典型的な運用フロー:
   1. ローカルで Anti-MVP 違反を修正する。
-  2. `node qualities/policy/anti_mvp/core/run.mjs` を実行し、違反 0 件であることを確認する。
+  2. `npm run -s verify:policy` を実行し、違反 0 件であることを確認する（個別実行が必要な場合は `node qualities/policy/anti_mvp/core/run.mjs`）。
   3. `npm run -s preflight` → `npm run -s check` を通し、他ポリシーとの整合を確認する。
 
 

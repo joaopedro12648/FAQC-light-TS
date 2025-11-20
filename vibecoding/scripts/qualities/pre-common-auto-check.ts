@@ -444,7 +444,7 @@ function diffManifestFiles(
   // 追加を検出するため、現行に存在して以前に無いパスを列挙するループ
   for (const [p] of currMap.entries()) {
     // 以前に存在しない場合のみ、追加として扱う条件分岐
-    if (!prevMap.has(p)) reasons.push(`[REASON] + ${p}`);
+    if (!prevMap.has(p)) reasons.push(`[REASON] + ${p} (新規追加された設定ファイルです。この変更内容を context.md の本文に反映してください)`);
   }
 
   // 削除/変更を検出するため、以前のエントリを基準に現行側の対応を確認するループ
@@ -453,12 +453,12 @@ function diffManifestFiles(
     // 現行に対応が無い場合は削除として扱う条件分岐
     if (newH === undefined) {
       // 現行の SoT に同一パスが存在しないため、このエントリは「削除」として記録する
-      reasons.push(`[REASON] - ${p}`);
+      reasons.push(`[REASON] - ${p} (削除された設定ファイルです。この変更内容を context.md の本文に反映してください)`);
     } else {
       // 以前と現行の内容ハッシュを比較し、差異がある場合のみ「変更」を記録する
       // 内容ハッシュが異なる場合は変更として扱う条件分岐
       if (newH !== oldH) {
-        reasons.push(`[REASON] ~ ${p}`);
+        reasons.push(`[REASON] ~ ${p} (変更された設定ファイルです。この変更内容を context.md の本文に反映してください)`);
       }
     }
   }
@@ -643,9 +643,12 @@ function outputAndExit(startAt: string, mappings: Array<{ srcDir: string; destDi
   emitDuplicateGuidanceIfNeeded(rubric);
 
   process.stdout.write(`Next steps:\n`);
-  process.stdout.write(`  1) 対象ユニットの context.md が存在しないか expire されました。PRE-COMMON.md に従って新規作成してください。\n`);
+  process.stdout.write(`  1) 対象ユニットの context.md が存在しないか expire されました。\n`);
+  process.stdout.write(`     - PRE-COMMON.md に従って新規作成、または既存の context.md を更新してください。\n`);
+  process.stdout.write(`     - [REASON] 行に示された設定ファイルの追加/削除/変更内容を、context.md の本文（Why/Where/What/How）に反映してください。\n`);
+  process.stdout.write(`     - 単に hash manifest を更新するだけでは不十分です。設定変更の内容を説明に織り込んでください。\n`);
   process.stdout.write(`  2) Hash Manifest 同期: npm run context:manifest  # context.md の "Quality Context Hash Manifest" (unitDigest/files) を更新\n`);
-  process.stdout.write(`  3) Rubric 検査: npx -y tsx vibecoding/scripts/qualities/context-md-rubric.ts\n`);
+  process.stdout.write(`  3) Rubric 検査: npm run -s context:rubric\n`);
   process.stdout.write(`  4) 再実行: npm run -s check:pre-common  # 成功時は "<StartAt> <hash>" を出力\n`);
   process.stdout.write(`(diagnostics: tmp/pre-common-diagnostics.md when generated)\n`);
 

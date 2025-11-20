@@ -15,7 +15,7 @@
  * @snd vibecoding/var/SPEC-and-DESIGN/SnD-creation.md
  */
 import { FILES_ALL_CODE } from '../../_shared/core/globs.mjs';
-import { consoleHandlerPlugin } from './console-handler.mjs';
+import { consoleHandlerPlugin } from './consoleHandler.mjs';
 
 /**
  * 環境別の例外方針（基本は禁止で必要時に明示許容）を定義する設定断片。
@@ -23,7 +23,7 @@ import { consoleHandlerPlugin } from './console-handler.mjs';
  * @returns Flat Config 配列
  */
 export const environmentExceptions = [
-  // デフォルト: console は禁止。ただし warn/error は例外（本ルールで @console-handler を要求して制御）
+  // デフォルト: console は禁止。ただし warn/error は例外（本ルールで @consoleHandler を要求して制御）
   {
     files: FILES_ALL_CODE,
     plugins: { env: consoleHandlerPlugin },

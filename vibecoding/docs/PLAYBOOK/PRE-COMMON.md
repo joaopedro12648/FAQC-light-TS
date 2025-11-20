@@ -156,6 +156,14 @@
    - 各行に「出典（相対パス＋抜粋/値）」を必ず併記し、PRE-COMMON 実行時点の現行設定と整合していることを示す（設定ファイルの値をそのまま引用し、SnD 側の仮値・サンプル値で代用しない）。
    - core/docs/types 以外のユニットでも、数値閾値や禁止語など設定値由来の境界条件を持つ場合は同様に「設定閾値一覧」を How 節先頭へ追加する。
 
+### LLM運用ガイダンス（SnD と qualities 編集）
+- SnD が qualities/** の変更を含む場合（ユーザーから明示されたときのみ）:
+  - SnD 本文の `context.outputTargets` に、編集を許可する qualities/** の最小セットのみを列挙する（過剰包含を禁止）。
+  - SnD 本文に「`outputTargets` 以外のファイルの編集は禁止」と明記する（IMPL スコープと連動）。
+- SnD 作成時にユーザーから明示的に支持された文脈が無い場合（品質系の一般タスク）:
+  - 実装で品質ゲート（`npm run -s check`）通過直後に PRE-COMMON を再実行し、`vibecoding/var/contexts/qualities/**` の鏡像を再整備する（context.md の本文更新＋ Hash Manifest 同期）。
+  - exit=0 を取得できない場合は鏡像更新を優先し、SnD の記録/進行を一時停止する（PRE-COMMON 成功が先）。
+
 ### スタータ（How にそのまま貼れる例）
 
 > 注意: 本スタータは非正典（Non-canonical）。具体値は qualities/** の現行設定やドメイン仕様から導出して置換すること。導出根拠（相対パス＋抜粋/値）を併記しない場合、Rubric未充足とみなす。
@@ -248,7 +256,7 @@ const audio = new Ctx();
       - Rubric満足までLLM内部3サイクル
    
    d. **Rubric検証**（必須）
-      - 詳細レポート作成の度に `npx -y tsx vibecoding/scripts/qualities/context-md-rubric.ts` を実行
+      - 詳細レポート作成の度に `npm run -s context:rubric` を実行
       - exit code が 0 であることを確認
       - 違反がある場合は修正して再度検証
 
@@ -455,7 +463,7 @@ Rubric照合は `check:pre-common` による機械的最低限のチェックに
 - 作成フロー（ガイダンス）:
   1) `context.md` を PRE-COMMON.md の Why/Where/What/How に従って新規作成  
   2) Hash Manifest 同期: `npm run context:manifest`（`### Quality Context Hash Manifest` の YAML に unitDigest/files を埋め込む）  
-  3) Rubric 検査: `npx -y tsx vibecoding/scripts/qualities/context-md-rubric.ts`  
+  3) Rubric 検査: `npm run -s context:rubric`  
   4) 再実行: `npm run -s check:pre-common`（成功時は `<StartAt> <hash>` を1行出力）  
 
 ---
@@ -519,7 +527,7 @@ exit=2 の場合、以下を順に実施：
    - Rubric充足まで内部反復（最大3サイクル）
 
 4. **Rubric検証**
-   - `npx -y tsx vibecoding/scripts/qualities/context-md-rubric.ts` を実行
+   - `npm run -s context:rubric` を実行
    - **初回作成モード**：下限60行＋上限100行の両方を自己チェック
    - **更新モード**：下限60行のみチェック（上限は自己判断）
    - exit code が 0 であることを確認（スクリプトは下限のみ検証）
@@ -606,7 +614,7 @@ exit=2 の場合、以下を順に実施：
      - Where/What: 現行の `qualities/**` に基づく同定・引用（相対パス＋抜粋/値を明記）
      - How: OK/NGの最小例、LLM典型NG（≥5）、事前チェック、修正方針を補強
      - 既存構成（Why/Where/What/How/Rubric）に統合し、重複は整理する（canonical を維持）
-  2) ルーブリック検証: `npx -y tsx vibecoding/scripts/qualities/context-md-rubric.ts` を通す（exit=0まで）
+  2) ルーブリック検証: `npm run -s context:rubric` を通す（exit=0まで）
   3) `context-review.md` を削除（当該ユニットのみ）
   4) `npm run -s check:pre-common` を再実行し、`<StartAt> <hash>`（exit=0）を取得するまでループ
 - 禁止: レビュー本文の貼り付け（incorporate 節の作成）、緩和（eslint-disable 等）、例外運用の追加

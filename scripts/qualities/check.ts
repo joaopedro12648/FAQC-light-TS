@@ -440,7 +440,7 @@ async function runContextReviewTest(): Promise<void> {
   }
 
   process.stdout.write('[test] context-review: context-review.md の存在を検査します\n');
-  await runCommand('npx', ['vitest', 'run', testPath, '--silent']);
+  await runCommand('npx', ['vitest', 'run', '--root', '.', testPath, '--silent']);
 }
 
 /** このファイルが直接起動されたかの判定（ユニットテストからの import を除外） */

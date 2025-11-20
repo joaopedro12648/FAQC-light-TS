@@ -1,0 +1,27 @@
+{
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "allowJs": true
+  },
+  "include": [
+    "../../../src/**/*.ts",
+    "../../../src/**/*.mts",
+    "../../../src/**/*.cts",
+    "../../../tests/**/*.ts",
+    "../../../tests/**/*.mts",
+    "../../../tests/**/*.cts",
+    "../../../vibecoding/**/*.ts",
+    "../../../vibecoding/**/*.mts",
+    "../../../vibecoding/**/*.cts"
+  ],
+  "exclude": [
+    "../../../node_modules",
+    "../../../dist",
+    "../../../build",
+    "../../../coverage",
+    "../../../auto-check",
+    "../../../tmp"
+  ]
+}
+
+

@@ -27,6 +27,10 @@ const RULES_PATH = path.join(PROJECT_ROOT, 'qualities', 'policy', 'dependency_st
 const TMP_DIR = path.join(PROJECT_ROOT, 'tmp');
 const TMP_CONFIG_PATH = path.join(TMP_DIR, 'dependency_structure_control.depcruise.config.json');
 const TMP_TSCONFIG_PATH = path.join(TMP_DIR, 'dependency_structure_control.depcruise.tsconfig.json');
+// depcruise 用の専用 tsconfig（リポジトリ固定・tmp 非依存）: TS18003 を根本回避するために使用する
+const DEPCRUISE_TSCONFIG_PATH = path.join(
+  PROJECT_ROOT, 'qualities', 'tsconfig', '_depcruise', 'tsconfig.depcruise.json',
+);
 
 /**
  * DSL(JSON) で定義されたルール集合を読み込む。
@@ -210,7 +214,8 @@ function runDepcruise(configPath) {
     path.join(REPO_ROOT, 'node_modules', 'dependency-cruiser', 'bin', 'dependency-cruise.js'),
   ];
   const jsEntrypoint = candidateJs.find((p) => fs.existsSync(p));
-  const args = ['.', '--config', configPath, '--ts-config', TMP_TSCONFIG_PATH, '--output-type', 'json'];
+  // tsconfig は固定の qualities/tsconfig/_depcruise を参照し、クリーン環境でも入力 0 件とならないようにする
+  const args = ['.', '--config', configPath, '--ts-config', DEPCRUISE_TSCONFIG_PATH, '--output-type', 'json'];
 
   // ローカルにインストールされた depcruise を同期実行し、品質ゲート内で依存構造を検査する
   const result = jsEntrypoint
