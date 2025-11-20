@@ -47,6 +47,8 @@ const SECRET = 'SAT-light-TS::PRE-COMMON::v1';
 // 定数
 /** 診断出力の最大文字数（安全のための切り詰め上限） */
 const DEFAULT_FORMAT_CAP = 8000;
+/** YAML 近傍探索で参照するハッシュ行の前方探索幅（行数） */
+const NEARBY_HASH_LOOKAHEAD = 4;
 /** ASCII 可視文字の下限コードポイント */
 const ASCII_PRINTABLE_MIN = 32;
 /** ASCII 可視文字の上限コードポイント */
@@ -267,9 +269,10 @@ function hasValidUnitDigest(digestMatch: RegExpMatchArray | null, recordedDigest
  * @param digests 現在の hash manifest 情報
  * @returns 更新が必要な src->dest の対応表（context.md ファイルパスを含む）
  */
-function computeNeededMappingsByDigest(unitSources: UnitSources[], digests: UnitDigestInfo[]): Array<{ srcDir: string; destDir: string }> {
-  const mappings: Array<{ srcDir: string; destDir: string }> = [];
+function computeNeededMappingsByDigest(unitSources: UnitSources[], digests: UnitDigestInfo[]): Array<{ srcDir: string; destDir: string; reasons: string[] }> {
+  const mappings: Array<{ srcDir: string; destDir: string; reasons: string[] }> = [];
   const digestByUnit = new Map<string, UnitDigestInfo>();
+
   // 各ユニットの unitDigest 情報をマップ化し、後続のループで高速に参照できるようにする
   digests.forEach((d) => {
     digestByUnit.set(d.unit, d);
@@ -284,11 +287,183 @@ function computeNeededMappingsByDigest(unitSources: UnitSources[], digests: Unit
     const needsUpdate = shouldUpdateContextForUnit(contextMdPath, digestInfo);
     // 再生成が必要なユニットのみを mappings に追加し、利用者へ明示的に更新対象を伝える
     if (needsUpdate) {
-      mappings.push({ srcDir: srcLabel, destDir: destOut });
+      // expire 理由（SoT 側の追加/削除/変更）を抽出するヘルパーを用いて差分を収集する
+      const reasons = computeExpireReasons(contextMdPath, digestInfo);
+
+      // SnD: 不一致/欠落時は派生物の mirror を expire（削除）して再作成フローへ誘導する
+      try {
+        const ctxDir = path.dirname(contextMdPath);
+        const reviewPath = path.join(ctxDir, 'context-review.md');
+        // context.md が残存している場合は古い mirror を除去して再作成を強制する
+        if (fs.existsSync(contextMdPath)) {
+          fs.unlinkSync(contextMdPath);
+        }
+        
+        // 隣接する review がある場合は併せて削除し、レビュー統合の重複や分岐を抑止する
+        // 目的: 重複防止 / 前提: review が存在する場合のみ / 例外: 削除失敗は警告で継続
+        if (fs.existsSync(reviewPath)) {
+          fs.unlinkSync(reviewPath);
+        }
+      } catch (e) {
+        // 削除失敗は致命ではないため継続するが、状況を警告として記録する
+        const msg = e instanceof Error ? e.message : String(e);
+        process.stderr.write(`[pre-common-auto-check] warn: failed to expire context files; continuing :: ${normalizePathForOutput(path.relative(PROJECT_ROOT, contextMdPath))} :: ${msg}\n`);
+      }
+
+      mappings.push({ srcDir: srcLabel, destDir: destOut, reasons });
     }
   }
 
   return mappings;
+}
+
+/**
+ * 前回の manifest（var 側 context.md 内）と現行 SoT の digest 結果を比較し、expire 理由（追加/削除/変更）を全件返す。
+ * @param contextMdPath var 側 context.md の絶対パス
+ * @param digestInfo 現行 SoT に基づく digest 情報
+ * @returns 理由行（[REASON] + / - / ~ path）の配列
+ */
+function computeExpireReasons(contextMdPath: string, digestInfo: UnitDigestInfo | undefined): string[] {
+  const reasons: string[] = [];
+
+  // 理由抽出の I/O を隔離し、失敗時も安全に継続するための try ブロック
+  try {
+    const yamlBody = readPreviousManifestYaml(contextMdPath);
+    // manifest が欠落している場合は新規作成が必要である旨を理由として返す
+    if (yamlBody === null) {
+      reasons.push('[REASON] previous manifest not found (fresh mirror required)');
+      return reasons;
+    }
+
+    const prevFiles = parseManifestFilesFromYaml(yamlBody);
+    const currFiles = toCurrentFilesList(digestInfo);
+    const diffs = diffManifestFiles(prevFiles, currFiles);
+    reasons.push(...diffs);
+
+    // 差分が見つからない場合のフォールバック（unitDigest 不一致など形式的理由）
+    if (reasons.length === 0) {
+      reasons.push('[REASON] unitDigest mismatch or invalid; mirror must be refreshed');
+    }
+  } catch {
+    // 旧 manifest の読み取りに失敗した場合も理由を明示し、以降の処理を継続する
+    reasons.push('[REASON] unable to read previous context manifest (expired)');
+  }
+
+  return reasons;
+}
+
+/**
+ * var 側 context.md から Quality Context Hash Manifest の YAML 本文を抽出して返す（無ければ null）。
+ * @param contextMdPath 対象の context.md 絶対パス
+ * @returns YAML フェンス内の本文。見つからない場合は null
+ */
+function readPreviousManifestYaml(contextMdPath: string): string | null {
+  const prevText = readFileIfExists(contextMdPath) || '';
+
+  // context.md 内の manifest セクションから YAML フェンス部分のみを抽出する条件分岐
+  const m = prevText.match(/###\s*Quality Context Hash Manifest[\s\S]*?```yaml([\s\S]*?)```/m);
+  return m ? (m[1] || '') : null;
+}
+
+/**
+ * YAML 本文から files 配列の path/hash を素朴に抽出して返す。
+ * @param yamlBody Manifest の YAML 本文
+ * @returns 抽出した path/hash の配列
+ */
+function parseManifestFilesFromYaml(yamlBody: string): Array<{ path: string; hash: string }> {
+  const prevFiles: Array<{ path: string; hash: string }> = [];
+  const lines = yamlBody.split(/\r?\n/);
+
+  // YAML 行を直列に走査して item 開始と hash を抽出するループ
+  for (let i = 0; i < lines.length; i++) {
+    const pathMatch = lines[i]?.match(/^\s*-\s*path:\s*(.+)\s*$/);
+    // item 開始行のみを対象として path を取り出す条件分岐
+    if (pathMatch) {
+      const p = (pathMatch[1] ?? '').trim();
+
+      const limit = Math.min(i + NEARBY_HASH_LOOKAHEAD, lines.length);
+      // 近傍の数行から hash 行を探索して採用し、フォーマット揺れに耐性を持たせる
+      const h = scanNearbyHash(lines, i + 1, limit);
+
+      prevFiles.push({ path: p, hash: h });
+    }
+  }
+
+  return prevFiles;
+}
+
+/**
+ * 近傍の行から hash: "<hex>" 行を探索して戻す。見つからなければ空文字。
+ * @param lines YAML 本文の行配列
+ * @param startIndex 探索開始インデックス（非含む）
+ * @param limitIndex 探索終了上限（未満）
+ * @returns 見つかった hash 値（hex）。無ければ空文字
+ */
+function scanNearbyHash(lines: string[], startIndex: number, limitIndex: number): string {
+  // 近傍のみを探索して計算量と誤検知の両リスクを抑えるループ
+  for (let j = startIndex; j < limitIndex; j++) {
+    const hashMatch = lines[j]?.match(/^\s*hash:\s*"?([0-9a-fA-F]+)"?\s*$/);
+    // hash 行のみを採用し、見つかった時点で早期リターンする条件分岐
+    if (hashMatch) {
+      return hashMatch[1] ?? '';
+    }
+
+    // 次 item の開始が見えたら当該 item の探索を中断する条件分岐
+    if (/^\s*-\s*path:/.test(lines[j] || '')) break;
+  }
+
+  return '';
+}
+
+/**
+ * 現行 SoT の digest から files 配列の path/hash を構築して返す。
+ * @param digestInfo 現行の digest 情報
+ * @returns path/hash の配列（digestInfo が無ければ空配列）
+ */
+function toCurrentFilesList(digestInfo: UnitDigestInfo | undefined): Array<{ path: string; hash: string }> {
+  // digest 情報が無い場合も空配列を返し、呼び出し側で一律に扱えるようにする分岐
+  const files = (digestInfo?.files || []).map((f) => ({ path: f.path, hash: f.hash }));
+  return files;
+}
+
+/**
+ * 以前と現行の files 配列を比較し、追加/削除/変更の [REASON] 行を返す。
+ * @param prevFiles 以前の path/hash 配列（var 側 manifest）
+ * @param currFiles 現行の path/hash 配列（SoT 側 digest）
+ * @returns [REASON] 形式の行配列
+ */
+function diffManifestFiles(
+  prevFiles: Array<{ path: string; hash: string }>,
+  currFiles: Array<{ path: string; hash: string }>,
+): string[] {
+  const reasons: string[] = [];
+
+  const prevMap = new Map(prevFiles.map((f) => [f.path, f.hash]));
+  const currMap = new Map(currFiles.map((f) => [f.path, f.hash]));
+
+  // 追加を検出するため、現行に存在して以前に無いパスを列挙するループ
+  for (const [p] of currMap.entries()) {
+    // 以前に存在しない場合のみ、追加として扱う条件分岐
+    if (!prevMap.has(p)) reasons.push(`[REASON] + ${p}`);
+  }
+
+  // 削除/変更を検出するため、以前のエントリを基準に現行側の対応を確認するループ
+  for (const [p, oldH] of prevMap.entries()) {
+    const newH = currMap.get(p);
+    // 現行に対応が無い場合は削除として扱う条件分岐
+    if (newH === undefined) {
+      // 現行の SoT に同一パスが存在しないため、このエントリは「削除」として記録する
+      reasons.push(`[REASON] - ${p}`);
+    } else {
+      // 以前と現行の内容ハッシュを比較し、差異がある場合のみ「変更」を記録する
+      // 内容ハッシュが異なる場合は変更として扱う条件分岐
+      if (newH !== oldH) {
+        reasons.push(`[REASON] ~ ${p}`);
+      }
+    }
+  }
+
+  return reasons;
 }
 
 /** 必須ディレクトリの存在を確認する。 */
@@ -333,6 +508,38 @@ interface RubricResult {
 
 /** rubric 要約として PRE-COMMON 出力へ載せる最大行数 */
 const RUBRIC_SUMMARY_MAX_LINES = 10;
+
+/**
+ * 重複構造に関する rubric 違反を含むかを代表行のテキストから簡易判定する。
+ * @param summaryLines Rubric の代表メッセージ行
+ * @returns 重複構造の違反が含まれる場合は true、それ以外は false
+ */
+function includesDuplicateStructureViolation(summaryLines: string[]): boolean {
+  const body = (summaryLines || []).join('\n').toLowerCase();
+  return (
+    body.includes('structure: duplicated h1') ||
+    body.includes('structure: multiple why') ||
+    body.includes('structure: multiple where') ||
+    body.includes('structure: multiple what') ||
+    body.includes('structure: multiple how') ||
+    body.includes('structure: multiple "quality context hash manifest"') ||
+    body.includes('multiple yaml fenced blocks') ||
+    body.includes('duplicate sections') ||
+    body.includes('multiple sections detected')
+  );
+}
+
+/**
+ * 重複構造違反が含まれる場合に、置換原則のガイダンスを出力する。
+ * @param rubric Rubric 実行結果
+ */
+function emitDuplicateGuidanceIfNeeded(rubric: RubricResult): void {
+  // 重複構造違反がある場合のみ、置換原則のガイダンスを出力する
+  if (rubric.hasViolation && includesDuplicateStructureViolation(rubric.summaryLines)) {
+    process.stdout.write(`[GATE] duplicate sections/manifest detected → replace (not append) the context.md structure.\n`);
+    process.stdout.write(`- Ensure single H1, single Why/Where/What/How, and single "Quality Context Hash Manifest" section.\n`);
+  }
+}
 
 /**
  * rubric 実行結果から RubricResult を構築する（status が未定義のケースは null を返す）。
@@ -419,7 +626,7 @@ function checkRubric(): RubricResult {
  * @param mappings 必要な src->dest の対応
  * @param rubric 結果（違反有無と要約）
  */
-function outputAndExit(startAt: string, mappings: Array<{ srcDir: string; destDir: string }>, rubric: RubricResult): void {
+function outputAndExit(startAt: string, mappings: Array<{ srcDir: string; destDir: string; reasons?: string[] }>, rubric: RubricResult): void {
   // 再生成の必要も違反も無ければハッシュを出力して成功終了する
   if (mappings.length === 0 && !rubric.hasViolation) {
 
@@ -431,27 +638,22 @@ function outputAndExit(startAt: string, mappings: Array<{ srcDir: string; destDi
 
   // ここからは exit=2 相当。次アクションの簡潔ガイダンスを冒頭に提示する
   const total = mappings.length;
-  process.stdout.write(`PRE-COMMON: ${total} unit(s) require mirror update or rubric fix.\n`);
+  process.stdout.write(`PRE-COMMON: ${total} unit(s) expired or require context creation.\n`);
+  // 重複構造の検出がある場合は、最初に「置換原則」を明示するガイダンスを追加する
+  emitDuplicateGuidanceIfNeeded(rubric);
+
   process.stdout.write(`Next steps:\n`);
-  process.stdout.write(
-    // PRE-COMMON 自体は context.md を変更しないため、本文(Why/Where/What/How等)と YAML manifest の両方を利用者側で更新してから再実行してもらう
-    '  1) Update vibecoding/var/contexts/qualities/**/context.md (Why/Where/What/How) AND refresh its "Quality Context Hash Manifest" YAML (unitDigest/files) using context-hash-manifest.ts or an equivalent documented flow.\n',
-  );
-  process.stdout.write(`  2) Run rubric: npx -y tsx vibecoding/scripts/qualities/context-md-rubric.ts\n`);
-  process.stdout.write(`  3) Re-run: npm run -s check:pre-common  # success prints "<StartAt> <hash>"\n`);
+  process.stdout.write(`  1) 対象ユニットの context.md が存在しないか expire されました。PRE-COMMON.md に従って新規作成してください。\n`);
+  process.stdout.write(`  2) Hash Manifest 同期: npm run context:manifest  # context.md の "Quality Context Hash Manifest" (unitDigest/files) を更新\n`);
+  process.stdout.write(`  3) Rubric 検査: npx -y tsx vibecoding/scripts/qualities/context-md-rubric.ts\n`);
+  process.stdout.write(`  4) 再実行: npm run -s check:pre-common  # 成功時は "<StartAt> <hash>" を出力\n`);
   process.stdout.write(`(diagnostics: tmp/pre-common-diagnostics.md when generated)\n`);
 
-  // rubric による違反がある場合は、要約行を PRE-COMMON 出力にも含めて修正対象の手がかりを提示する
-  if (rubric.hasViolation && rubric.summaryLines.length > 0) {
-    rubric.summaryLines.forEach((ln) => {
-      process.stdout.write(`${ln}\n`);
-    });
-  }
+  // rubric の代表行を必要時のみ出力して修正対象の手がかりを提示する
+  emitRubricSummary(rubric);
 
-  // 必要なミラー生成・更新対象を列挙して作業指示を明確化する（どの context.md を更新するかをファイル単位で示す）
-  for (const m of mappings) {
-    process.stdout.write(`[GATE] ${m.srcDir} => ${m.destDir}\n`);
-  }
+  // 必要なミラー生成・更新対象を列挙して作業指示を明確化する
+  emitMappings(mappings);
 
   // ルーブリック違反のみ検出された場合にも同期対象の提示を行う（少なくとも 1 つは context 更新が必要であることを明示する）
   if (rubric.hasViolation && mappings.length === 0) {
@@ -460,12 +662,52 @@ function outputAndExit(startAt: string, mappings: Array<{ srcDir: string; destDi
     process.stdout.write('[GATE] contexts/qualities => vibecoding/var/contexts/qualities  # rubric noncompliant\n');
   }
 
-  // 診断出力の条件: 監視対象のいずれかで context.md が未整備（欠落）である
-  if (!allTargetContextMdExist()) {
-    emitDiagnostics(); // 欠落ユニットを可視化する自己修復用診断を生成・出力する
-  }
+  // 診断出力の条件を満たす場合のみ、自己修復用診断を生成・出力する
+  emitDiagnosticsIfMissingContexts();
 
   process.exit(2);
+}
+
+/**
+ * rubric の代表行を PRE-COMMON 出力へ必要時のみ出力する。
+ * @param rubric Rubric 実行結果
+ */
+function emitRubricSummary(rubric: RubricResult): void {
+  // Rubric 違反がある場合のみ、代表行を出力して修正対象を可視化する
+  if (rubric.hasViolation && rubric.summaryLines.length > 0) {
+    // 代表行を順に出力して、最初の数行の要旨を提示するループ
+    for (const ln of rubric.summaryLines) {
+      process.stdout.write(`${ln}\n`);
+    }
+  }
+}
+
+/**
+ * 必要なミラー生成・更新対象を列挙し、[EXPIRE]/[GATE] と理由一覧を出力する。
+ * @param mappings SRC=>DEST の対応一覧（reasons を含む）
+ */
+function emitMappings(mappings: Array<{ srcDir: string; destDir: string; reasons?: string[] }>): void {
+  // 各ユニットの expire 対象と更新対象を順に表示するためのループ
+  for (const m of mappings) {
+    process.stdout.write(`[EXPIRE] ${m.destDir} (and context-review.md if existed)\n`);
+    process.stdout.write(`[GATE] ${m.srcDir} => ${m.destDir}\n`);
+
+    // SoT 側の差分一覧をそのまま提示して、expire の具体的理由を明確にする
+    if (m.reasons && m.reasons.length > 0) {
+      // 差分理由の各行を出力するためのループ
+      for (const r of m.reasons) {
+        process.stdout.write(`${r}\n`);
+      }
+    }
+  }
+}
+
+/** 監視対象の context.md が欠落している場合に限り、自己修復用診断を出力する。 */
+function emitDiagnosticsIfMissingContexts(): void {
+  // 診断出力の条件: 監視対象のいずれかで context.md が未整備（欠落）である
+  if (!allTargetContextMdExist()) {
+    emitDiagnostics();
+  }
 }
 
 /**

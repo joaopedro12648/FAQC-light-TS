@@ -247,19 +247,14 @@ function runDepcruise(configPath) {
     if (errors > 0) {
       return printNg(stdout, stderr);
     }
-    
+
     return printOk(stdout);
   } catch {
     // JSON 以外の出力だった場合は、depcruise の終了コードで最終判定する
     // 非 0（NG）の場合は depcruise の出力を中継して失敗させる
     handleDepcruiseResult(result, stdout, stderr);
-    // ここまで到達した場合は OK とみなす
+    // ここまで到達した場合は OK とみなす（詳細ダンプは抑制）
     process.stdout.write('[policy:dependency_structure_control] OK: 依存構造制御ポリシー違反は検出されませんでした\n');
-    // 標準出力が空でない場合のみ補助的に転送する
-    if (stdout.trim().length > 0) {
-      // depcruise の標準出力がある場合は解析補助のため転送する
-      process.stdout.write(`${stdout.trimEnd()}\n`);
-    }
   }
 }
 
@@ -365,10 +360,7 @@ function getErrorCountFromReport(report) {
  */
 function printOk(stdout) {
   process.stdout.write('[policy:dependency_structure_control] OK: 依存構造制御ポリシー違反は検出されませんでした\n');
-  // 解析補助のため、JSON レポートがあれば転送する
-  if (stdout.trim().length > 0) {
-    process.stdout.write(`${stdout.trimEnd()}\n`);
-  }
+  // 依存グラフの詳細は標準出力へは出さない（必要なら tmp へ保存する運用へ移行）
 
   return true;
 }
@@ -381,16 +373,7 @@ function printOk(stdout) {
  */
 function printNg(stdout, stderr) {
   process.stderr.write('[policy:dependency_structure_control] NG: 依存構造制御ポリシー違反が検出されました（詳細は depcruise 出力を参照）\n');
-  // JSON レポートが空でない場合は、そのままエラー出力へ転送する
-  if (stdout.trim().length > 0) {
-    process.stderr.write(`${stdout.trimEnd()}\n`);
-  }
-
-  // depcruise 側の補足情報がある場合は合わせて出力する
-  // エラー内容の補足（stderr）を併記して原因追跡を容易にする
-  if (stderr.trim().length > 0) {
-    process.stderr.write(`${stderr.trimEnd()}\n`);
-  }
+  // 依存グラフの詳細は標準出力/標準エラーへは出さない（要約のみ）
   
   process.exit(1);
 }
@@ -446,12 +429,7 @@ function assertNoDepcruiseViolations(result, stdout, stderr) {
   // depcruise の終了コードに基づき、違反の有無を最終判定する
   // depcruise が非ゼロ終了コードを返した場合はポリシー違反ありとみなし、depcruise 側の出力をそのまま中継して失敗させる
   if (result.status && result.status !== 0) {
-    process.stderr.write('[policy:dependency_structure_control] NG: 依存構造制御ポリシー違反が検出されました（詳細は depcruise 出力を参照）\n');
-    // depcruise の標準出力に違反詳細が含まれている場合は、その内容をそのまま転送して依存パターンを可視化する
-    if (stdout.trim().length > 0) process.stderr.write(`${stdout.trimEnd()}\n`);
-    // depcruise の標準エラーに補足情報が含まれている場合も合わせて出力し、原因追跡を容易にする
-    // 2 つ目の条件分岐は出力の粒度を調整するために必要
-    if (stderr.trim().length > 0) process.stderr.write(`${stderr.trimEnd()}\n`);
+    process.stderr.write('[policy:dependency_structure_control] NG: 依存構造制御ポリシー違反が検出されました（詳細は省略）\n');
     process.exit(1);
   }
 }

@@ -549,6 +549,123 @@ function checkInlineHashManifestSection(text: string): string[] {
 }
 
 /**
+ * 文書全体の重複構造（H1/Why/Where/What/How/Manifest）の重複を検査する。
+ * - H1 は文書内で1つのみ
+ * - Why/Where/What/How は各1回のみ（見出し表記/番号見出し互換）
+ * - "### Quality Context Hash Manifest" セクションは1つのみ
+ * - 上記 Manifest セクションに含まれる YAML fenced ブロックは合計1つのみ
+ * @param text Markdown の本文
+ * @returns エラーメッセージ配列
+ */
+function checkDuplicateStructure(text: string): string[] {
+  const errs: string[] = [];
+
+  /**
+   * コードブロック外で与えた正規表現のいずれかに一致する行数を数える。
+   * @param textAll 検査対象の全文
+   * @param matchers 行単位で評価する正規表現配列
+   * @returns 一致行数
+   */
+  function countOutsideCode(textAll: string, matchers: RegExp[]): number {
+    const ls = textAll.split(/\r?\n/);
+    let inCode = false;
+    let count = 0;
+
+    // 各行を走査してコードブロック外のみを対象に一致行をカウントする
+    for (const l of ls) {
+      // フェンス記号（```）でコードブロックの開始/終了を検出し、内部は対象から除外する
+      if (/^```/.test(l)) {
+        inCode = !inCode;
+        continue;
+      }
+
+      // コードブロック内は評価対象外とする
+      if (inCode) continue;
+
+      // 指定パターンのいずれかに一致した行をカウントする
+      if (matchers.some((re) => re.test(l))) {
+        count += 1;
+      }
+    }
+
+    return count;
+  }
+
+  /**
+   * コードブロック外の H1 見出し（"# "）の行数を数える。
+   * @param textAll 検査対象の全文
+   * @returns H1 行数
+   */
+  function countH1(textAll: string): number {
+    return countOutsideCode(textAll, [/^\s*#\s+/]);
+  }
+
+  const h1Count = countH1(text);
+
+  const whyCount = countOutsideCode(text, [
+    /^\s*#{1,6}\s*目的・思想（Why）\b/,
+    /^\s*\d+\.\s*目的・思想（Why）\b/,
+    /^\s*#{1,6}\s*Why\b/,
+  ]);
+
+  const whereCount = countOutsideCode(text, [
+    /^\s*#{1,6}\s*適用範囲（Where）\b/,
+    /^\s*\d+\.\s*適用範囲（Where）\b/,
+    /^\s*#{1,6}\s*Where\b/,
+  ]);
+
+  const whatCount = countOutsideCode(text, [
+    /^\s*#{1,6}\s*要求基準（What）\b/,
+    /^\s*\d+\.\s*要求基準（What）\b/,
+    /^\s*#{1,6}\s*What\b/,
+  ]);
+
+  const howCount = countOutsideCode(text, [
+    /^\s*#{1,6}\s*適用例（How）\b/,
+    /^\s*\d+\.\s*適用例（How）\b/,
+    /^\s*#{1,6}\s*How\b/,
+  ]);
+
+  const manifestSectionCount = countOutsideCode(text, [/^\s*###\s*Quality Context Hash Manifest\b/]);
+
+  const counts: Array<{ label: string; count: number; message: string }> = [
+    { label: 'h1', count: h1Count, message: 'structure: duplicated H1 detected' },
+    { label: 'why', count: whyCount, message: 'structure: multiple Why sections detected' },
+    { label: 'where', count: whereCount, message: 'structure: multiple Where sections detected' },
+    { label: 'what', count: whatCount, message: 'structure: multiple What sections detected' },
+    { label: 'how', count: howCount, message: 'structure: multiple How sections detected' },
+    { label: 'manifest', count: manifestSectionCount, message: 'structure: multiple "Quality Context Hash Manifest" sections detected' },
+  ];
+
+  // 各種カウントが 1 を超える場合は重複として違反メッセージを追加する
+  for (const c of counts) {
+    // 重複が検出された場合のみ違反として列挙する
+    if (c.count > 1) {
+      errs.push(c.message);
+    }
+  }
+
+  // Manifest セクションの YAML fenced ブロック数を合算して確認（全セクション合計で1つのみ）
+  const manifestSections: string[] = hasHeading(text, [/^###\s*Quality Context Hash Manifest\b/m])
+    ? Array.from(text.matchAll(/^###\s*Quality Context Hash Manifest\b[\s\S]*?(?=^###\s|\Z)/mg)).map((m) => m[0] ?? '')
+    : [];
+
+  let totalYamlBlocks = 0;
+  // 各 Manifest セクションごとに YAML フェンスの数を合算する
+  for (const sec of manifestSections) {
+    const blocks = sec.match(/```yaml[\s\S]*?```/g) || [];
+    totalYamlBlocks += blocks.length;
+  }
+
+  // 合計が 1 を超える場合は Manifest YAML の重複として扱う
+  if (totalYamlBlocks > 1) {
+    errs.push('structure: multiple yaml fenced blocks detected in "Quality Context Hash Manifest"');
+  }
+
+  return errs;
+}
+
+/**
  * 単一の context.md に対してルーブリック検査を実行する。
  * @param filePath 絶対パス
  * @returns エラーメッセージ配列
@@ -563,6 +680,7 @@ function checkContextMd(filePath: string): string[] {
   errs.push(...checkHowSection(text));
   errs.push(...checkThresholdSectionForKeyUnits(filePath, text));
   errs.push(...checkInlineHashManifestSection(text));
+  errs.push(...checkDuplicateStructure(text));
 
   return errs;
 }

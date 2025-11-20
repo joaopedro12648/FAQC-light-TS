@@ -244,7 +244,7 @@ export const documentation = [
   },
   // JS ローカルプラグインに Options typedef を要求（meta.schema.properties を包含）
   {
-    files: ['qualities/eslint/plugins/**/*.js'],
+    files: ['qualities/eslint/plugins/**/*.js', 'qualities/eslint/plugins/**/*.mjs'],
     plugins: { typedef: typedefPlugin },
     rules: {
       'typedef/require-options-typedef': ['error', { generalJsMode: 'off' }]

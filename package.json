@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
     "check:pre-common": "tsx vibecoding/scripts/qualities/pre-common-auto-check.ts",
     "typecheck": "tsc --noEmit --incremental --tsBuildInfoFile tmp/tsbuildinfo.json -p qualities/tsconfig/tsconfig/types/tsconfig.json",
     "lint": "node -e \"console.log('ESLint is running with --max-warnings=0');\" && eslint . --config qualities/eslint/eslint.config.mjs --max-warnings=0 --cache --cache-location node_modules/.cache/eslint",
@@ -10,7 +13,8 @@
     "preflight": "tsx scripts/qualities/preflight.ts",
     "check": "tsx scripts/qualities/check.ts",
     "check:fast": "tsx scripts/qualities/check.ts --fast",
-    "verify:policy": "node qualities/policy/anti_mvp/core/run.mjs && node qualities/policy/no_relaxation/core/run.mjs"
+    "verify:policy": "node qualities/policy/anti_mvp/core/run.mjs && node qualities/policy/no_relaxation/core/run.mjs",
+    "context:manifest": "tsx vibecoding/scripts/qualities/context-hash-manifest.ts"
   },
   "author": "cozyupk",
   "license": "MIT",

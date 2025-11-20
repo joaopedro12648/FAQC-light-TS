@@ -260,6 +260,15 @@ paths:
     var_dir: "vibecoding/var/contexts/qualities/"
     index_files:
       - "context.md"
+    unit_policy:
+      allowed_units:
+        - "core"
+        - "types"
+        - "docs"
+      allow_new_units_only_with_explicit_user_instruction: true
+      explicit_user_instruction_phrases:
+        - "ユニット追加を承認: <unit>"
+        - "APPROVE UNIT: <unit>"
   sandboxes:
     tmp_dir: "tmp/"
     scripts_tmp_dir: "scripts/tmp/"
@@ -389,13 +398,12 @@ agent_phase:
     # 承認要請タイミングの規範（明文化）
     approval_prompt_policy:
       require_snd_created_and_pre_common_success: true  # SnD 作成完了（PRE-COMMON exit=0）前は承認要請を出さない
-      # 状態差分ベースの Ready 遷移検出ルール（実装用）
+      # Ready 観測ベースの検出ルール（実装用）
       ready_transition_detector:
-        previous_status_not_ready: "previous_snd_status != 'Ready'"
-        current_status_ready: "current_snd_status == 'Ready'"
-        require_quality_hash: "SnD.front_matter.quality_refresh_hash_at_created is set"
+        first_ready_observation: "SnD.status == Ready && SnD.front_matter.quality_refresh_hash_at_created is set"
+        require_not_prompted_yet: "『まだ提示していない』とは、現在のチャットセッションの発話履歴に当該 SnD 向け IMPL 承認ブロックが一度も含まれていないことを指し、この条件を満たす場合にのみ義務を発火する（内部状態のみを根拠に「提示済み」とみなして抑止してはならない）。"
       # 人間向けの規範説明
-      ready_transition_prompt_rule: "SnD を新規作成または編集した直後、その SnD について『直前の状態では Ready ではなかった／今回の応答で Ready になった』ことが検知できる場合は、その場で IMPL フェーズを開始するか否かに関わらず、IMPL フェーズ移行のための承認フレーズ付きチャット出力を必ず 1 回行う（ユーザーの発話内容や直前のチャット文脈を理由に抑止してはならない）。この Ready 遷移時の承認ブロック出力は、output_policy および chat_output_guards に優先する。"
+      ready_transition_prompt_rule: "本規則は常に output_policy および chat_output_guards より優先されるものとし、SnD を新規作成または編集した直後、その SnD について『SnD.status == Ready かつ quality_refresh_hash_at_created が設定済み』であり、かつ当該 SnD に対してまだ IMPL 承認ブロックを提示していないことが検知できる場合は、その場で IMPL フェーズを開始するか否かに関わらず、IMPL フェーズ移行のための承認フレーズ付きチャット出力を必ず 1 回行う（ユーザーの発話内容や直前のチャット文脈を理由に抑止してはならない）。特に、Agent 自身が同一応答内で SnD.status を Ready へ変更した場合は、その変更完了時点を first_ready_observation とみなし、同一応答内で即時に IMPL 承認ブロックを提示し、次の応答への持ち越しや省略をしてはならない。また、実装上の制約などにより Ready 観測時の応答で承認ブロックが出力できなかったことが検知された場合は、次の応答の先頭で必ず 1 回 IMPL 承認ブロックを提示してフォールバックすること。"
 
 guardrails:
   edits:

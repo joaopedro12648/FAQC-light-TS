@@ -32,6 +32,8 @@
 - 手計算・独自スクリプトによる生成や改変は禁止。
 - 「設定ファイルの網羅的読み込み」や「診断出力の参照」は、詳細レポート作成（`context.md` 生成）時の要件であり、ハッシュ記録の SoT とは切り離して扱う。
 
+> 鏡像再生成時は本文を置換し、H1/Why/Where/What/How/Manifest はそれぞれ1セクションのみを厳守。既存本文の「追記による複製」は禁止。
+
 ### 詳細レポート作成（detailed quality report generation）の定義
 - 参照元（normative）: `qualities/**` の実設定
 - 生成物（derived）: `vibecoding/var/contexts/qualities/**/context.md`
@@ -207,6 +209,17 @@ const audio = new Ctx();
      - `^[a-z][a-z0-9_-]*$`  
    - 上記命名規約を満たす `<unit>` だけを PRE-COMMON のユニット ID として扱い、`vibecoding/var/contexts/qualities/<unit>/` 配下に `context.md` を生成・更新する。  
    - `core` / `docs` / `types` は従来どおり canonical なユニットとして扱うが、命名規約を満たすユニット名であれば追加ユニット（例: `perf`, `security` など）も将来的に許容される。  
+
+  #### ユニット解釈の落とし穴（回避指針）
+  - 誤りやすい例（NG）:
+    - `qualities/eslint/05-environment-exceptions/core` をユニット `eslint/05-environment-exceptions` と誤解し、`vibecoding/var/contexts/qualities/eslint/05-environment-exceptions/context.md` を作成すること
+  - 正しい解釈（OK）:
+    - 第3階層名がユニットID。上記の例はユニットIDが `core` であり、var 側は `vibecoding/var/contexts/qualities/core/context.md` を対象とする
+    - `qualities/eslint/plugins/environment/**` の場合、ユニットIDは `environment`。var 側は `vibecoding/var/contexts/qualities/environment/context.md`
+  - ルール要約:
+    - var 側のパスは常に `vibecoding/var/contexts/qualities/<unit>/context.md` の形（`<unit>` は第3階層ディレクトリ名）
+    - `<bucket>/<unit>` より上位（例: `eslint/05-...`）や下位（例: `.../environment/console-handler`）を var 側のユニット階層へ持ち込まない
+    - 迷ったら「第3階層＝ユニットID」「var 側は `<unit>/context.md` 固定」の2点に立ち返る
 
 3. **exit=2 の自動診断（example code & diagnostics）**  
    `npm run -s check:pre-common` が exit=2 の場合、スクリプトは以下を自動出力する。
@@ -428,6 +441,22 @@ Rubric照合は `check:pre-common` による機械的最低限のチェックに
 - [ ] 1関数が長くなっていないか（分割し、役割を明確化）
 - [ ] `as unknown as` を使っていないか（代替の型付けで表現）
 - [ ] 抑止コメント（eslint-disable 等）を増やしていないか
+ 
+### 不一致時の expire 方針（重要）
+  
+- unitDigest 不一致・manifest 欠落/不正を検知したユニットは、派生物である `vibecoding/var/contexts/qualities/<unit>/context.md` を即時に削除（expire）する。  
+  - 同ディレクトリに `context-review.md` が存在する場合も同時に削除する。  
+  - これにより「古い mirror が残り続ける」状態を排除し、再作成フローへ確実に誘導する。  
+- PRE-COMMON の出力先頭は次の形式となる:  
+  - `PRE-COMMON: <N> unit(s) expired or require context creation.`  
+- 各対象ユニットは次の行で明示される:  
+  - `[EXPIRE] vibecoding/var/contexts/qualities/<unit>/context.md (and context-review.md if existed)`  
+  - `[GATE] qualities/* (<unit>) => vibecoding/var/contexts/qualities/<unit>/context.md`  
+- 作成フロー（ガイダンス）:
+  1) `context.md` を PRE-COMMON.md の Why/Where/What/How に従って新規作成  
+  2) Hash Manifest 同期: `npm run context:manifest`（`### Quality Context Hash Manifest` の YAML に unitDigest/files を埋め込む）  
+  3) Rubric 検査: `npx -y tsx vibecoding/scripts/qualities/context-md-rubric.ts`  
+  4) 再実行: `npm run -s check:pre-common`（成功時は `<StartAt> <hash>` を1行出力）  
 
 ---
 
