@@ -68,10 +68,10 @@ export function cleanupDir(dir: string): void {
   try {
     // 深い削除
     fs.rmSync(dir, { recursive: true, force: true });
-  } catch {
-    // 後始末失敗はテスト継続のため握り潰し、CI 安定性を優先する
-    /* 削除失敗はテスト継続のため無視する（副作用の漏れはない） */
-    // noop（CI の一時的失敗を許容）
+  } catch (e) {
+    // 後始末失敗はテスト継続のため握り潰しつつ、発生状況だけは標準エラーへ記録して CI 安定性と原因追跡性を両立する
+    const msg = e instanceof Error ? e.message : String(e);
+    process.stderr.write(`[fsFixtures] warn: failed to cleanup tmp dir; ignoring for CI stability :: ${dir} :: ${msg}\n`);
   }
 }
 

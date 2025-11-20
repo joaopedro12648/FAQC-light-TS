@@ -50,8 +50,12 @@ describe('policy: comment_locale', () => {
       expect(ng.stderr).toMatch(/\[policy:comment_locale\] NG/);
 
       // OK 検証前に NG ファイルを削除し、クリーンな状態で条件を独立させる
-      try { await runNode('node', ['-e', `"require('node:fs').rmSync('${path.join(tmp, 'ng.ts').replace(/\\/g, '\\\\')}',{force:true})"`]); } catch {
-        // 削除失敗は検証条件に影響しないためスキップする
+      try {
+        await runNode('node', ['-e', `"require('node:fs').rmSync('${path.join(tmp, 'ng.ts').replace(/\\/g, '\\\\')}',{force:true})"`]);
+      } catch (e) {
+        // 削除失敗は検証条件に影響しないためスキップするが、テスト実行時の状況をログに残しておく
+        const msg = e instanceof Error ? e.message : String(e);
+        process.stderr.write(`[comment_locale:test] warn: failed to remove NG fixture; skip and proceed :: ${msg}\n`);
       }
 
       // OK: 日本語（非ASCII）を含む JSDoc

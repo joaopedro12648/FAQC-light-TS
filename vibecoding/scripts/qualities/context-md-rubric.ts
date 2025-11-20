@@ -83,8 +83,10 @@ function listFilesRecursive(dir: string): string[] {
     // ディレクトリの列挙に失敗しても処理全体を止めず次のノードへ進む
     try {
       entries = fs.readdirSync(cur, { withFileTypes: true });
-    } catch {
-      // 目録の読み取りに失敗したディレクトリはスキップする
+    } catch (e) {
+      // 目録の読み取りに失敗したディレクトリはスキップするが、どの経路で失敗したかをログとして残す
+      const msg = e instanceof Error ? e.message : String(e);
+      process.stderr.write(`[context-md-rubric] warn: skip unreadable directory while listing :: ${cur} :: ${msg}\n`);
       continue;
     }
 

@@ -65,8 +65,10 @@ const isMain = (() => {
     // 呼び出し元が不明な場合は安全側で実行しない
     if (!arg1) return false;
     return import.meta.url.endsWith(arg1.replace(/\\/g, '/'));
-  } catch {
-    // エントリ判定に失敗した場合は安全側に倒し、副作用のない経路を選択する
+  } catch (e) {
+    // エントリ判定に失敗した場合は安全側に倒し、副作用のない経路を選択する（理由を標準エラーへ記録する）
+    const msg = e instanceof Error ? e.message : String(e);
+    process.stderr.write(`[qualities:preflight] warn: failed to determine isMain; treating as library use :: ${msg}\n`);
     return false;
   }
 })();

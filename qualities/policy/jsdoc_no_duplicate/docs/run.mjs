@@ -56,8 +56,12 @@ function listFilesRecursive(dir) {
     // 配下のエントリ一覧を取得して検査対象の列挙を進める
     try {
       entries = fs.readdirSync(d, { withFileTypes: true });
-    } catch {
-      // 読み取り失敗は対象のみ除外し走査を継続する
+    } catch (e) {
+      // 読み取り失敗は対象のみ除外し走査を継続するが、スキップしたパスと理由を標準エラーへ記録する
+      const msg = e instanceof Error ? e.message : String(e);
+      process.stderr.write(
+        `[policy:jsdoc_no_duplicate] warn: skip unreadable directory while walking :: ${path.relative(PROJECT_ROOT, d)} :: ${msg}\n`,
+      );
       continue;
     }
 
@@ -184,7 +188,7 @@ function first5NoSpace(s) {
 
 /**
  * JSDoc ブロックからタグ名の集合を抽出（厳しめ: 出現するタグ名が1つでも共通なら重複扱い）
- * 例: @param, @returns, @deprecated, @example, @file など
+ * 例: @param, @returns, @deprecated, @example など
  * @param {string} raw ブロックコメントの生文字列（/** ～ *\/ を含む）
  * @returns {string[]} ソート済みユニークタグ名（小文字）
  */
@@ -241,8 +245,12 @@ function main() {
     // 重複JSDoc検査のためにファイル本文を読み込む
     try {
       content = fs.readFileSync(fp, 'utf8');
-    } catch {
-      // 読み取り失敗は検査対象から除外して集計を継続する
+    } catch (e) {
+      // 読み取り失敗は検査対象から除外して集計を継続するが、対象ファイルと理由を標準エラーへ記録する
+      const msg = e instanceof Error ? e.message : String(e);
+      process.stderr.write(
+        `[policy:jsdoc_no_duplicate] warn: skip unreadable file while scanning :: ${path.relative(PROJECT_ROOT, fp)} :: ${msg}\n`,
+      );
       continue;
     }
 

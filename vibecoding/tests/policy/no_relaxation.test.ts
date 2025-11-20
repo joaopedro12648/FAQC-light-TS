@@ -34,8 +34,10 @@ describe('policy: no_relaxation', () => {
       expect(ng.stderr).toMatch(/no_relaxation/);
 
       // OK: クリア — 失敗ファイルを削除してから検証（検証分離のため先に除去）
-      try { fs.rmSync(path.join(tmp, 'ng.ts')); } catch {
-        // 削除に失敗した場合は後続の OK 検証へ影響しないためスキップする
+      try { fs.rmSync(path.join(tmp, 'ng.ts')); } catch (e) {
+        // 削除に失敗した場合は後続の OK 検証へ影響しないためスキップするが、テストとしては状況を標準エラーへ残しておく
+        const msg = e instanceof Error ? e.message : String(e);
+        process.stderr.write(`[no_relaxation:test] warn: failed to remove NG fixture; skip and continue :: ${msg}\n`);
       }
 
       writeTextFile(path.join(tmp, 'ok.ts'), 'export const ok = 1;');

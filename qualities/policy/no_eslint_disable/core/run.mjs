@@ -62,8 +62,12 @@ function listFilesRecursive(dir) {
     // 読み取り不能なノードはスキップし、探索を中断させない
     try {
       entries = fs.readdirSync(d, { withFileTypes: true });
-    } catch {
-      // 権限や一時的な消失などは無視し、他のパス探索を継続する
+    } catch (e) {
+      // 権限や一時的な消失などは無視しつつ、どのノードをスキップしたかを標準エラーへ記録して依存構造の調査を容易にする
+      const msg = e instanceof Error ? e.message : String(e);
+      process.stderr.write(
+        `[policy:no_eslint_disable] warn: skip unreadable directory while walking :: ${path.relative(PROJECT_ROOT, d)} :: ${msg}\n`,
+      );
       continue;
     }
 
@@ -164,8 +168,12 @@ function scanFile(fp) {
   // 読み取り不能時は当該ファイルの検査を省略し、全体の健全性を優先する
   try {
     content = fs.readFileSync(fp, 'utf8');
-  } catch {
+  } catch (e) {
     // I/O 例外は仕様外入力として扱い、当該ファイルは再試行せずにスキップする（局所的に隔離して全体の進行を優先）
+    const msg = e instanceof Error ? e.message : String(e);
+    process.stderr.write(
+      `[policy:no_eslint_disable] warn: skip unreadable file while scanning :: ${path.relative(PROJECT_ROOT, fp)} :: ${msg}\n`,
+    );
     return [];
   }
 

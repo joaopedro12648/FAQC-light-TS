@@ -31,7 +31,9 @@ function run(cmd) {
   try {
     return execSync(cmd, { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' }).trim();
   } catch (e) {
-    // 取得に失敗した場合は空文字を返して後続のフォールバックへ委ねる
+    // 取得に失敗した場合は空文字を返して後続のフォールバックへ委ねると同時に、デバッグ用に標準エラーへ理由を出力する
+    const msg = e instanceof Error ? e.message : String(e);
+    process.stderr.write(`[ci-check-pre-impl] warn: failed to run command; fallback to empty output :: ${cmd} :: ${msg}\n`);
     return '';
   }
 }
@@ -68,8 +70,10 @@ function readFileSafe(p) {
   // 読み込み失敗時も処理継続するため空文字でフォールバックする
   try {
     return fs.readFileSync(p, 'utf8');
-  } catch {
-    // 読み取りに失敗した場合は空文字を返して後続の判定を続ける
+  } catch (e) {
+    // 読み取りに失敗した場合は空文字を返して後続の判定を続けるが、失敗理由は標準エラーへ記録する
+    const msg = e instanceof Error ? e.message : String(e);
+    process.stderr.write(`[ci-check-pre-impl] warn: failed to read file; treat as empty :: ${p} :: ${msg}\n`);
     return '';
   }
 }

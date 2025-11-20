@@ -500,7 +500,7 @@ export const ruleRequireCommentsOnControlStructures = {
       need_else_trailing:
         'else の単一文末尾に意図説明コメントが必要です（同行末）。 対象行: {{preview}}',
       need_catch_block_head:
-        'catch ブロックの先頭に意図説明コメントが必要です（{ の行または次行）。 対象行: {{preview}}',
+        'CATCH ブロックの先頭に意図説明コメントが必要です（{ の行または次行）。 対象行: {{preview}}',
       need_finally_block_head:
         'finally ブロックの先頭に意図説明コメントが必要です（{ の行または次行）。 対象行: {{preview}}',
       meta_like_comment: 'メタ表現のコメントは不可です。',

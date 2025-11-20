@@ -34,8 +34,10 @@ describe('policy: no_unknown_double_cast', () => {
       expect(ng.stderr).toMatch(/double cast/i);
 
       // OK: 失敗ファイルを削除してから検証（NG残存物を除去して検証を独立）
-      try { fs.rmSync(path.join(tmp, 'ng.ts')); } catch {
-        // 削除に失敗した場合は次の検証に影響しない範囲でスキップする
+      try { fs.rmSync(path.join(tmp, 'ng.ts')); } catch (e) {
+        // 削除に失敗した場合は次の検証に影響しない範囲でスキップするが、原因把握のためにログへ記録する
+        const msg = e instanceof Error ? e.message : String(e);
+        process.stderr.write(`[no_unknown_double_cast:test] warn: failed to remove NG fixture; skip and continue :: ${msg}\n`);
       }
 
       writeTextFile(path.join(tmp, 'ok.ts'), 'const n: number = 1;');

@@ -41,8 +41,10 @@ function findContextMdFiles(dir: string): string[] {
     // 探索を優先して結果収集を継続し、個別失敗は全体に影響させない
     try {
       entries = fs.readdirSync(current, { withFileTypes: true });
-    } catch {
-      // 目録の読み取りに失敗したディレクトリはスキップして後続の探索を続ける
+    } catch (e) {
+      // 目録の読み取りに失敗したディレクトリはスキップして後続の探索を続ける（テスト観点で状況だけ標準エラーへ記録する）
+      const msg = e instanceof Error ? e.message : String(e);
+      process.stderr.write(`[context-review] warn: failed to read directory; skip and continue traversal :: ${String(current)} :: ${msg}\n`);
       continue;
     }
     

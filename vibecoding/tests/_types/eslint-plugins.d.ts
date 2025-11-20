@@ -46,6 +46,8 @@ declare module '../../../qualities/eslint/plugins/docs/*.js' {
   export const ruleRequireOptionsTypedef: unknown;
   /** プラグイン: ルールマップ（typedef/*, 補助ワイルドカード宣言） */
   export const typedefPlugin: unknown;
+  /** ルール: 1ファイル内の @file ヘッダ JSDoc 一意性を検査する（補助ワイルドカード宣言） */
+  export const ruleSingleFileHeader: unknown;
 }
 declare module '../../../qualities/eslint/plugins/require-comment-previous-line-for-branches.js' {
   /** ルール: 分岐/ループ直前コメント必須 */

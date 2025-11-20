@@ -92,7 +92,11 @@ export function primesBad(limit: any, mode: any = "fast"): any {
       JSON.parse("{not: 'json'}");
     }
   } catch (e) {
-    // 意図的にエラーを処理（サンプル）
+    // 意図的にエラーを処理（サンプル）: デモ用コードが例外を握り潰していることを明示しつつログへ残す
+    const msg = e instanceof Error ? e.message : String(e);
+    process.stderr.write(
+      '[pre-common-auto-check:demo] intentionally swallowed error in primesBad demo :: ' + msg + '\n',
+    );
   }
 
   return arr;
@@ -118,6 +122,7 @@ function readFileIfExists(filePath: string): string | null {
     return fs.readFileSync(filePath, 'utf8');
   } catch {
     // 読み取り失敗は未検出として扱い上位のロジックで継続する
+    process.stderr.write(`[pre-common-auto-check] warn: readFileIfExists failed; treat as not existing :: ${filePath}\n`);
     return null;
   }
 }
@@ -167,8 +172,10 @@ function listFilesRecursive(dir: string): string[] {
     // 配下のエントリ一覧を取得して探索キューを拡張する
     try {
       entries = fs.readdirSync(current, { withFileTypes: true });
-    } catch {
-    // 読み取り失敗は当該ディレクトリのみ除外して探索を継続する
+    } catch (e) {
+      // 読み取り失敗は当該ディレクトリのみ除外して探索を継続するが、どの経路で失敗したかをログに残す
+      const msg = e instanceof Error ? e.message : String(e);
+      process.stderr.write(`[pre-common-auto-check] warn: listFilesRecursive skipped unreadable directory :: ${current} :: ${msg}\n`);
       continue;
     }
 
@@ -519,8 +526,10 @@ function runGateCommandsWithKata(_pkgJson: unknown): string[] {
     return results;
   } finally {
     // 一時ファイルを削除してクリーンアップの確実性を高める
-    try { fs.unlinkSync(kataPath); } catch {
-      // 一時ファイル削除の失敗は致命ではないため継続する
+    try { fs.unlinkSync(kataPath); } catch (e) {
+      // 一時ファイル削除の失敗は致命ではないため継続するが、クリーンアップ漏れの可能性をログに残す
+      const msg = e instanceof Error ? e.message : String(e);
+      process.stderr.write(`[pre-common-auto-check] warn: failed to remove kata diagnostic file; continuing :: ${kataPath} :: ${msg}\n`);
     }
 
     // ディレクトリが空であれば撤去して痕跡を最小化する
@@ -528,8 +537,10 @@ function runGateCommandsWithKata(_pkgJson: unknown): string[] {
       const remains = fs.readdirSync(kataDir);
       // 空ディレクトリのみ削除して安全にクリーンアップする
       if (remains.length === 0) fs.rmdirSync(kataDir);
-    } catch {
-      // ディレクトリ撤去に失敗しても致命ではないため継続する
+    } catch (e) {
+      // ディレクトリ撤去に失敗しても致命ではないため継続するが、残骸の存在は警告として記録する
+      const msg = e instanceof Error ? e.message : String(e);
+      process.stderr.write(`[pre-common-auto-check] warn: failed to remove kata diagnostics directory; continuing :: ${kataDir} :: ${msg}\n`);
     }
   }
 }
@@ -582,8 +593,10 @@ function saveDiagnostics(diagnostics: string[]): void {
   try {
     fs.mkdirSync(path.dirname(diagOutFile), { recursive: true });
     fs.writeFileSync(diagOutFile, full, 'utf8');
-  } catch {
-    // 診断の保存に失敗した場合は標準出力のみで継続する
+  } catch (e) {
+    // 診断の保存に失敗した場合は標準出力のみで継続するが、書き込み失敗の理由はログに残す
+    const msg = e instanceof Error ? e.message : String(e);
+    process.stderr.write(`[pre-common-auto-check] warn: failed to persist diagnostics; continue with stdout only :: ${diagOutFile} :: ${msg}\n`);
   }
 
   const ascii = toAsciiPrintable(full);

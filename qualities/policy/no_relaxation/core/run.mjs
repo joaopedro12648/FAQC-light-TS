@@ -58,8 +58,12 @@ function listFilesRecursive(dir) {
     // 配下のエントリ一覧を取得して探索を継続する
     try {
       entries = fs.readdirSync(d, { withFileTypes: true });
-    } catch {
-      // 読み取り失敗は当該ノードのみ除外し走査を続行する
+    } catch (e) {
+      // 読み取り失敗は当該ノードのみ除外し走査を続行するが、スキップしたパスと理由を標準エラーへ記録する
+      const msg = e instanceof Error ? e.message : String(e);
+      process.stderr.write(
+        `[policy:no_relaxation] warn: skip unreadable directory while walking :: ${path.relative(PROJECT_ROOT, d)} :: ${msg}\n`,
+      );
       continue;
     }
 
@@ -99,8 +103,12 @@ function scanFile(fp) {
   // ファイル本文を読み込み緩和ディレクティブの出現を解析する
   try {
     content = fs.readFileSync(fp, 'utf8');
-  } catch {
-    // 読み取り失敗は検査対象から除外して空配列を返す
+  } catch (e) {
+    // 読み取り失敗は検査対象から除外して空配列を返すが、スキップ理由を標準エラーへ記録する
+    const msg = e instanceof Error ? e.message : String(e);
+    process.stderr.write(
+      `[policy:no_relaxation] warn: skip unreadable file while scanning :: ${path.relative(PROJECT_ROOT, fp)} :: ${msg}\n`,
+    );
     return [];
   }
 

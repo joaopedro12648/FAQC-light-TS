@@ -84,8 +84,12 @@ function shouldEnterDir(dirPath, name) {
     try {
       // var ディレクトリの実在を確認して除外判定を確定する
       if (fs.existsSync(maybeVar) && fs.statSync(maybeVar).isDirectory()) return false;
-    } catch {
-      // 参照の失敗時は安全側で除外として扱う
+    } catch (e) {
+      // 参照の失敗時は安全側で除外として扱う（対象パスと理由を標準エラーへ記録する）
+      const msg = e instanceof Error ? e.message : String(e);
+      process.stderr.write(
+        `[find_consecutive_line_comments] warn: failed to probe vibecoding/var; treat as excluded :: ${maybeVar} :: ${msg}\n`,
+      );
       return false;
     }
   }
@@ -121,8 +125,12 @@ function listFilesRecursive(rootDir) {
     // 配下のエントリ一覧を取得して走査対象を展開する
     try {
       entries = fs.readdirSync(current, { withFileTypes: true });
-    } catch {
-      // 読み取り失敗は当該ディレクトリのみ除外して探索を継続する
+    } catch (e) {
+      // 読み取り失敗は当該ディレクトリのみ除外して探索を継続するが、対象パスと理由を標準エラーへ記録する
+      const msg = e instanceof Error ? e.message : String(e);
+      process.stderr.write(
+        `[find_consecutive_line_comments] warn: skip unreadable directory while walking :: ${current} :: ${msg}\n`,
+      );
       continue;
     }
 
@@ -182,8 +190,12 @@ function processFile(filePathAbs, repoRootAbs) {
   // I/O 失敗時は安全側でスキップして継続
   try {
     content = fs.readFileSync(filePathAbs, 'utf8');
-  } catch {
-    // 読み取りに失敗したファイルは検出対象から外す
+  } catch (e) {
+    // 読み取りに失敗したファイルは検出対象から外すが、対象パスと理由を標準エラーへ記録する
+    const msg = e instanceof Error ? e.message : String(e);
+    process.stderr.write(
+      `[find_consecutive_line_comments] warn: skip unreadable file while scanning :: ${filePathAbs} :: ${msg}\n`,
+    );
     return [];
   }
 
@@ -201,12 +213,10 @@ function processFile(filePathAbs, repoRootAbs) {
       continue;
     }
 
-    // 連続開始
-    let j = i + 1;
-    // 内側スキャン：連続区間の終端直前まで伸ばす
-    while (j < isComment.length && isComment[j]) j++;
-    const runStart = i;
-    const runEnd = j - 1; // 連続最終インデックス
+    // 連続区間の終端インデックスを求める
+    const run = findCommentRun(isComment, i);
+    const runStart = run.start;
+    const runEnd = run.end;
     const runLen = runEnd - runStart + 1;
     // 2行以上連続している場合のみ検出対象として出力する
     if (runLen >= 2) {
@@ -221,10 +231,29 @@ function processFile(filePathAbs, repoRootAbs) {
       }
     }
 
-    i = j; // 次の非連続位置へ
+    // 次の非連続位置へ進める
+    i = run.nextIndex;
   }
 
   return out;
+}
+
+/**
+ * コメント行フラグ配列から、指定位置を起点とした連続区間を検出する。
+ * @param {boolean[]} isComment 各行がコメントかどうかのフラグ配列
+ * @param {number} startIndex 連続区間探索の開始インデックス
+ * @returns {{start:number,end:number,nextIndex:number}} 連続区間の開始・終了インデックスと次にスキャンすべき位置
+ */
+function findCommentRun(isComment, startIndex) {
+  let j = startIndex + 1;
+  // 内側スキャン：連続区間の終端直前まで伸ばす
+  while (j < isComment.length && isComment[j]) {
+    j++;
+  }
+
+  const runStart = startIndex;
+  const runEnd = j - 1; // 連続最終インデックス
+  return { start: runStart, end: runEnd, nextIndex: j };
 }
 
 /**
@@ -238,6 +267,7 @@ function main() {
   const root = path.resolve(args.root || defaultRoot);
   const files = listFilesRecursive(root);
   const outLines = [];
+
   // 走査結果を順に処理して TSV 行を集約する
   for (const fp of files) {
     // 収集したファイルを個別に処理し、検出行を追加していく
@@ -260,7 +290,9 @@ function main() {
 // 終了方針: 実行例外があってもコマンド用途を阻害しない運用を保証する
 try {
   main();
-} catch {
-  // 例外時はエラーを表出せず静かに 0 終了して呼び出し側のフローを維持する
+} catch (e) {
+  // 例外時は検出処理を中断しつつ、発生した例外要約を標準エラーに出力した上で静かに 0 終了し、呼び出し側のフローを維持する
+  const msg = e instanceof Error ? e.message : String(e);
+  process.stderr.write(`[find_consecutive_line_comments] warn: unexpected error; exit 0 to preserve caller flow :: ${msg}\n`);
   process.exit(0);
 }

@@ -106,8 +106,10 @@ export function collectUnitSources(): UnitSources[] {
     // バケット配下を読み取り、命名規約に従うユニット候補だけを抽出する
     try {
       areaEntries = fs.readdirSync(bucketDir, { withFileTypes: true });
-    } catch {
-      // 読み取り不能なバケットは一時的な不整合としてスキップし、他のバケットの検査を優先する
+    } catch (e) {
+      // 読み取り不能なバケットは一時的な不整合としてスキップし、他のバケットの検査を優先するが、発生事象はログに残す
+      const msg = e instanceof Error ? e.message : String(e);
+      process.stderr.write(`[context-hash-manifest] warn: skip unreadable bucket while enumerating unit dirs :: ${bucketDir} :: ${msg}\n`);
       return [];
     }
 
@@ -166,8 +168,10 @@ function listFilesRecursive(dir: string): string[] {
     // 読み取りに失敗するディレクトリがあっても全体の列挙を継続できるようにする
     try {
       entries = fs.readdirSync(current, { withFileTypes: true });
-    } catch {
-      // アクセス権や一時的な I/O エラーで読み取れないディレクトリは、鮮度判定の対象外として安全にスキップする
+    } catch (e) {
+      // アクセス権や一時的な I/O エラーで読み取れないディレクトリは、鮮度判定の対象外として安全にスキップする（理由はログに記録）
+      const msg = e instanceof Error ? e.message : String(e);
+      process.stderr.write(`[context-hash-manifest] warn: skip unreadable directory while listing files :: ${current} :: ${msg}\n`);
       continue;
     }
 
@@ -333,8 +337,10 @@ function syncHashManifestMd(
   // digest を同期するために context.md を読み込む
   try {
     mdText = fs.readFileSync(contextMdPath, 'utf8');
-  } catch {
-    // 読み取り不能な context.md は digest 記録の対象外とし、他ユニットの処理を継続する
+  } catch (e) {
+    // 読み取り不能な context.md は digest 記録の対象外とし、他ユニットの処理を継続するが、対象と理由をログへ出力する
+    const msg = e instanceof Error ? e.message : String(e);
+    process.stderr.write(`[context-hash-manifest] warn: skip unreadable context.md when writing hash manifest :: ${contextMdPath} :: ${msg}\n`);
     return;
   }
 
@@ -402,8 +408,10 @@ const isDirectRun = (() => {
     const fromUrl = fileURLToPath(import.meta.url);
     const fromArg = path.resolve(entryArg);
     return path.resolve(fromUrl) === fromArg;
-  } catch {
+  } catch (e) {
     // 変換に失敗した場合は保守的に「直接実行ではない」とみなす（ライブラリ利用時の誤検知を避ける）
+    const msg = e instanceof Error ? e.message : String(e);
+    process.stderr.write(`[context-hash-manifest] warn: failed to determine direct-run status; treat as library use :: ${msg}\n`);
     return false;
   }
 })();

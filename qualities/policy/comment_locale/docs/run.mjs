@@ -61,8 +61,10 @@ function getOsLocale() {
   // OS のロケール設定を取得し、コメントロケール判定の既定値として利用する
   try {
     return Intl.DateTimeFormat().resolvedOptions().locale || '';
-  } catch {
-    /* OS ロケール取得失敗時は既定（空文字）へフォールバックする */
+  } catch (e) {
+    /* OS ロケール取得失敗時は既定（空文字）へフォールバックする（失敗理由は標準エラーへ記録する） */
+    const msg = e instanceof Error ? e.message : String(e);
+    process.stderr.write(`[policy:comment_locale] warn: failed to resolve OS locale; fallback to empty :: ${msg}\n`);
     return '';
   }
 }
@@ -124,8 +126,12 @@ function listFilesRecursive(dir) {
     if (!d) break;
     let entries;
     // ファイルシステムの状態が変化しても全体の検査を継続するため、読み取り失敗は局所的に無視する
-    try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch {
-      /* ディレクトリ読み取り失敗は対象のみスキップして探索を継続する */
+    try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch (e) {
+      /* ディレクトリ読み取り失敗は対象のみスキップして探索を継続する（対象パスと理由を標準エラーへ記録する） */
+      const msg = e instanceof Error ? e.message : String(e);
+      process.stderr.write(
+        `[policy:comment_locale] warn: skip unreadable directory while walking :: ${d} :: ${msg}\n`,
+      );
       continue;
     }
 
@@ -395,8 +401,12 @@ function analyzeFileForViolations(fp, strictness) {
   // 検査対象ファイルを読み込み、ロケール違反判定のためのテキスト全文を取得する
   try {
     content = fs.readFileSync(fp, 'utf8');
-  } catch {
+  } catch (e) {
     /* 読み取り不能ファイルは検査対象外として扱う（安定性のため継続） */
+    const msg = e instanceof Error ? e.message : String(e);
+    process.stderr.write(
+      `[policy:comment_locale] warn: skip unreadable file while scanning :: ${path.relative(PROJECT_ROOT, fp)} :: ${msg}\n`,
+    );
     return [];
   }
 

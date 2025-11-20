@@ -1,0 +1,11 @@
+{
+  "no_vibecoding_from_outside": {
+    "from": "!^vibecoding/",
+    "to": "^vibecoding/",
+    "severity": "error",
+    "comment": "vibecoding/ ディレクトリ外から vibecoding/ 配下への依存（import 等）を禁止する"
+  }
+}
+
+
+

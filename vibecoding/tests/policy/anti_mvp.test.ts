@@ -39,8 +39,10 @@ describe('policy: anti_mvp', () => {
       expect(ng.stderr).toMatch(/anti-mvp ❌/);
 
       // OK 検証: 失敗ファイルを削除して残骸を除去し、検証を分離した状態で実施する
-      try { fs.rmSync(path.join(tmp, 'ng.ts')); } catch {
-        // 削除失敗時は後続の OK 検証へ影響しないためスキップする
+      try { fs.rmSync(path.join(tmp, 'ng.ts')); } catch (e) {
+        // 削除失敗時は後続の OK 検証へ影響しないためスキップするが、テスト上の状況はログに残しておく
+        const msg = e instanceof Error ? e.message : String(e);
+        process.stderr.write(`[anti_mvp:test] warn: failed to remove NG fixture; skipping cleanup :: ${msg}\n`);
       }
 
       writeTextFile(path.join(tmp, 'ok.ts'), 'export const ok = 1;');

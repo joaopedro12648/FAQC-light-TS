@@ -53,8 +53,10 @@ export function runNode(
     let stderr = '';
     const timer = setTimeout(() => {
       // タイムアウト時に子プロセスを強制終了しリソースリークを防止する
-      try { child.kill('SIGKILL'); } catch {
-        // 強制終了に失敗した場合は状態を保持したまま結果のみ返す
+      try { child.kill('SIGKILL'); } catch (e) {
+        // 強制終了に失敗した場合は状態を保持したまま結果のみ返すが、その事実を標準エラーへ記録する
+        const msg = e instanceof Error ? e.message : String(e);
+        process.stderr.write(`[runNode] warn: failed to SIGKILL child process on timeout :: ${msg}\n`);
       }
     }, timeoutMs);
     child.stdout?.on('data', (d) => { stdout += String(d); });

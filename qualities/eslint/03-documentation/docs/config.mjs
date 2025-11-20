@@ -20,6 +20,7 @@ import { FILES_ALL_CODE, FILES_JS } from '../../_shared/core/globs.mjs';
 import { blockCommentFormattingPlugin } from '../../plugins/docs/block-comment-formatting.js';
 import { headerPlugin } from '../../plugins/docs/header-bullets-min.js';
 import { controlStructuresPlugin } from '../../plugins/docs/require-comments-on-control-structures.js';
+import { singleFileHeaderPlugin } from '../../plugins/docs/single-file-header.js';
 import { typedefPlugin } from '../../plugins/types/require-options-typedef.js';
 
 /**
@@ -75,7 +76,7 @@ export const documentation = [
   // ファイル先頭JSDocの箇条書き（Header Checklist）を最低件数で強制
   {
     files: FILES_ALL_CODE,
-    plugins: { header: headerPlugin },
+    plugins: { header: headerPlugin, singleHeader: singleFileHeaderPlugin },
     rules: {
       'header/header-bullets-min': [
         'error',
@@ -84,7 +85,9 @@ export const documentation = [
           message:
             'Header checklist is missing or too short (min: 8 bullet items). Refer to the Quality Gate Context and update the file header comment according to PRE-IMPL.md.'
         }
-      ]
+      ],
+      // 1ファイル内で複数の @file ヘッダ JSDoc が存在しないことを保証する
+      'singleHeader/single-file-header': 'error'
     }
   },
   // ブロックコメントの先頭行に本文を置かない（複数行JSDoc対象）

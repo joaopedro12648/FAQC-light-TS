@@ -92,8 +92,10 @@ function getChangedFilesForLint(): string[] {
       .filter((p) => /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/.test(p))
       .filter((p) => existsSync(p));
     return targets;
-  } catch {
-    // 失敗時は空配列を返す
+  } catch (e) {
+    // 失敗時は空配列を返すが、Git 差分から対象ファイルを特定できなかった理由を標準エラーへ記録する
+    const msg = e instanceof Error ? e.message : String(e);
+    process.stderr.write(`[qualities:check] warn: getChangedFilesForLint failed; treat as empty list :: ${msg}\n`);
     return [];
   }
 }
@@ -116,8 +118,10 @@ function getChangedPathsRaw(): string[] | null {
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
     return candidates;
-  } catch {
-    // 失敗時は null を返す
+  } catch (e) {
+    // 失敗時は null を返すが、Git 差分取得に失敗した理由を標準エラーへ記録する
+    const msg = e instanceof Error ? e.message : String(e);
+    process.stderr.write(`[qualities:check] warn: getChangedPathsRaw failed; treating as no diff :: ${msg}\n`);
     return null;
   }
 }
@@ -170,8 +174,12 @@ function hasFilesUpdatedAfter(rootDir: string, thresholdIso: string): boolean {
     // ルートが存在しなければ検出なし
     if (!existsSync(rootDir)) return false;
     return traverseUpdatedNewerThan(rootDir, threshold);
-  } catch {
-    // 不明/失敗時は検出なし（false）を返す
+  } catch (e) {
+    // 不明/失敗時は検出なし（false）を返すが、判定不能となった理由を標準エラーへ記録する
+    const msg = e instanceof Error ? e.message : String(e);
+    process.stderr.write(
+      `[qualities:check] warn: hasFilesUpdatedAfter failed; treat as no-updates :: ${rootDir} :: ${msg}\n`,
+    );
     return false;
   }
 }
@@ -252,8 +260,12 @@ export function shouldRunInternalTests(): boolean {
       lastUpdatedIso: iso,
       anyUpdatedSince: anyUpdated,
     });
-  } catch {
-    // 無い/読めない
+  } catch (e) {
+    // 無い/読めない場合は安全側の判定に切り替える（last_updated 不明として扱い、例外理由を標準エラーへ記録する）
+    const msg = e instanceof Error ? e.message : String(e);
+    process.stderr.write(
+      `[qualities:check] warn: failed to read last_updated; treating as unknown timestamp :: ${lastUpdatedPath} :: ${msg}\n`,
+    );
     return evaluateShouldRunInternalTests({
       vibecodingExists,
       changedPaths: changed,
@@ -443,8 +455,10 @@ const isMain = (() => {
     if (!arg1) return false;
     const invokedHref = pathToFileURL(arg1).href;
     return import.meta.url === invokedHref;
-  } catch {
-    // 例外時は判定不能として実行を抑止する（安全側で false）
+  } catch (e) {
+    // 例外時は判定不能として実行を抑止する（安全側で false）とともに、判定失敗理由を標準エラーへ記録する
+    const msg = e instanceof Error ? e.message : String(e);
+    process.stderr.write(`[qualities:check] warn: failed to determine isMain; treating as library use :: ${msg}\n`);
     return false;
   }
 })();

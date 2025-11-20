@@ -42,34 +42,22 @@ function collectInvalidAreaDirs(): string[] {
     const buckets = fs.readdirSync(domainDir, { withFileTypes: true });
 
     // ドメイン配下の各バケットについて第4階層のエリア名を調査する
-    // 各バケットについて、エリア階層ごとの構造ルール逸脱を検査する
     for (const bucketEntry of buckets) {
       // バケットではないエントリ（設定ファイルなど）は構造検査の対象外とする
       if (!bucketEntry.isDirectory()) continue;
       const bucketName = bucketEntry.name;
       const bucketDir = path.join(domainDir, bucketName);
-      // バケット配下のエリア階層を読み取り、命名規約に従わないユニット名が無いか検査する
-      // バケット配下のディレクトリ一覧を取得し、命名規約に反する名前が無いかを調べる（eslint/policy/tsconfig すべてに同じ構造規則を適用する）
-      let areaEntries: fs.Dirent[];
-      // 読み取りに失敗したバケットは一時的な不整合とみなし、構造検査の対象から除外して他バケットの確認を優先する
-      try {
-        areaEntries = fs.readdirSync(bucketDir, { withFileTypes: true });
-      } catch {
-        // 読み取り不能な場合は当該バケットのみ除外し、他の検査を継続する
-        continue;
-      }
 
-      // 第4階層のディレクトリ名を列挙して違反を抽出する（構造レベルでのリークや例外フォルダを防ぐ）
+      // バケット以下のエリア階層を読み取り、命名規約に従う候補のみを対象とする
+      const areaEntries = readAreaEntries(bucketDir, domain, bucketName);
+      // 読み取り不能なバケットは readAreaEntries 内でスキップされる
       for (const areaEntry of areaEntries) {
-        // ファイルは検査対象外とし、ディレクトリのみを第4階層の候補として扱う
+        // バケット内のファイルは構造検査の対象外とし、ディレクトリのみを第4階層候補として扱う
         if (!areaEntry.isDirectory()) continue;
-        // 第4階層のユニット名が命名規約から外れている場合だけ構造ルール違反として検出し、後続のリファクタ時に修正対象を明確にする
         const areaName = areaEntry.name;
-        // '_' 始まりや正規表現に反する名前が見つかった場合にだけ違反リストへ追加し、構造ルールからの逸脱を 1 箇所に集約して検知する
+        // 命名規約に従わないユニット名（または '_' 始まり）は違反として収集する
         if (!UNIT_NAME_PATTERN.test(areaName) || areaName.startsWith('_')) {
-          const rel = path
-            .join('qualities', domain, bucketName, areaName)
-            .replace(/\\/g, '/');
+          const rel = path.join('qualities', domain, bucketName, areaName).replace(/\\/g, '/');
           violations.push(rel);
         }
       }
@@ -77,6 +65,28 @@ function collectInvalidAreaDirs(): string[] {
   }
 
   return violations;
+}
+
+/**
+ * qualities ドメイン配下のバケットディレクトリからエリア階層のエントリ一覧を取得する。
+ * 読み取り不能なディレクトリはスキップし、警告だけを標準エラーへ出力する。
+ * @param bucketDir バケットディレクトリの絶対パス
+ * @param domain ドメイン名（eslint/policy/tsconfig）
+ * @param bucketName バケット名
+ * @returns エリア階層のディレクトリエントリ配列（読み取り失敗時は空配列）
+ */
+function readAreaEntries(bucketDir: string, domain: string, bucketName: string): fs.Dirent[] {
+  // バケット配下のエントリ一覧を取得し、読み取り不能な場合は警告を出してスキップする
+  try {
+    return fs.readdirSync(bucketDir, { withFileTypes: true });
+  } catch (e) {
+    // 構造検査の網羅性を維持しつつ、読み取り不能バケットの存在をテストログとして可視化する
+    const msg = e instanceof Error ? e.message : String(e);
+    process.stderr.write(
+      `[qualities-areas-structure] warn: skip unreadable bucket while checking structure :: ${domain}/${bucketName} :: ${msg}\n`,
+    );
+    return [];
+  }
 }
 
 // このテスト群の目的: qualities ドメイン/バケット構造の第4階層に現れるユニット名が命名規約（^[a-z][a-z0-9_-]*$）に従うことを自動検証し、将来の refactor での逸脱を検知する
