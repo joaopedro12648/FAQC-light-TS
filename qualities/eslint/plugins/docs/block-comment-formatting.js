@@ -48,8 +48,7 @@ export const ruleBlockCommentFormatting = {
         for (const comment of sourceCode.getAllComments()) {
           // インラインコメントは対象外とし、ブロックコメントのみを扱う
           if (comment.type !== 'Block') continue;
-
-          const raw = `/*${comment.value}*/`;
+          const raw = `/*${String(comment.value)}*/`;
           const lines = raw.split(/\r?\n/);
           // 1 行だけのコメントは本ルールの対象外（no-empty-comment 側で扱う）
           if (lines.length === 1) {
@@ -70,7 +69,6 @@ export const ruleBlockCommentFormatting = {
     };
   },
 };
-
 /**
  * 単一行で表現できる内容を複数行ブロックコメントとして書くことを抑止するルール。
  * - 対象: 複数行ブロックコメントのうち、実質 1 文の説明だけで構成されるコメント
@@ -162,7 +160,7 @@ export const ruleNoEmptyBlockComment = {
         for (const comment of sourceCode.getAllComments()) {
           // 対象外のコメント種別は早期リターンでスキップする
           if (comment.type !== 'Block') continue;
-          const raw = `/*${comment.value}*/`;
+          const raw = `/*${String(comment.value)}*/`;
           const trimmedLines = raw
             .replace(/^\/\*\*?/, '')
             .replace(/\*\/$/, '')
@@ -177,6 +175,91 @@ export const ruleNoEmptyBlockComment = {
               messageId: 'emptyBlock',
             });
           }
+        }
+      },
+    };
+  },
+};
+
+/**
+ * ブロックコメント内部の空行を禁止するルール。
+ * - 対象: JSDoc/通常ブロックコメントの本文行全体
+ * - 失敗: 装飾文字（* や空白）を除いた本文行の中に空行が 1 行でも含まれている場合
+ * @type {import('eslint').Rule.RuleModule}
+ */
+export const ruleNoBlankLinesInBlockComment = {
+  meta: {
+    type: 'layout',
+    docs: {
+      description:
+        'Disallow blank lines inside block comments so that all content and tag lines appear consecutively without empty separators.',
+    },
+    schema: [],
+    messages: {
+      noBlankLines:
+        'ブロックコメント内部に空行があります。本文行とタグ行の間に空行を挟まず連続した行として記述してください。',
+    },
+  },
+  create(context) {
+    const sourceCode = context.getSourceCode();
+
+    /**
+     * ブロックコメント内部に空行が含まれるかどうかを判定する。
+     * - 先頭と末尾の装飾上の空行は許容し、最初と最後の本文行の内側だけを見る。
+     * - comment.value（区切り記号を除いた内部文字列）を対象に、簡易スキャナと同等のロジックを適用する。
+     * @param {import('eslint').AST.Token | import('estree').Comment} comment 対象コメント
+     * @returns {boolean} 本文行の内側に空行が存在する場合 true、存在しない場合 false
+     */
+    function hasBlankLines(comment) {
+      const rawLines = String(comment.value).split(/\r?\n/);
+      const trimmed = rawLines.map((line) => line.replace(/^\s*\*?\s?/, '').trim());
+
+      let firstContentIndex = -1;
+      let lastContentIndex = -1;
+      // 理由: 最初と最後の本文行を特定し、装飾上の空行（外縁）は検査対象から除外する
+      for (let i = 0; i < trimmed.length; i++) {
+        // 理由: 本文と見なせる行のみを最初/最後インデックス計算に使用する
+        if (trimmed[i].length > 0) {
+          // 理由: 最初に見つかった本文行のインデックスを確定する（1回のみ）
+          if (firstContentIndex === -1) {
+            firstContentIndex = i;
+          }
+
+          lastContentIndex = i;
+        }
+      }
+
+      // 理由: 本文行が存在しない（全て空行）場合は違反ではないため早期終了する
+      // 先頭/末尾以外にも本文が無いケースを除外して誤検出を防ぐ
+      if (firstContentIndex === -1 || lastContentIndex === -1) {
+        return false;
+      }
+
+      // 理由: 本文領域の内側に空文字行（空行）が存在すれば違反とみなす
+      for (let i = firstContentIndex + 1; i < lastContentIndex; i++) {
+        // 理由: 本文の連続性を壊す空行を検出する
+        if (trimmed[i].length === 0) {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    return {
+      Program() {
+        // ソースコード全体のコメントを走査し、ブロックコメント内部の空行を検査する
+        for (const comment of sourceCode.getAllComments()) {
+          // 理由: 対象外のコメント種別（Line）は検査コスト削減のため除外する
+          if (comment.type !== 'Block') continue;
+
+          // 理由: 本文内に空行が無いコメントは違反ではないため報告しない
+          if (!hasBlankLines(comment)) continue;
+
+          context.report({
+            loc: comment.loc,
+            messageId: 'noBlankLines',
+          });
         }
       },
     };
@@ -272,6 +355,7 @@ export const ruleRequireDescribeComment = {
  * - no-empty-comment: 空ブロックコメント禁止ルール
  * - require-describe-comment: describe 直前コメント必須ルール
  * - prefer-single-line-block-comment: 単一行で済む内容の多行ブロックコメントを抑止するルール
+ * - no-blank-lines-in-block-comment: ブロックコメント内部の空行を禁止するルール
  */
 export const blockCommentFormattingPlugin = {
   rules: {
@@ -279,6 +363,7 @@ export const blockCommentFormattingPlugin = {
     'no-empty-comment': ruleNoEmptyBlockComment,
     'require-describe-comment': ruleRequireDescribeComment,
     'prefer-single-line-block-comment': rulePreferSingleLineBlockComment,
+    'no-blank-lines-in-block-comment': ruleNoBlankLinesInBlockComment,
   },
 };
 

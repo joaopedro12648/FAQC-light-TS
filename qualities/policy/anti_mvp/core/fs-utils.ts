@@ -19,7 +19,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-// 単純なグロブ解決（今回の用途限定）。対応: "src/**/*.ts", "*。*/src/**/*.ts"（必要に応じて拡張）
+// 単純なグロブ解決（今回の用途限定）。対応: "src/**/*/*.ts", "*。*/src/**/*/*.ts"（必要に応じて拡張）
 /**
  * パターンに基づき .ts ファイルの相対パス一覧を収集する。
  * @param rootDir ルートディレクトリ
@@ -31,12 +31,12 @@ export const globFiles = (rootDir: string, patterns: readonly string[]): string[
   // 各パターンを順に評価する
   for (const pattern of patterns) {
     // src 配下の .ts を列挙する
-    if (pattern === 'src/**/*.ts') {
+    if (pattern === 'src/**/*/*.ts') {
       // src 配下専用パターンの処理で走査対象を限定する
       for (const rel of listAllTsUnder(path.join(rootDir, 'src'))) {
         results.push(path.relative(rootDir, rel));
       }
-    } else if (pattern === '**/src/**/*.ts') {
+    } else if (pattern === '**/src/**/*/*.ts') {
       // 任意の src 直下から走査して対象の網羅性を確保する
       for (const rel of listAllTsUnderAnySrc(rootDir)) {
         results.push(path.relative(rootDir, rel));

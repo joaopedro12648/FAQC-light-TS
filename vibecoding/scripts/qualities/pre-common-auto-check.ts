@@ -243,7 +243,6 @@ function shouldUpdateContextForUnit(contextMdPath: string, digestInfo: UnitDiges
 
   // qualities/** 側から再計算した digest と context.md 内の unitDigest が一致しない場合は再生成が必要
   if (recordedDigest !== digestInfo.unitDigest) return true;
-
   return false;
 }
 
@@ -289,7 +288,6 @@ function computeNeededMappingsByDigest(unitSources: UnitSources[], digests: Unit
     if (needsUpdate) {
       // expire 理由（SoT 側の追加/削除/変更）を抽出するヘルパーを用いて差分を収集する
       const reasons = computeExpireReasons(contextMdPath, digestInfo);
-
       // SnD: 不一致/欠落時は派生物の mirror を expire（削除）して再作成フローへ誘導する
       try {
         const ctxDir = path.dirname(contextMdPath);
@@ -298,7 +296,7 @@ function computeNeededMappingsByDigest(unitSources: UnitSources[], digests: Unit
         if (fs.existsSync(contextMdPath)) {
           fs.unlinkSync(contextMdPath);
         }
-        
+
         // 隣接する review がある場合は併せて削除し、レビュー統合の重複や分岐を抑止する
         // 目的: 重複防止 / 前提: review が存在する場合のみ / 例外: 削除失敗は警告で継続
         if (fs.existsSync(reviewPath)) {

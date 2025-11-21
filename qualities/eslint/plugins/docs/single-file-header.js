@@ -75,7 +75,6 @@ export const ruleSingleFileHeader = {
           const raw = `/*${comment.value}*/`;
           // JSDoc 以外のブロックコメントは対象外とし、ヘッダ以外の汎用コメントはスキップする
           if (!raw.startsWith('/**')) continue;
-
           const body = raw.replace(/^\/\*\*/, '').replace(/\*\/$/, '');
           const lines = body
             .split(/\r?\n/)

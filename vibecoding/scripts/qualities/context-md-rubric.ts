@@ -22,20 +22,20 @@ import path from 'node:path';
  * 使用方法（CLI）
  * - 全ファイル（既定）:
  * 例: npx tsx vibecoding/scripts/qualities/context-md-rubric.ts
- *
+ * 使用例（対象の絞り込み）:
  * - 対象を絞る（--include または位置引数。複数可・カンマ区切り可）:
  * 例: npx tsx vibecoding/scripts/qualities/context-md-rubric.ts --include vibecoding/var/contexts/qualities/policy/anti_mvp/context.md
  * 例: npx tsx vibecoding/scripts/qualities/context-md-rubric.ts --include vibecoding/var/contexts/qualities/eslint/** --include vibecoding/var/contexts/qualities/tsconfig/context.md
  * 例: npx tsx vibecoding/scripts/qualities/context-md-rubric.ts qualities/policy/no_relaxation/**,qualities/policy/no_unknown_double_cast/**
- *
+ * 便宜機能:
  * - 便宜機能: qualities/ からの指定を var 側に自動マップ
  * 例: npx tsx vibecoding/scripts/qualities/context-md-rubric.ts --include qualities/policy/anti_mvp/**
- *
+ * 絞り込み挙動の定義:
  * 絞り込み挙動
  * - 引数未指定: vibecoding/var/contexts/qualities/**\/context.md を全走査
  * - --include/位置引数指定時: 引数を簡易グロブ（** と *）として repo 相対パスにマッチさせフィルタ
  * - マッチ 0 件時: 「no files matched by --include」を出して 0 終了（スキップ扱い）
- *
+ * rubric 要件の要点:
  * context.md 作成上の注意（rubric 検出要件の要点）
  * - すべての項目は各セクション内に存在すること（見出しは「…（Why/Where/What/How）」または "Why/Where/What/How" のいずれか）
  * 1) Why: 品質影響（型安全性/保守性/セキュリティ等）とコスト影響（トークン/時間/認知負荷等）を明記
@@ -47,7 +47,7 @@ import path from 'node:path';
  * - チェックリスト（- [ ] の形式が1つ以上）
  * - 修正方針（語: 修正/対処/方針/remediation/fix のいずれかを含む）
  * - 本文の最低行数（空行除外）: 60 行以上
- *
+ * 運用ヒント:
  * 推奨運用
  * - 最初にテンプレに沿って各ユニットの context.md を作成（How 内に上記4要素を必ず内包）
  * - まとめて編集後に rubric を1回だけ実行（O(n) 運用）。逐次修正は O(n^2) 寄りになりがち

@@ -48,7 +48,6 @@ export const moduleBoundaries = [
     },
     settings: { jsdoc: { mode: 'typescript' } }
   },
-
   // TS/TSX 向けのモジュール境界
   {
     files: FILES_TS,

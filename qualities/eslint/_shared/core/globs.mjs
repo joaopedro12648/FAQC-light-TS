@@ -20,13 +20,11 @@
  * - ESLint JS 設定やローカルプラグインの files に利用する
  */
 export const FILES_JS = ['**/*.{js,cjs,mjs}'];
-
 /**
  * TS 系ファイルに対する共通グロブ
  * - TypeScript 系ルールや型安全ポリシーの適用範囲に利用する
  */
 export const FILES_TS = ['**/*.{ts,tsx,mts,cts}'];
-
 /**
  * JS/TS を横断して適用するルール向けの統合グロブ
  * - コメント/ドキュメント/複雑度など言語非依存の規律で利用する

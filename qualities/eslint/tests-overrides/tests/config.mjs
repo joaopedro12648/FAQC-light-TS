@@ -21,7 +21,7 @@
  */
 export const testsOverrides = [
   {
-    files: ['tests/**/*.ts', 'tests/**/*.mts', 'tests/**/*.cts'],
+    files: ['tests/**/*/*.ts', 'tests/**/*/*.mts', 'tests/**/*/*.cts'],
     rules: {
       'max-lines-per-function': ['error', { max: 120, skipComments: true, skipBlankLines: true }]
     }

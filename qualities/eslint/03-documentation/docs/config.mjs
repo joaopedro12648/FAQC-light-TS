@@ -97,7 +97,8 @@ export const documentation = [
     rules: {
       'blockfmt/block-comment-formatting': 'error',
       'blockfmt/no-empty-comment': 'error',
-      'blockfmt/prefer-single-line-block-comment': 'error'
+      'blockfmt/prefer-single-line-block-comment': 'error',
+      'blockfmt/no-blank-lines-in-block-comment': 'error'
     }
   },
   // 制御構造でのコメントを検査する（ja 系では非ASCIIを要求する）
@@ -244,7 +245,7 @@ export const documentation = [
   },
   // JS ローカルプラグインに Options typedef を要求（meta.schema.properties を包含）
   {
-    files: ['qualities/eslint/plugins/**/*.js', 'qualities/eslint/plugins/**/*.mjs'],
+    files: ['qualities/eslint/plugins/**/*.js', 'qualities/eslint/plugins/**/*/*.mjs'],
     plugins: { typedef: typedefPlugin },
     rules: {
       'typedef/require-options-typedef': ['error', { generalJsMode: 'off' }]

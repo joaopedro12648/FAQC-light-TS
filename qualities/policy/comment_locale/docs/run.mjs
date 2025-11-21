@@ -414,7 +414,6 @@ function analyzeFileForViolations(fp, strictness) {
   const jsdocBlocks = blocks.filter((b) => b.raw.startsWith('/**'));
   // JSDoc ブロックが 1 つも無いファイルはロケール検査の対象外としてスキップする
   if (jsdocBlocks.length === 0) return [];
-
   const out = [];
   // 抽出した各 JSDoc ブロックについてロケール違反の有無を判定し、違反行を結果リストに集約する
   for (const b of jsdocBlocks) {
