@@ -15,6 +15,8 @@
  * @snd vibecoding/var/SPEC-and-DESIGN/202511/20251113/SnD-20251113-eslint-if-branch-similarity.md
  */
 
+import { computeLevenshteinSimilarity } from './common.js';
+
 /**
  * 制御構造コメントルールの挙動を制御するオプション型定義。
  * @typedef {Object} BranchCommentOptions
@@ -313,6 +315,272 @@ function hasTrailingSectionComment(src, statement) {
 }
 
 /**
+ * ブロック節先頭の説明コメント本文を抽出する。
+ * @param {import('eslint').SourceCode} src ソースコード
+ * @param {any} block BlockStatement ノード
+ * @returns {string} コメント本文（見つからなければ空文字）
+ */
+function getBlockHeadCommentText(src, block) {
+  const first = (Array.isArray(block?.body) && block.body[0]) || null;
+  const c = first ? getLastMeaningfulComment(src, first) : null;
+  return typeof c?.value === 'string' ? c.value : '';
+}
+
+/**
+ * 単一ステートメント同行の trailing 説明コメント本文を抽出する。
+ * @param {import('eslint').SourceCode} src ソースコード
+ * @param {any} statement 対象ステートメント
+ * @returns {string} コメント本文（見つからなければ空文字）
+ */
+function getTrailingSameLineCommentText(src, statement) {
+  const endLine = statement?.loc?.end?.line;
+  const after = src.getCommentsAfter(statement) || [];
+  const found = after.find(
+    (c) => c.loc && c.loc.start && c.loc.start.line === endLine && !isDirectiveComment(c),
+  );
+  return typeof found?.value === 'string' ? found.value : '';
+}
+
+/**
+ * then/else/catch/finally 節のコメント本文を抽出する（共通ユーティリティ）。
+ * - ブロック節: 先頭文の直前コメント
+ * - 単文節: 同一行の trailing コメント
+ * @param {import('eslint').SourceCode} src ソースコード
+ * @param {any} branch 対象ブランチノード
+ * @returns {string} コメント本文（見つからなければ空文字）
+ */
+function getSectionTextGlobal(src, branch) {
+  // 節が存在しない場合は比較対象が無いため空を返す
+  if (!branch) return '';
+  // ブロック節: 先頭ステートメント直前の説明コメントを採用する
+  if (branch.type === 'BlockStatement') {
+    return getBlockHeadCommentText(src, branch);
+  }
+  // 単文節: 同一行の trailing コメントを採用する（ディレクティブ除外）
+
+  return getTrailingSameLineCommentText(src, branch);
+}
+
+/**
+ * else-if 連鎖の else 側ブランチを無視するかどうかを判定する（共通ユーティリティ）。
+ * @param {any} node 対象ノード
+ * @param {string} kw 対象キーワード種別
+ * @param {boolean} enabled else-if 免除オプションが有効かどうか
+ * @returns {boolean} 無視すべきブランチであれば true
+ */
+function isIgnoredElseIfBranchGlobal(node, kw, enabled) {
+  // 免除方針の理由: else-if 連鎖の可読性確保と冗長な重複説明の回避を優先する
+  if (kw !== 'if' || !enabled) return false;
+  // 親情報が無い場合は誤判定リスクを避けるため免除しない
+  if (!node || !node.parent) return false;
+  // 親が IfStatement かつ自身が alternate であれば else-if 連鎖の一部
+  return node.parent.type === 'IfStatement' && node.parent.alternate === node;
+}
+
+/**
+ * 直前コメントの存在とパターン適合を検査する関数を生成する（ファクトリ）。
+ * @param {import('eslint').SourceCode} src ソースコード
+ * @param {import('eslint').Rule.RuleContext} context ルールコンテキスト
+ * @param {boolean} allowBlank 空行許容
+ * @param {RegExp|null} re パターン
+ * @param {{requireTagPattern?:string}} options オプション（タグパターンなど）
+ * @returns {(node:any, kw:string)=>string|null} preview 文字列 or null
+ */
+function makeRunCommentAndPatternChecks(src, context, allowBlank, re, options) {
+  return (node, kw) => {
+    // 目的: 規約に従った説明コメントの存在とタグ基準適合を保証する
+    const { ok, last } = hasRequiredPreviousComment(src, node, allowBlank);
+    const preview = node && node.loc && node.loc.start ? getLinePreview(src, node.loc.start.line) : '';
+
+    // 説明コメントが無い場合は、その行の意図が不明確となるため即報告する
+    if (!ok) {
+      context.report({ node, messageId: 'missingComment', data: { kw, preview } });
+      return null;
+    }
+
+    // ロケールやタグ基準への適合性を確認し、逸脱時は指摘する
+    const text = typeof last.value === 'string' ? last.value : null;
+
+    // コメント本文が requireTagPattern に適合しない場合は tagMismatch を報告する
+    if (!matchesPattern(text, re)) {
+      context.report({
+        node,
+        messageId: 'tagMismatch',
+        data: { kw, pat: options.requireTagPattern || '', preview },
+      });
+    }
+
+    return preview;
+  };
+}
+
+/**
+ * if の then/else の類似度検査を行い、違反時に報告する。
+ * @param {import('eslint').SourceCode} src ソースコード
+ * @param {import('eslint').Rule.RuleContext} context ルールコンテキスト
+ * @param {any} node IfStatement ノード
+ * @param {string} prevText if 直前コメント本文
+ * @param {number} threshold 類似度しきい値
+ * @returns {void}
+ */
+function handleIfSimilarity(src, context, node, prevText, threshold) {
+  // then/else の説明が if 直前の説明と過度に類似していないかを検査する
+  const thenText = getSectionTextGlobal(src, node.consequent);
+  // 類似度がしきい値以上なら then の説明が冗長であるため指摘する
+  if (thenText && computeLevenshteinSimilarity(prevText, thenText) >= threshold) {
+    context.report({ node: node.consequent || node, messageId: 'similar_if_then' });
+  }
+
+  // else-if 連鎖の else は別 if として扱われるため通常の else のみ対象とする
+  if (node.alternate && node.alternate.type !== 'IfStatement') {
+    const elseText = getSectionTextGlobal(src, node.alternate);
+    // 類似度がしきい値以上なら else の説明が冗長であるため指摘する
+    if (elseText && computeLevenshteinSimilarity(prevText, elseText) >= threshold) {
+      context.report({ node: node.alternate, messageId: 'similar_if_else' });
+    }
+  }
+}
+
+/**
+ * try の catch/finally の類似度検査を行い、違反時に報告する。
+ * @param {import('eslint').SourceCode} src ソースコード
+ * @param {import('eslint').Rule.RuleContext} context ルールコンテキスト
+ * @param {any} node TryStatement ノード
+ * @param {string} prevText try 直前コメント本文
+ * @param {number} threshold 類似度しきい値
+ * @returns {void}
+ */
+function handleTrySimilarity(src, context, node, prevText, threshold) {
+  // 例外処理の節コメントが try 直前説明に過度に類似していないかを検査する
+  if (node.handler && node.handler.body) {
+    const ct = getSectionTextGlobal(src, node.handler.body);
+    // 類似度がしきい値以上なら catch の説明が冗長であるため指摘する
+    if (ct && computeLevenshteinSimilarity(prevText, ct) >= threshold) {
+      context.report({ node: node.handler, messageId: 'similar_try_catch' });
+    }
+  }
+
+  // finally 節が存在する場合は類似度検査を行い、冗長な説明を検知する
+  if (node.finalizer) {
+    const ft = getSectionTextGlobal(src, node.finalizer);
+    // 類似度がしきい値以上なら finally の説明が冗長であるため指摘する
+    if (ft && computeLevenshteinSimilarity(prevText, ft) >= threshold) {
+      context.report({ node: node.finalizer, messageId: 'similar_try_finally' });
+    }
+  }
+}
+
+/**
+ * ノード種別・対象・else-if免除に基づく処理可否を判定する。
+ * @param {string} kw キーワード種別
+ * @param {Set<string>} targets 対象キーワード集合
+ * @param {any} node 対象ノード
+ * @param {boolean} ignoreElseIf else-if 免除フラグ
+ * @returns {boolean} 処理継続なら true
+ */
+function shouldProcessNode(kw, targets, node, ignoreElseIf) {
+  // 対象外の制御構造は検査不要（誤検出の抑止）
+  if (!targets.has(kw)) return false;
+  // else-if 連鎖の else 側は意図的に免除（冗長報告の抑止）
+  if (isIgnoredElseIfBranchGlobal(node, kw, ignoreElseIf)) return false;
+  return true;
+}
+
+/**
+ * 類似度検査をノード種別ごとに実行する。
+ * @param {import('eslint').SourceCode} src ソースコード
+ * @param {import('eslint').Rule.RuleContext} context ルールコンテキスト
+ * @param {any} node 対象ノード
+ * @param {string} kw キーワード種別（'if' | 'try' 等）
+ * @param {string} prevText 直前コメント本文
+ * @param {number} threshold 類似度しきい値
+ * @returns {void}
+ */
+function runSimilarityByKind(src, context, node, kw, prevText, threshold) {
+  // 分岐の意図: 種別ごとに適切な節を比較対象として選ぶ
+  switch (kw) {
+    case 'if':
+      handleIfSimilarity(src, context, node, prevText, threshold);
+      break;
+    case 'try':
+      handleTrySimilarity(src, context, node, prevText, threshold);
+      break;
+    default:
+      // 他の制御構造は類似度検査の対象外
+      break;
+  }
+}
+
+/**
+ * 節コメント検査をノード種別ごとに実行する。
+ * @param {import('eslint').SourceCode} src ソースコード
+ * @param {import('eslint').Rule.RuleContext} context ルールコンテキスト
+ * @param {any} node 対象ノード
+ * @param {string} kw キーワード種別
+ * @param {boolean|'fullOnly'|undefined} sectionFlag 節コメント検査の有効化設定
+ * @param {Set<string>} sectionLocations 節コメントの許容位置
+ * @returns {void}
+ */
+function runSectionChecksByKind(src, context, node, kw, sectionFlag, sectionLocations) {
+  // if に対しては then/else の節コメント要件を検査する
+  if (kw === 'if') {
+    checkIfSectionComments(src, context, node, sectionFlag, sectionLocations);
+    return;
+  }
+
+  // try に対しては catch/finally の節コメント要件を検査する（オプション有効時）
+  if (kw === 'try' && sectionFlag) {
+    checkTrySectionComments(src, context, node, sectionLocations);
+  }
+}
+
+/**
+ * 単一ノード検査関数を生成する（ファクトリ）。
+ * - 類似度検査と節コメント検査の双方を統合する
+ * @param {object} deps 依存オブジェクト
+ * @param {import('eslint').SourceCode} deps.src ソースコード
+ * @param {import('eslint').Rule.RuleContext} deps.context ルールコンテキスト
+ * @param {Set<string>} deps.targets 対象キーワード集合
+ * @param {boolean} deps.ignoreElseIf else-if 連鎖の else 側を免除するか
+ * @param {boolean|'fullOnly'|undefined} deps.sectionFlag 節コメント検査の有効化設定
+ * @param {Set<string>} deps.sectionLocations 節コメントとして認める位置
+ * @param {number} deps.threshold 類似度しきい値
+ * @param {(node:any, kw:string)=>string|null} deps.runCommentAndPatternChecks 直前コメント/タグ検査関数
+ * @returns {(node:any, kw:string)=>void} 検査関数
+ */
+function makeCheckNode({
+  src,
+  context,
+  targets,
+  ignoreElseIf,
+  sectionFlag,
+  sectionLocations,
+  threshold,
+  runCommentAndPatternChecks,
+}) {
+  return (node, kw) => {
+    // 対象外や免除対象は早期リターン（不要な検査を避ける）
+    if (!shouldProcessNode(kw, targets, node, ignoreElseIf)) return;
+
+    const preview = runCommentAndPatternChecks(node, kw);
+    // 直前コメントが存在せず missingComment を報告した場合は、節コメント検査を行わずに早期リターンする
+    if (preview === null) return;
+
+    // 類似度検査（Levenshtein, similarity >= threshold で違反）
+    const prevCommentNode = getLastMeaningfulComment(src, node);
+    const prevText = typeof prevCommentNode?.value === 'string' ? prevCommentNode.value : '';
+
+    // 類似度検査の実施: if/try のみ対象
+    if (prevText) {
+      runSimilarityByKind(src, context, node, kw, prevText, threshold);
+    }
+
+    // 節コメントオプションが有効な場合は if/try の節コメントも検査する
+    runSectionChecksByKind(src, context, node, kw, sectionFlag, sectionLocations);
+  };
+}
+
+/**
  * if 文の then/else 節に対する節コメント要件を検査する。
  * @param {import('eslint').SourceCode} src ソースコード
  * @param {import('eslint').Rule.RuleContext} context ルールコンテキスト
@@ -543,78 +811,28 @@ export const ruleRequireCommentsOnControlStructures = {
         ? options.sectionCommentLocations
         : ['before-if', 'block-head', 'trailing'];
     const sectionLocations = new Set(sectionLocationsRaw);
+    const threshold =
+      typeof options.similarityThreshold === 'number'
+        ? Math.min(1, Math.max(0.6, options.similarityThreshold))
+        : 0.75;
+    const runCommentAndPatternChecks = makeRunCommentAndPatternChecks(
+      src,
+      context,
+      allowBlank,
+      re,
+      options,
+    );
 
-    /**
-     * else-if 連鎖の else 側ブランチを無視するかどうかを判定する。
-     * @param {any} node 対象ノード
-     * @param {string} kw 対象キーワード種別
-     * @param {boolean} enabled else-if 免除オプションが有効かどうか
-     * @returns {boolean} 無視すべきブランチであれば true
-     */
-    function isIgnoredElseIfBranch(node, kw, enabled) {
-      // if 以外や無効化時は免除ロジック自体を適用しない
-      if (kw !== 'if' || !enabled) return false;
-      // 親ノード情報が欠落しているケースでは安全側に倒し、免除判定ロジックを適用しない
-      if (!node || !node.parent) return false;
-      // 親が IfStatement かつ自身が alternate であれば else-if 連鎖の一部とみなす
-      return node.parent.type === 'IfStatement' && node.parent.alternate === node;
-    }
-
-    /**
-     * 直前コメントの存在とパターン適合を検査する。
-     * @param {any} node 対象ノード
-     * @param {string} kw 対象キーワード種別
-     * @returns {string|null} プレーンテキストのプレビュー（必須コメントが無い場合は null）
-     */
-    function runCommentAndPatternChecks(node, kw) {
-      const { ok, last } = hasRequiredPreviousComment(src, node, allowBlank);
-      const preview = node && node.loc && node.loc.start ? getLinePreview(src, node.loc.start.line) : '';
-
-      // 必須コメントが存在しない場合は対象キーワードごとに missingComment を報告する
-      if (!ok) {
-        context.report({ node, messageId: 'missingComment', data: { kw, preview } });
-        return null;
-      }
-
-      // 取得した直前コメントの本文がロケールポリシーなどのパターンに適合しているか検査する
-      const text = typeof last.value === 'string' ? last.value : null;
-      // コメント本文が requireTagPattern に適合しない場合は tagMismatch を報告する
-      if (!matchesPattern(text, re)) {
-        context.report({
-          node,
-          messageId: 'tagMismatch',
-          data: { kw, pat: options.requireTagPattern || '', preview },
-        });
-      }
-
-      return preview;
-    }
-
-    /**
-     * 単一ノードに対して直前コメントとパターン適合を検査する。
-     * @param {any} node 対象ノード
-     * @param {string} kw 対象キーワード種別
-     */
-    function checkNode(node, kw) {
-      // 設定で対象外のキーワードはスキップする（無関係な制御構造には干渉しない）
-      if (!targets.has(kw)) return;
-
-      // else-if 連鎖の else 側を免除するオプションが有効な場合は検査をスキップする
-      if (isIgnoredElseIfBranch(node, kw, ignoreElseIf)) return;
-
-      const preview = runCommentAndPatternChecks(node, kw);
-      // 直前コメントが存在せず missingComment を報告した場合は、節コメント検査を行わずに早期リターンする
-      if (preview === null) return;
-
-      // 節コメントオプションが有効な場合は if/try の節コメントも検査する
-      if (kw === 'if') {
-        // if 文に対しては then/else 節コメントの検査ロジックを適用し、節ごとのコメント有無を確認する
-        checkIfSectionComments(src, context, node, sectionFlag, sectionLocations);
-      } else if (kw === 'try' && sectionFlag) {
-        // sectionFlag が有効な場合のみ catch/finally の節コメント検査を適用する
-        checkTrySectionComments(src, context, node, sectionLocations);
-      }
-    }
+    const checkNode = makeCheckNode({
+      src,
+      context,
+      targets,
+      ignoreElseIf,
+      sectionFlag,
+      sectionLocations,
+      threshold,
+      runCommentAndPatternChecks,
+    });
 
     // 既存のユーティリティを用いて対象ノード種別ごとのリスナーを構築する
     return buildListeners(targets, ignoreCatch, (node, kw) => {
