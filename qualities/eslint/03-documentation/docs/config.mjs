@@ -18,6 +18,7 @@ import eslintComments from 'eslint-plugin-eslint-comments';
 import jsdoc from 'eslint-plugin-jsdoc';
 import { FILES_ALL_CODE, FILES_JS } from '../../_shared/core/globs.mjs';
 import { blockCommentFormattingPlugin } from '../../plugins/docs/block-comment-formatting.js';
+import { consecutiveLineCommentsPlugin } from '../../plugins/docs/consecutive-line-comments-similarity.js';
 import { headerPlugin } from '../../plugins/docs/header-bullets-min.js';
 import { controlStructuresPlugin } from '../../plugins/docs/require-comments-on-control-structures.js';
 import { singleFileHeaderPlugin } from '../../plugins/docs/single-file-header.js';
@@ -71,6 +72,19 @@ export const documentation = [
       'jsdoc/require-file-overview': 'error'
     },
     settings: { jsdoc: { mode: 'typescript' } }
+  },
+  // 連続行コメントの類似度検査（リポジトリ全体へ適用）
+  {
+    files: FILES_ALL_CODE,
+    plugins: { cmtSim: consecutiveLineCommentsPlugin },
+    rules: {
+      'cmtSim/consecutive-line-comments-similarity': [
+        'error',
+        {
+          similarityThreshold: 0.75
+        }
+      ]
+    }
   },
 
   // ファイル先頭JSDocの箇条書き（Header Checklist）を最低件数で強制

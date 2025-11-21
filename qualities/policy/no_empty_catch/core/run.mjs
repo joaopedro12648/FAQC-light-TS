@@ -362,8 +362,7 @@ function scanFile(absFile, text, violations) {
     const rawNoComments = stripComments(raw);
     // コメントを除去した後のテキストに意味のあるハンドリング（throw/ロギング等）が含まれているかを先に確認する
     const hasMeaningfulEarly = meaningfulRegex.test(rawNoComments);
-    // 意味のある処理が無く、かつ noop パターンやセミコロンのみで構成されている場合は「実質空の catch」として違反とする
-    // 意味のある処理が無く、かつ noop パターンやセミコロンのみで構成されている場合は「実質空の catch」として違反とする
+    // 意味のある処理が無い場合に、noop/セミコロンのみで構成される catch を「実質空」として扱う
     if (!hasMeaningfulEarly && isTriviallyEmpty(raw)) {
       const line = offsetToLine(b.headerStart);
       violations.push({

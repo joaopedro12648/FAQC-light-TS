@@ -103,9 +103,9 @@ const listAllTsUnderAnySrc = (rootDir: string): string[] => {
       if (IGNORES.has(name)) continue;
       // 一時スクリプト配下は対象外として走査コストを抑える
       if (name === 'scripts' && fs.existsSync(path.join(abs, 'tmp'))) continue;
-      // src 配下の .ts を列挙して収集する
+      // src ディレクトリに到達した場合のみ .ts 列挙を実行する条件
       if (name === 'src') {
-        // src 配下の .ts を列挙して結果へ追加する
+        // src 配下の TypeScript ファイルを再帰列挙して out へ集約する
         for (const file of listAllTsUnder(abs)) out.push(file);
       }
 
