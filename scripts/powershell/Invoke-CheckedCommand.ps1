@@ -3,7 +3,7 @@
   - Executes the given command and arguments as-is (no shell magic).
   - On success (exit=0): prints full STDOUT/STDERR followed by "EXIT_CODE:<n>".
   - On failure (exit!=0): prints a brief summary with command/exit and
-    the first ~1024 chars of STDERR and STDOUT (truncated by default).
+    the first ~4096 chars of STDERR and STDOUT (truncated by default).
     Use -ShowFullOutput to print full outputs on failure.
   - On wrapper failure, prints "WRAPPER_ERROR: <message>" and exits non-zero.
 #>
@@ -20,7 +20,7 @@ $OutputEncoding = $utf8NoBom
 
 $ErrorActionPreference = 'Stop'
 $exitCode = 0
-$MAX_PREVIEW = 1024
+$MAX_PREVIEW = 4096
 
 function Truncate-Preview {
     param(

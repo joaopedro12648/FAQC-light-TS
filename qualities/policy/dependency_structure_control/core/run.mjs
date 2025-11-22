@@ -206,31 +206,15 @@ function materializeConfigFile() {
  * @returns {void}
  */
 function runDepcruise(configPath) {
-  const binCmd = path.join(
-    REPO_ROOT, 'node_modules', '.bin', process.platform === 'win32' ? 'depcruise.cmd' : 'depcruise',
-  );
-  const candidateJs = [
-    path.join(REPO_ROOT, 'node_modules', 'dependency-cruiser', 'bin', 'depcruise.js'),
-    path.join(REPO_ROOT, 'node_modules', 'dependency-cruiser', 'bin', 'dependency-cruise.js'),
-  ];
-  const jsEntrypoint = candidateJs.find((p) => fs.existsSync(p));
-  // tsconfig は固定の qualities/tsconfig/_depcruise を参照し、クリーン環境でも入力 0 件とならないようにする
-  const args = ['.', '--config', configPath, '--ts-config', DEPCRUISE_TSCONFIG_PATH, '--output-type', 'json'];
-
-  // ローカルにインストールされた depcruise を同期実行し、品質ゲート内で依存構造を検査する
-  const result = jsEntrypoint
-    // JS エントリポイントが見つかる場合は node 経由で実行（.cmd 実行の EINVAL を回避）
-    ? spawnSync(process.execPath, [jsEntrypoint, ...args], {
-      cwd: PROJECT_ROOT,
-      shell: false,
-      encoding: 'utf8',
-    })
-    // 見つからない場合は .bin を直接実行（非推奨フォールバック）
-    : spawnSync(binCmd, args, {
-      cwd: PROJECT_ROOT,
-      shell: process.platform === 'win32', // Windows の .cmd 実行に合わせる
-      encoding: 'utf8',
-    });
+  // 事前に materializeConfigFile() が tmp に書き出した設定を参照する npm script を実行する
+  // package.json: "depcruise": "npx --no-install depcruise . --config tmp/dependency_structure_control.depcruise.config.json --ts-config qualities/infra/tsconfig/_depcruise/tsconfig.depcruise.json --output-type json"
+  const isWin = process.platform === 'win32';
+  const npmCmd = isWin ? 'npm.cmd' : 'npm';
+  const result = spawnSync(npmCmd, ['run', '-s', 'depcruise'], {
+    cwd: PROJECT_ROOT,
+    shell: isWin, // Windows 環境では .cmd 実行のため shell:true を使用
+    encoding: 'utf8',
+  });
 
   const stdout = typeof result.stdout === 'string' ? result.stdout : '';
   const stderr = typeof result.stderr === 'string' ? result.stderr : '';
