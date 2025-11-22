@@ -27,7 +27,7 @@ export const testsOverrides = [
     }
   },
   {
-    files: ['tests/vitest.config.*'],
+    files: ['**/vitest.config.*'],
     rules: {
       // 設定ファイルはツール仕様上 default export が必要
       'import/no-default-export': 'off'

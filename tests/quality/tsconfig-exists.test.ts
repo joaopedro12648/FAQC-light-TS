@@ -18,8 +18,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect,test } from 'vitest';
 
-test('qualities/tsconfig/tsconfig/types/tsconfig.json should exist', () => {
-  const p = path.join(process.cwd(), 'qualities', 'tsconfig', 'tsconfig', 'types', 'tsconfig.json');
+test('qualities/infra/tsconfig/types/tsconfig.json should exist', () => {
+  const p = path.join(process.cwd(), 'qualities', 'infra', 'tsconfig', 'types', 'tsconfig.json');
   expect(fs.existsSync(p)).toBe(true);
 });
 

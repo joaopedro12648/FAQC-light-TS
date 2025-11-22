@@ -33,7 +33,7 @@ export const typeSafety = [
     languageOptions: {
       parser: tsparser,
       parserOptions: {
-        project: ['qualities/tsconfig/tsconfig/types/tsconfig.json'],
+        project: ['qualities/infra/tsconfig/types/tsconfig.json'],
         tsconfigRootDir
       },
       ecmaVersion: 'latest',

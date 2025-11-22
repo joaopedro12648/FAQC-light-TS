@@ -29,7 +29,7 @@ const TMP_CONFIG_PATH = path.join(TMP_DIR, 'dependency_structure_control.depcrui
 const TMP_TSCONFIG_PATH = path.join(TMP_DIR, 'dependency_structure_control.depcruise.tsconfig.json');
 // depcruise 用の専用 tsconfig（リポジトリ固定・tmp 非依存）: TS18003 を根本回避するために使用する
 const DEPCRUISE_TSCONFIG_PATH = path.join(
-  PROJECT_ROOT, 'qualities', 'tsconfig', '_depcruise', 'tsconfig.depcruise.json',
+  PROJECT_ROOT, 'qualities', 'infra', 'tsconfig', '_depcruise', 'tsconfig.depcruise.json',
 );
 
 /**
