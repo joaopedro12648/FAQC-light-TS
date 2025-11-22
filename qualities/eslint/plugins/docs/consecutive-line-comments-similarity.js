@@ -15,7 +15,7 @@ import { computeLevenshteinSimilarity } from './common.js';
 /**
  * ルールオプション型。
  * @typedef {Object} ConsecutiveCommentsOptions
- * @property {number} [similarityThreshold] 類似度のしきい値（既定: 0.75、範囲: 0.6〜1.0）
+ * @property {number} [similarityThreshold] 類似度のしきい値（既定: 0.75、範囲: 0.25〜1.0）
  */
 
 /**
@@ -79,7 +79,7 @@ export const ruleConsecutiveLineCommentsSimilarity = {
       {
         type: 'object',
         properties: {
-          similarityThreshold: { type: 'number', minimum: 0.6, maximum: 1.0 },
+          similarityThreshold: { type: 'number', minimum: 0.25, maximum: 1.0 },
         },
         additionalProperties: false,
       },
@@ -94,7 +94,7 @@ export const ruleConsecutiveLineCommentsSimilarity = {
     const options = (context.options && context.options[0]) || {};
     const threshold =
       typeof options.similarityThreshold === 'number'
-        ? Math.min(1, Math.max(0.6, options.similarityThreshold))
+        ? Math.min(1, Math.max(0.25, options.similarityThreshold))
         : 0.75;
 
     // 「意図」: ファイル全体を1度だけ走査して連続コメントペアを抽出

@@ -69,9 +69,10 @@ function listFilesRecursive(dir) {
     let entries;
     // 読み取り不能なディレクトリは局所的にスキップし、全体の検査を継続する
     try {
+      // 子要素の候補を取得し、次の分岐判定に必要な入力を準備する
       entries = fs.readdirSync(d, { withFileTypes: true });
     } catch (e) {
-      // 特定ディレクトリの読み取りに失敗した場合は当該ディレクトリ配下のみを除外し、残りの走査を継続する（対象パスと理由を標準エラーへ記録する）
+      /* 局所的な I/O 失敗は全体を止めず、この経路のみ無視して理由を記録する */
       const msg = e instanceof Error ? e.message : String(e);
       process.stderr.write(
         `[policy:no_empty_catch] warn: skip unreadable directory while walking :: ${path.relative(PROJECT_ROOT, d)} :: ${msg}\n`,
@@ -106,6 +107,8 @@ function enumerateTargetFiles() {
   const all = roots
     .filter((r) => fs.existsSync(r))
     .flatMap((r) => listFilesRecursive(r));
+
+  // tests/** も含めてポリシーを適用する（テストにおける握り潰しも検知対象）
   return all.filter((f) => EXT_RX.test(f));
 }
 

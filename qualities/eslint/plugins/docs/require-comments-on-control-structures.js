@@ -104,16 +104,11 @@ function isDirectiveComment(c) {
  * @returns {any|null} コメント or null
  */
 function getLastMeaningfulComment(src, node) {
-  // 対象ノード直前側に存在するコメント列から最後の意味のあるコメントを取得する
-  // API 存在に応じて三項で配列取得し、無効時は空配列を既定とする意図
-  // 三項活用の前行コメント（緩和適用）を採用し、API 非搭載時も落とさない
-  // API が無い場合は空配列で安全に扱う
+  /* 直前側のコメント列を取得し（API 非搭載時は空配列）、最後の意味あるコメントを返す */
   const arr = typeof src.getCommentsBefore === 'function' ? src.getCommentsBefore(node) : []; // 三項: API存在を確認し直前コメント配列を安全に取得する
-  // 直前側のコメント列を後ろから走査し、最後の意味のあるコメントを特定する
-  // 後方から走査して直前に最も近い説明コメントを一意に選出する
   for (let i = arr.length - 1; i >= 0; i -= 1) {
     const c = arr[i];
-    // ディレクティブ以外の説明的コメントのみを直前コメントとして採用する
+    // ディレクティブ以外の説明的コメントのみ採用
     if (!isDirectiveComment(c)) return c;
   }
 
@@ -301,7 +296,7 @@ function hasTrailingSectionComment(src, statement) {
     if (!c.loc || !c.loc.start) continue;
     // ステートメントと同一行を越えた時点で trailing コメント候補の探索を終了する
     if (c.loc.start.line !== endLine) {
-      // 行が変わった時点で trailing コメント候補は終了とみなす
+      /* 行が変われば探索終了 */
       break;
     }
 
@@ -388,7 +383,7 @@ function isIgnoredElseIfBranchGlobal(node, kw, enabled) {
  */
 function makeRunCommentAndPatternChecks(src, context, allowBlank, re, options) {
   return (node, kw) => {
-    // 目的: 規約に従った説明コメントの存在とタグ基準適合を保証する
+    // 規約に従った説明コメントの存在とタグ基準適合を保証する
     const { ok, last } = hasRequiredPreviousComment(src, node, allowBlank);
     const preview = node && node.loc && node.loc.start ? getLinePreview(src, node.loc.start.line) : '';
 
@@ -738,7 +733,7 @@ export const ruleRequireCommentsOnControlStructures = {
           ignoreCatch: { type: 'boolean' },
           fixMode: { type: 'boolean' },
           treatChainHeadAs: { enum: ['non-dangling', 'dangling'] },
-          similarityThreshold: { type: 'number', minimum: 0.6, maximum: 1.0 },
+          similarityThreshold: { type: 'number', minimum: 0.25, maximum: 1.0 },
           enforceMeta: { type: 'boolean' },
           requireSectionComments: {
             anyOf: [{ type: 'boolean' }, { enum: ['fullOnly'] }],
@@ -813,7 +808,7 @@ export const ruleRequireCommentsOnControlStructures = {
     const sectionLocations = new Set(sectionLocationsRaw);
     const threshold =
       typeof options.similarityThreshold === 'number'
-        ? Math.min(1, Math.max(0.6, options.similarityThreshold))
+        ? Math.min(1, Math.max(0.25, options.similarityThreshold))
         : 0.75;
     const runCommentAndPatternChecks = makeRunCommentAndPatternChecks(
       src,

@@ -30,9 +30,9 @@ export const globFiles = (rootDir: string, patterns: readonly string[]): string[
   const results: string[] = [];
   // 各パターンを順に評価する
   for (const pattern of patterns) {
-    // src 配下の .ts を列挙する
+    // src スコープに限定して走査コストとノイズを抑える
     if (pattern === 'src/**/*/*.ts') {
-      // src 配下専用パターンの処理で走査対象を限定する
+      // ./src 直下の TypeScript を列挙して候補を集約する
       for (const rel of listAllTsUnder(path.join(rootDir, 'src'))) {
         results.push(path.relative(rootDir, rel));
       }

@@ -81,7 +81,7 @@ export const documentation = [
       'cmtSim/consecutive-line-comments-similarity': [
         'error',
         {
-          similarityThreshold: 0.75
+          similarityThreshold: 0.25
         }
       ]
     }
@@ -135,6 +135,7 @@ export const documentation = [
           // SnD-20251118 で導入した節コメントオプションは段階的ロールアウトのため既定では無効化する
           requireSectionComments: false,
           sectionCommentLocations: ['block-head', 'trailing'],
+          similarityThreshold: 0.25,
           // ja 系なら少なくとも1文字の非ASCIIを要求。それ以外は未設定（無効化）が望ましいが、ここでは動的に切替。
           enforceMeta: false,
           requireTagPattern: (() => {
@@ -166,6 +167,7 @@ export const documentation = [
           // フェーズ1適用: fullOnly + block-head
           requireSectionComments: 'fullOnly',
           sectionCommentLocations: ['block-head'],
+          similarityThreshold: 0.25,
           enforceMeta: false,
           requireTagPattern: (() => {
             const envLocale = (process.env.CHECK_LOCALE || '').trim();
@@ -195,6 +197,7 @@ export const documentation = [
           fixMode: false,
           requireSectionComments: 'fullOnly',
           sectionCommentLocations: ['block-head'],
+          similarityThreshold: 0.25,
           enforceMeta: false,
           requireTagPattern: (() => {
             const envLocale = (process.env.CHECK_LOCALE || '').trim();
@@ -223,6 +226,7 @@ export const documentation = [
           fixMode: true,
           requireSectionComments: 'fullOnly',
           sectionCommentLocations: ['block-head'],
+          similarityThreshold: 0.25,
           enforceMeta: false,
           requireTagPattern: (() => {
             const envLocale = (process.env.CHECK_LOCALE || '').trim();

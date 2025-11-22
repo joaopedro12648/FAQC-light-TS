@@ -228,12 +228,11 @@ function main() {
   process.exit(1);
 }
 
-// 検査の最上位例外は明示メッセージで通知し、異常終了を保証する
+// エントリポイントを呼び出して検査を完了させる
 try {
-  // 例外は最上位で拾い、メッセージを簡潔に出力して異常終了とする
   main();
 } catch (e) {
-  // 実行時の想定外例外を通知し、検査不能を明確化する
+  /* 例外の要約を出力し、異常終了コード(2)で終了する */
   const msg = e instanceof Error && typeof e.message === 'string' ? e.message : String(e);
   process.stderr.write(`[policy:no_eslint_disable] fatal: ${msg}\n`);
   process.exit(2);

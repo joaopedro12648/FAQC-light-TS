@@ -477,11 +477,10 @@ function main() {
   reportResult(violations);
 }
 
-// ランナー全体のエントリポイントを保護し、想定外の例外が発生した場合でも原因を明示して終了させる
+// ランナーの最上位で想定外例外を捕捉して終了させる
 try { main(); } catch (e) {
-  /* エントリポイントでの致命的例外は理由を明示して異常終了する */
+  /* 例外内容を要約し、ポリシーの致命として終了する */
   const msg = e instanceof Error && typeof e.message === 'string' ? e.message : String(e);
-  // ランナー自体の致命的な例外はポリシー失敗として扱い、原因メッセージを明示して異常終了する
   process.stderr.write(`[policy:comment_locale] fatal: ${msg}\n`);
   process.exit(2);
 }

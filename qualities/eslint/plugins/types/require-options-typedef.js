@@ -66,10 +66,8 @@ function paramsContainOptions(params, nameRx) {
  * @returns {boolean} options 風パラメータが含まれる場合 true
  */
 function hasOptionsInFunctionDeclaration(node, nameRx) {
-  // パラメータを持たない関数は options 形状検査の対象外とする
-  // 宣言された関数のパラメータ群を調べ、Options 形状を受け取る候補かどうかを判定する
+  // パラメータが無い関数は対象外。候補は params に options 風が含まれる場合のみ。
   if (!node.params || node.params.length === 0) return false;
-  // 宣言型関数のパラメータ群に options 風の引数が含まれているかを確認する
   return paramsContainOptions(node.params, nameRx);
 }
 
@@ -80,16 +78,15 @@ function hasOptionsInFunctionDeclaration(node, nameRx) {
  * @returns {boolean} options 風パラメータが含まれる場合 true
  */
 function hasOptionsInVariableDeclaration(node, nameRx) {
-  // 変数宣言の各要素を確認し、関数式を初期値に持つものを対象とする
+  // 各要素を評価し、初期値が関数式のものだけを対象にする
   for (const decl of node.declarations) {
-    // 初期化されていない、または関数以外を init に持つ宣言は Options 形状とは無関係なため検査対象から外す
+    // options 形状の関数式だけを対象に絞り込む（Arrow/FunctionExpression + params に options 風）
     if (
       decl.init &&
       (decl.init.type === 'ArrowFunctionExpression' ||
         decl.init.type === 'FunctionExpression') &&
       paramsContainOptions(decl.init.params, nameRx)
     ) {
-      // 変数に束縛された関数式のパラメータに options 風の引数が含まれている場合は Options 形状検査の対象とみなす
       return true;
     }
   }

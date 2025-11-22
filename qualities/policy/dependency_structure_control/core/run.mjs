@@ -255,8 +255,7 @@ function runDepcruise(configPath) {
 
     return printOk(stdout);
   } catch {
-    // JSON 以外の出力だった場合は、depcruise の終了コードで最終判定する
-    // 非 0（NG）の場合は depcruise の出力を中継して失敗させる
+    // JSON 以外の出力は depcruise の終了コードで判定（非0ならその出力を中継して失敗）
     handleDepcruiseResult(result, stdout, stderr);
     // ここまで到達した場合は OK とみなす（詳細ダンプは抑制）
     process.stdout.write('[policy:dependency_structure_control] OK: 依存構造制御ポリシー違反は検出されませんでした\n');
@@ -316,11 +315,9 @@ function assertDepcruiseEnvironmentHealthy(result, stdout, stderr) {
     process.exit(2);
   }
 
-  // プロセス起動自体に失敗した場合は致命的エラーとして扱い、depcruise 自体が動作していないことを明示する
+  // プロセス起動自体に失敗した場合は致命（depcruise が動作していない）
   if (result.error) {
-    // depcruise 実行の失敗理由を人間が追跡できる形に整形し、品質ゲートの環境依存エラーとして明示的に報告する
-    // depcruise 実行に失敗した場合は、例外メッセージを整形して標準エラーへ出力し、環境要件の不足を明示する
-    // ここで補足するのは depcruise バイナリの欠如や権限不足など、ポリシー以前に実行環境が満たされていないケース
+    // depcruise 実行失敗の理由を整形し、環境要件の不足を明示する（バイナリ欠如・権限不足など）
     const msg = result.error instanceof Error && typeof result.error.message === 'string'
       ? result.error.message
       : String(result.error);
@@ -365,7 +362,7 @@ function getErrorCountFromReport(report) {
  */
 function printOk(stdout) {
   process.stdout.write('[policy:dependency_structure_control] OK: 依存構造制御ポリシー違反は検出されませんでした\n');
-  // 依存グラフの詳細は標準出力へは出さない（必要なら tmp へ保存する運用へ移行）
+  // 詳細な依存グラフは標準出力へは出さない（必要なら tmp へ保存）
 
   return true;
 }
@@ -411,7 +408,7 @@ function countForbiddenFromModules(modules, vibecodingRe) {
 function hasForbiddenForModule(mod, vibecodingRe) {
   const fromPath = String(mod?.source ?? '');
   const deps = Array.isArray(mod?.dependencies) ? mod.dependencies : [];
-  // 各依存（to）を評価し、禁止条件に合致したら true
+  // 各依存（to）を評価し、禁止条件に合致したら true を返す
   for (const dep of deps) {
     const toPath = String(dep?.resolved ?? '');
     // vibecoding 外から vibecoding/ への依存を検出する条件
@@ -431,8 +428,7 @@ function hasForbiddenForModule(mod, vibecodingRe) {
  * @returns {void}
  */
 function assertNoDepcruiseViolations(result, stdout, stderr) {
-  // depcruise の終了コードに基づき、違反の有無を最終判定する
-  // depcruise が非ゼロ終了コードを返した場合はポリシー違反ありとみなし、depcruise 側の出力をそのまま中継して失敗させる
+  // depcruise の終了コードで最終判定（非0なら出力を中継して失敗扱い）
   if (result.status && result.status !== 0) {
     process.stderr.write('[policy:dependency_structure_control] NG: 依存構造制御ポリシー違反が検出されました（詳細は省略）\n');
     process.exit(1);
@@ -466,9 +462,7 @@ function main() {
 try {
   main();
 } catch (e) {
-  // ランナー全体の想定外例外を 1 箇所に集約し、ポリシー名付きメッセージとして人間が追える形で通知する
-  // ランナー自身の想定外例外をポリシー名付きで報告し、品質ゲートの異常終了として明示する
-  // depcruise 実行前後のいずれのフェーズでも捕捉されなかった例外をここで整形し、原因追跡に必要な最小限のメッセージとして出力する
+  // 想定外例外をポリシー名付きで要約し報告（原因追跡に必要な最小限のメッセージ）
   const msg = e instanceof Error && typeof e.message === 'string' ? e.message : String(e);
   process.stderr.write(`[policy:dependency_structure_control] fatal: 実行時例外が発生しました (${msg})\n`);
   process.exit(2);

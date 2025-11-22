@@ -66,10 +66,14 @@ function listFilesRecursive(dir) {
       const full = path.join(d, e.name);
       const base = path.basename(full);
 
-      // 除外集合に一致する名前は走査対象に含めず、以降の探索から除外する
+      // 除外名は探索対象から外す
       if (e.isDirectory()) {
-        // SoT で定義された除外ディレクトリ名に一致する場合は配下の二重キャスト検査を行わず走査から除外する
-        if (SKIP_DIR_NAMES.has(base)) continue;
+        // 既知の除外名はここで早期に弾き、不要な走査を避ける
+        if (SKIP_DIR_NAMES.has(base)) {
+          // 除外ディレクトリは即座にスキップして探索の広がりを抑制
+          continue;
+        }
+
         stack.push(full);
       } else if (e.isFile()) {
         files.push(full);

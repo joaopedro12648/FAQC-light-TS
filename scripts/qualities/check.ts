@@ -325,10 +325,9 @@ export async function runQualityGate(): Promise<void> {
 
     // lint は選択的に処理（差分限定 lint を優先実行し、処理した場合は次ステップへ）
     if (id === 'lint' && (await handleLintStep(scope))) continue;
-    // test は内製テストの追加入り口を持つ
+    // test は必要に応じて内製テストを追加実行する
     if (id === 'test') {
-
-      // 既定のテスト実行が済んだら内製テストの追加実行要否を判定する
+      // 既定テストが完了した場合は追加フローへ移る
       if (await handleTestStep(cmd, args)) continue;
     }
 
@@ -378,13 +377,14 @@ async function handleLintStep(scope: string): Promise<boolean> {
  */
 async function handleTestStep(cmd: string, args: readonly string[]): Promise<boolean> {
   await runCommand(cmd, args);
-  // 内製テストの追加実行可否を評価して必要なら続けて実行する
+  // 内製テストの追加実行可否を評価し、必要なら続けて実行する
   if (shouldRunInternalTests()) {
-    // vibecoding ディレクトリがある場合のみ内製テストの探索を行う
+    // vibecoding 配下が存在する場合のみ内製テストを追実行して検査を補完する
     if (existsSync('vibecoding')) {
-      // 追加実行の要件: vibecoding/tests/** に1件以上のテストが存在する場合に限る
+      // テスト資産が無い場合は何もしない（余計な起動を避ける）
       if (hasInternalTestFiles()) {
-        // 内製テストを限定構成で追加実行し、利用者向けテストを補完する
+        // vibecoding/** のみを対象にサブセットで補完実行する
+        // 內製テストを限定構成で追加実行して補完する
         process.stdout.write('[test] vibecoding/ 変更あり: 内製テストを追加実行します\n');
         // 一時的な Vitest 設定で include を vibecoding/** に限定して実行
         const tmpDir = path.join(process.cwd(), 'tmp');

@@ -150,9 +150,9 @@ function listAllTsFiles(rootDir) {
     for (const entry of fs.readdirSync(dirAbs, { withFileTypes: true })) {
       const name = entry.name;
       const abs = path.join(dirAbs, name);
-      // 除外ディレクトリ名に一致する場合は再帰探索をスキップする
+      // 除外ディレクトリ名に一致する場合は再帰探索をスキップ
       if (entry.isDirectory()) {
-        // SoT で定義された除外ディレクトリ名に一致する場合は配下の走査自体をスキップし、不要な検査コストを避ける
+        // SoT の除外ディレクトリは配下ごとスキップする
         if (SKIP_DIR_NAMES.has(name)) continue;
         walk(abs);
       } else if (entry.isFile() && TS_EXT_RX.test(name)) {
