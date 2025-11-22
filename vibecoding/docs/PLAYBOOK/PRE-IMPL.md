@@ -37,7 +37,6 @@
 
 ## エージェント指示（必須・自動実行）
 - 実装開始前に、`npm run -s check:pre-impl` を実行する。
-- 実行内容は現行では PRE-COMMON と同一（将来分岐予定）。
 - `exit=0` 時の標準出力（`"<StartAt> <hash>"`）を、対象 SPEC の front matter に `quality_refresh_hash_before_impl` として記録する。
 - 自動コミットは行わない（ユーザーから明示的な許可がある場合を除く）。
 
