@@ -41,6 +41,10 @@ const QUALITIES_DIR = path.join(PROJECT_ROOT, 'qualities');
 const OUTPUT_BASE = path.join(PROJECT_ROOT, 'vibecoding', 'var', 'contexts', 'qualities');
 /** PRE-COMMON の鮮度記録（ISO文字列）ファイルパス */
 const LAST_UPDATED_FILE = path.join(OUTPUT_BASE, 'last_updated');
+/** ローカル状態ディレクトリ（git 無視対象） */
+const LOCALSTATE_DIR = path.join(PROJECT_ROOT, 'vibecoding', 'var', 'localstate');
+/** preflight 通過マーカー */
+const PREFLIGHT_PASSED_FILE = path.join(LOCALSTATE_DIR, 'preflight_passed');
 /** ハッシュ計算用の固定シークレット（安定性目的） */
 const SECRET = 'SAT-light-TS::PRE-COMMON::v1';
 
@@ -184,12 +188,11 @@ function listFilesRecursive(dir: string): string[] {
     // 子エントリを順に評価し、スタック/結果へ反映して探索を継続する
     for (const e of entries) {
       const full = path.join(current, e.name);
-      // ディレクトリは後続探索へ積み、ファイルは結果へ追加する
+      // ディレクトリは再帰走査を継続するため探索キューへ積む
       if (e.isDirectory()) {
-        // サブディレクトリは後続探索のためスタックへ積む
+        // 次段の探索対象としてスタックに追加する
         stack.push(full);
       } else if (e.isFile()) {
-        // 収集対象のファイルを結果集合へ追加する
         files.push(full);
       }
     }
@@ -297,8 +300,7 @@ function computeNeededMappingsByDigest(unitSources: UnitSources[], digests: Unit
           fs.unlinkSync(contextMdPath);
         }
 
-        // 隣接する review がある場合は併せて削除し、レビュー統合の重複や分岐を抑止する
-        // 目的: 重複防止 / 前提: review が存在する場合のみ / 例外: 削除失敗は警告で継続
+        // review が存在する場合は併せて削除し、統合作業の重複や分岐を抑止する（削除失敗は警告で継続）
         if (fs.existsSync(reviewPath)) {
           fs.unlinkSync(reviewPath);
         }
@@ -453,8 +455,7 @@ function diffManifestFiles(
       // 現行の SoT に同一パスが存在しないため、このエントリは「削除」として記録する
       reasons.push(`[REASON] - ${p} (削除された設定ファイルです。この変更内容を context.md の本文に反映してください)`);
     } else {
-      // 以前と現行の内容ハッシュを比較し、差異がある場合のみ「変更」を記録する
-      // 内容ハッシュが異なる場合は変更として扱う条件分岐
+      // 以前とのハッシュ差分がある場合のみ「変更」を記録する
       if (newH !== oldH) {
         reasons.push(`[REASON] ~ ${p} (変更された設定ファイルです。この変更内容を context.md の本文に反映してください)`);
       }
@@ -607,7 +608,6 @@ function checkRubric(): RubricResult {
 
   // 公式ローダが利用可能な場合は、そちらを優先して rubric を実行し、結果が得られた場合はそのまま返す
   if (tsxLoaderArg) {
-    // 公式ローダ経由で rubric を実行し、成功・失敗を含めた結果を収集する
     result = runRubricWithLoader(rubricChecker, tsxLoaderArg);
   }
 
@@ -627,8 +627,6 @@ function checkRubric(): RubricResult {
 function outputAndExit(startAt: string, mappings: Array<{ srcDir: string; destDir: string; reasons?: string[] }>, rubric: RubricResult): void {
   // 再生成の必要も違反も無ければハッシュを出力して成功終了する
   if (mappings.length === 0 && !rubric.hasViolation) {
-
-    // ミラー生成も違反も無い状態のため、開始時刻から導出したハッシュを出力して終了する
     const hash = crypto.createHash('sha256').update(startAt + SECRET).digest('hex');
     process.stdout.write(`${startAt} ${hash}\n`);
     process.exit(0);
@@ -770,7 +768,7 @@ function runGateCommandsWithKata(_pkgJson: unknown): string[] {
   } finally {
     // 一時ファイルを削除してクリーンアップの確実性を高める
     try { fs.unlinkSync(kataPath); } catch (e) {
-      // 一時ファイル削除の失敗は致命ではないため継続するが、クリーンアップ漏れの可能性をログに残す
+      /* 削除失敗は非致命。痕跡が残る可能性のみを警告する */
       const msg = e instanceof Error ? e.message : String(e);
       process.stderr.write(`[pre-common-auto-check] warn: failed to remove kata diagnostic file; continuing :: ${kataPath} :: ${msg}\n`);
     }
@@ -794,9 +792,7 @@ function runGateCommandsWithKata(_pkgJson: unknown): string[] {
  * @param results 出力の蓄積先
  */
 function appendDiagnosticsForStep(d: typeof stepDefs[number], results: string[]): void {
-  // すべての対応ユニットに context.md が存在する場合、診断を抑止
-  // 関連ディレクトリが指定されていればそれを優先、無ければ既定の1件
-  // 関連ディレクトリ指定の有無で対象を決定
+  // すべての対応ユニットに context.md が存在する場合は診断を抑止（related 指定があれば優先）
   const unitDirs = (d.relatedUnitDirs && d.relatedUnitDirs.length > 0) ? d.relatedUnitDirs : [d.configRelDir] /* 関連指定の有無で探索対象を切替 */; // 関連指定があれば優先、無ければ単一dir
   const allContextsExist = unitDirs.every((u) => fs.existsSync(path.join(OUTPUT_BASE, u, 'context.md')));
   // 対象すべてが整っている場合は冗長な診断出力を避けるため早期に戻る
@@ -808,8 +804,8 @@ function appendDiagnosticsForStep(d: typeof stepDefs[number], results: string[])
   }
 
   results.push(`[SAMPLE] exit=${result.status}`);
-  // 標準出力に加え、標準エラーがあれば追記して可視化
-  const out = (result.stdout || '') + (result.stderr ? `\n[stderr]\n${result.stderr}` : '' /* 付加情報なし */); /* 標準エラーの有無で付加情報を構成 */ // stderr があれば併記して可視化
+  // 標準出力に加え、標準エラーがあれば併記して可視化
+  const out = (result.stdout || '') + (result.stderr ? `\n[stderr]\n${result.stderr}` : '' /* 付加情報なし */);
   const capped = formatCap(out, DEFAULT_FORMAT_CAP);
   const cappedLines = capped.split('\n');
   // 各行を整形して空行と本文を区別して蓄積する
@@ -846,8 +842,6 @@ function saveDiagnostics(diagnostics: string[]): void {
   process.stdout.write(`${ascii  }\n`);
   // 保存先が存在する場合は参照パスを追加で案内する
   if (diagOutFile) {
-
-    // 保存先の相対パスをユーザーへ案内する
     process.stdout.write(`(full diagnostics saved: ${normalizePathForOutput(path.relative(PROJECT_ROOT, diagOutFile))})\n`);
   }
 }
@@ -898,16 +892,14 @@ function emitDiagnostics(): void {
 function allTargetContextMdExist(): boolean {
   const units = collectUnitSources();
   const seenUnits = new Set<string>();
-  // 各ユニットごとに context.md の存在を確認して整合性を判断する
-  // 取得済みユニット一覧を順に確認し、var 配下に対応する context.md が存在するかを検査する
+  // 各ユニットごとに var 配下の context.md の存在を確認し整合性を判断する
   for (const { unit } of units) {
-    // 各ユニットは一度だけ確認し、重複チェックによる無駄なファイルアクセスやレポートの揺れを防ぐ
-    // すでに確認済みのユニットは二重判定を避けてスキップする
+    // 重複チェックを避けるため、一度確認したユニットはスキップ
     if (seenUnits.has(unit)) continue;
     seenUnits.add(unit);
     const destDir = path.join(OUTPUT_BASE, unit);
     const destMd = path.join(destDir, 'context.md');
-    // 正規ユニット（core/types/docs）の context.md が欠けていれば不整合とみなす
+    // 正規ユニット（core/types/docs）の context.md が欠けていれば不整合
     if (!fs.existsSync(destMd)) {
       return false;
     }
@@ -1005,16 +997,17 @@ function handleReviewConflicts(
   mappings: Array<{ srcDir: string; destDir: string }>,
   rubricViolation: boolean,
 ): void {
-  // ミラーやルーブリック、重複に未解決要素が残っている場合は review 検査は後段に回す
+  // ミラーやルーブリック未充足を先に解消してからレビュー衝突の検査へ進む
   if (mappings.length !== 0 || rubricViolation) {
+    // 未解決要素があるためレビュー検査はスキップして呼び出し元へ戻る
     return;
   }
 
-  // まずミラーとルーブリックの要件が揃っている場合にのみレビュー有無を確認する
+  // ミラー/ルーブリック要件が揃っている場合のみレビュー有無を確認する
   const reviewPairs = findContextReviewPairs();
-  // レビューが存在する場合は統合作業を促して一時的に Fail とする
+  // レビュー対象の組が存在する場合のみ衝突を表示し異常終了する
   if (reviewPairs.length > 0) {
-    // レビュー統合の必要性を明示し、完了まで一時 Fail とする
+    // 衝突メッセージを出力し、再レビューを促すために終了コード 2 を返す
     emitReviewConflictMessages(reviewPairs);
     process.exit(2);
   }
@@ -1022,6 +1015,21 @@ function handleReviewConflicts(
 
 /** エントリポイント。鮮度チェックを実行して終了する。 */
 function main(): void {
+  // 引数で --pre-impl が指定された場合、preflight パスのマーカーを削除して強制再実行を促す
+  if (process.argv.includes('--pre-impl')) {
+    // PRE-IMPL 実行時は preflight マーカーを初期化し、以降の check に前提検証の実施を強制する
+    try {
+      // ファイルが存在する場合にのみ削除して副作用を限定し、存在しない場合は無処理で通過させる
+      if (fs.existsSync(PREFLIGHT_PASSED_FILE)) {
+        fs.unlinkSync(PREFLIGHT_PASSED_FILE);
+      }
+    } catch (e) {
+      // 削除に失敗しても致命ではないため、次の PRE-IMPL 実行で再試行する前提で警告にとどめる
+      const msg = e instanceof Error ? e.message : String(e);
+      process.stderr.write(`[pre-common-auto-check] warn: failed to remove preflight marker :: ${PREFLIGHT_PASSED_FILE} :: ${msg}\n`);
+    }
+  }
+  
   ensurePreconditions();
   const startAt = writeLastUpdated();
   const unitSources = collectUnitSources();

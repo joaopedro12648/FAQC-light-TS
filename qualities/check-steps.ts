@@ -73,7 +73,7 @@ export const stepDefs: ReadonlyArray<StepDef> = [
   // preflight 用の lint（docs プラグインの厳しいルールを一時的に切り離す専用エントリ）
   { id: 'lint:preflight', command: 'node', args: ['qualities/eslint/run-lint-preflight.mjs'], configRelDir: 'eslint/03-documentation', runMode: 'gate', runScope: 'preflight' },
   // 実ゲート用の lint（1回: ci/check のみで実行する）
-  { id: 'lint',          command: 'npm',  args: ['run', 'lint', '--silent'],             configRelDir: 'eslint', runMode: 'gate', runScope: 'ci' },
+  { id: 'lint',          command: 'node', args: ['qualities/eslint/run-lint-gate.mjs'],  configRelDir: 'eslint', runMode: 'gate', runScope: 'ci' },
   // 診断専用の lint（1回だが、5ユニットへの対応関係を持つ）
   { id: 'lint:diagnostics', command: 'npm', args: ['run', 'lint', '--silent'], configRelDir: 'eslint', relatedUnitDirs: [
     'eslint/01-module-boundaries',

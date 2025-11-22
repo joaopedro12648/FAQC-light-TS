@@ -93,9 +93,13 @@ function listFilesRecursive(dir: string): string[] {
     // 子エントリを順に評価して探索キューまたは結果へ反映する
     for (const e of entries) {
       const full = path.join(cur, e.name);
-      // ディレクトリは後続の走査対象としてスタックへ積む
-      if (e.isDirectory()) stack.push(full); // 下位ディレクトリを後続探索のためキューへ積む
-      else if (e.isFile()) files.push(full); // ファイルを結果へ追加する
+      // 再帰走査を継続するため、ディレクトリのみ次段の探索キューへ積む
+      if (e.isDirectory()) {
+        // ディレクトリをスタックへ追加して下位を後続探索する
+        stack.push(full);
+      } else if (e.isFile()) {
+        files.push(full); // ファイルを結果へ追加する
+      }
     }
   }
 
@@ -174,8 +178,7 @@ function parseIncludeArgs(argv: string[]): string[] {
   return out.map((raw) => {
 
     let p = raw;
-    // qualities/** を var 側のコンテキストパスに自動マップして指定を簡略化する
-    // 便宜置換: qualities/** → vibecoding/var/contexts/qualities/**
+    // qualities/** を var 側へ自動マップ（便宜置換: qualities/** → vibecoding/var/contexts/qualities/**）
     if (/^qualities\//i.test(p)) {
       p = p.replace(/^qualities\//i, 'vibecoding/var/contexts/qualities/');
     }
@@ -362,20 +365,17 @@ function checkHowSection(text: string): string[] {
 
   const howSection = extractSection(text, howPatterns);
   const codeFences = (howSection.match(/```/g) || []).length;
-  // 代表的な成功/失敗例を最低2ブロック含めることを要求する
+  // 成功/失敗例のコードブロック数を確認する
   if (codeFences < MIN_CODE_FENCES) errs.push('How: need >= 2 code blocks (success/failure patterns)');
   
   // NG patterns: 「### LLM典型NG」セクションが存在する場合のみ番号付き項目数を検査する
   const ngSectionMatch = howSection.match(/###\s*(LLM典型NG|典型.*NG|NG.*パターン)/i);
-  // 「典型NG」セクションが存在する場合にのみ詳細計数へ進む
+  // 典型NGセクションの有無で検査ロジックを切り替える
   if (ngSectionMatch) {
-    // セクション範囲を抽出して番号付き項目数を正確にカウントする
-
-    // 典型NGセクションの範囲抽出（見出し位置から開始を確定）
+    // セクション範囲を特定して番号付き項目数を算出する
     const ngSectionStart = howSection.indexOf(ngSectionMatch[0]);
     const nextHeadingMatch = howSection.slice(ngSectionStart + ngSectionMatch[0].length).match(/^###\s/m);
-    // 次見出しが見つかればそこまで、無ければセクション末尾までを終端とする
-    // 次見出しの有無で終端位置を決定
+    // 次見出しがあればそこまで、無ければ末尾までを終端とする
     const ngSectionEnd = nextHeadingMatch 
       ? ngSectionStart + ngSectionMatch[0].length + nextHeadingMatch.index!
       : howSection.length /* 典型NGセクションの終端を決定（次見出し or 末尾） */;
@@ -456,15 +456,14 @@ function validateManifestFields(lines: string[]): string[] {
     errs.push('hash_manifest: missing generatedAt in yaml manifest');
   }
 
-  // unitDigest フィールドの存在と形式を検証する
+  // unitDigest の有無と形式を段階的に検証する
   if (!unitDigestLine) {
-    // unitDigest フィールドが無い場合はエラーとする
+    // 欠落時は不足を明示して修正対象を特定しやすくする
     errs.push('hash_manifest: missing unitDigest in yaml manifest');
   } else {
-    // unitDigest が hex 文字列形式であることを確認する
+    // 存在時は形式を検査し、hex 文字列以外を検出する
     const digestMatch = unitDigestLine.match(/unitDigest:\s*"?([0-9a-f]{32,})"?\s*$/i);
-
-    // unitDigest の形式が不正な場合はエラーとする
+    // 許容形式: 32 文字以上の 16 進文字列のみ（簡易検査）
     if (!digestMatch) {
       errs.push('hash_manifest: invalid unitDigest (expected hex string) in yaml manifest');
     }

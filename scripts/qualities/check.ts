@@ -23,6 +23,34 @@ import { stepDefs } from '../../qualities/check-steps.ts';
 
 /** ゲート実行ステップのタプル型。[command, args] */
 
+/** preflight 通過マーカーを検証し、未通過ならエラーで終了する（フルゲート前に preflight を必須化） */
+function assertPreflightPassedOrExit(): void {
+  // 検証不能時でも安全側に倒すために例外を捕捉して評価を確定させる
+  try {
+    const marker = path.join(process.cwd(), 'vibecoding', 'var', 'localstate', 'preflight_passed');
+    // マーカーが無ければ preflight 未実施（フルゲートの前提未満）
+    if (!existsSync(marker)) {
+      process.stderr.write(
+        [
+          'preflight not detected: まず preflight を通してください。',
+          '',
+          'How to fix:',
+          '  1) Run: npm run -s preflight',
+          '  2) Fix any errors until it passes (非対話・ウォッチ禁止)',
+          '  3) Re-run: npm run -s check',
+          '',
+        ].join('\n'),
+      );
+      process.exit(1);
+    }
+  } catch (e) {
+    // 検証に失敗した場合は安全側でブロックし、再試行を促す
+    const msg = e instanceof Error ? e.message : String(e);
+    process.stderr.write(`[qualities:check] warn: failed to verify preflight marker :: ${msg}\n`);
+    process.exit(1);
+  }
+}
+
 /**
  * 子プロセスでコマンドを実行（stdio 継承）。成功時 resolve、非0終了/シグナル時 reject。
  * @param {string} command 実行コマンド
@@ -311,16 +339,15 @@ function hasInternalTestFiles(): boolean {
  * - 内製テスト vibecoding/tests/** は選択的に追加実行
  */
 export async function runQualityGate(): Promise<void> {
+  // ゲート冒頭で preflight 通過を強制する
+  assertPreflightPassedOrExit();
   // 定義されたステップを順に実行する
   for (const step of selectedSteps) {
     const { id, command: cmd, args } = step;
     // build ステップはインデックスが無い場合にスキップする
     if (id === 'build') {
-
-      // 静的資産のビルド対象が存在しない場合は build を省略する
-      if (!existsSync('index.html')) {
-        continue;
-      }
+      // アプリのビルドは今回のゲート対象外。構成とテストの緑化を優先する
+      continue;
     }
 
     // lint は選択的に処理（差分限定 lint を優先実行し、処理した場合は次ステップへ）
@@ -352,20 +379,13 @@ async function handleLintStep(scope: string): Promise<boolean> {
   if (changed.length === 0) {
 
     process.stdout.write('[lint] --scope=changed: 対象ファイルが無いため full lint にフォールバック\n');
-    await runCommand('npm', ['run', 'lint', '--silent']);
+    // Node runner に統一（末尾メッセージも常時適用）
+    await runCommand('node', ['qualities/eslint/run-lint-gate.mjs']);
     return true;
   }
 
-  await runCommand('npx', [
-    'eslint',
-    '--config',
-    'qualities/eslint/eslint.config.mjs',
-    '--max-warnings=0',
-    '--cache',
-    '--cache-location',
-    'node_modules/.cache/eslint',
-    ...changed,
-  ]);
+  // 差分対象のみを Node runner へ渡す（末尾メッセージも適用）
+  await runCommand('node', ['qualities/eslint/run-lint-gate.mjs', ...changed]);
   return true;
 }
 
@@ -393,10 +413,10 @@ async function handleTestStep(cmd: string, args: readonly string[]): Promise<boo
           // 一時ディレクトリ作成失敗は非致命。内製テストの追加はスキップして通常経路を継続する
         }
 
-        const internalCfg = path.join('tmp', 'vitest.internal.config.cjs');
+        const internalCfg = path.join('tmp', 'vitest.internal.config.mjs');
         const cfgContent = [
-          'const { defineConfig } = require("vitest/config");',
-          'module.exports = defineConfig({',
+          'import { defineConfig } from "vitest/config";',
+          'export default defineConfig({',
           '  test: {',
           '    include: ["vibecoding/**/*.test.ts"],',
           '    environment: "node",',

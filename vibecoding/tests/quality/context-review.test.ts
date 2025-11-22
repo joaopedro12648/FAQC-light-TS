@@ -51,9 +51,9 @@ function findContextMdFiles(dir: string): string[] {
     // 子要素を順に評価して次段処理へ回す
     for (const entry of entries) {
       const fullPath = path.join(current, entry.name);
-      // ディレクトリは再帰探索へ回す（スタックへ積む）
+      // 再帰探索を継続するため、ディレクトリは次段の探索キューに積む
       if (entry.isDirectory()) {
-        // 下位ディレクトリを後続探索に回す
+        // 次段の走査対象としてスタックへ push する
         stack.push(fullPath);
       // context.md を検出した場合は結果へ追加する
       } else if (entry.isFile() && entry.name === 'context.md') {

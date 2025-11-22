@@ -92,8 +92,7 @@ function readAreaEntries(bucketDir: string, domain: string, bucketName: string):
 // このテスト群の目的: qualities ドメイン/バケット構造の第4階層に現れるユニット名が命名規約（^[a-z][a-z0-9_-]*$）に従うことを自動検証し、将来の refactor での逸脱を検知する
 describe('qualities areas structure (4th level directories)', () => {
   it('qualities/{eslint,policy,tsconfig}/<bucket>/<area> のユニット名は命名規約 ^[a-z][a-z0-9_-]*$ に従う', () => {
-    // qualities ベースが存在しない環境（部分チェックなど）ではスキップ扱い
-    // リポジトリ構成によっては qualities 自体が存在しない CI/job もあるため、その場合はスキップする
+    // qualities ベースが無い環境（部分チェックや特定CI）ではスキップ扱い
     if (!fs.existsSync(QUALITIES_BASE)) {
       return;
     }

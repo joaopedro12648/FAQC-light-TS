@@ -15,11 +15,13 @@
  * @snd vibecoding/var/SPEC-and-DESIGN/202511/20251115/SnD-20251115-preflight-scope.md
  */
 import { spawn } from 'node:child_process';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 import { stepDefs } from '../../qualities/check-steps.ts';
 
 /**
- * 子プロセスでコマンドを同期的に実行し、非0/シグナル終了をエラーとして扱う。
- * 目的: 実行結果を明確化し、前提条件の未充足を早期に可視化する。
+ * 子プロセスでコマンドを同期的に実行し、非0/シグナル終了はエラーとして扱う。
+ * 実行結果を明確化し、前提条件の未充足を早期に可視化する。
  * @param command 実行コマンド
  * @param args 引数配列（読み取り専用）
  */
@@ -47,13 +49,25 @@ const preflightSteps = stepDefs
 
 /**
  * preflight 対象のステップを定義順に実行する。
- * 目的: 実装中の逸脱を素早く検知し、手戻りを最小化する。
+ * 実装中の逸脱を素早く検知し、手戻りを最小化する。
  */
 async function runPreflight(): Promise<void> {
   // 実装中の逸脱を早期検知するため、定義順にチェックを直列実行する
   for (const s of preflightSteps) {
     // 依存関係の前提を守るため、順次に実行する
     await runCommand(s.command, s.args);
+  }
+  
+  // すべて成功した場合にローカル状態へ通過マーカーを書き出す
+  try {
+    const dir = path.join(process.cwd(), 'vibecoding', 'var', 'localstate');
+    const marker = path.join(dir, 'preflight_passed');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(marker, `${new Date().toISOString()}\n`, 'utf8');
+  } catch (e) {
+    // マーカーの書き込み失敗は実行結果に影響させず、ログのみで注意喚起する
+    const msg = e instanceof Error ? e.message : String(e);
+    process.stderr.write(`[qualities:preflight] warn: failed to write preflight marker :: ${msg}\n`);
   }
 }
 

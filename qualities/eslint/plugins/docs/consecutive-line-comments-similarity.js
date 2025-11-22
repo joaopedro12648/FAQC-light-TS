@@ -1,6 +1,6 @@
 /**
  * @file 連続行コメントの類似度検査（docs ユニット）
- * - 目的: 連続する行コメントの内容が「似すぎ」ている場合に警告し、単一行化や差別化を促す
+ * - 目的: 連続する行コメントの内容が似すぎている場合に警告し、単一行化や差別化を促す
  * - 対象: .ts/.tsx/.js/.jsx（.d.ts 除外想定、ESLint 経由で与えられる SourceCode.lines を使用）
  * - 手法: Levenshtein 正規化類似度（computeLevenshteinSimilarity）で閾値判定
  * - 出力: 連続コメントペアごとに ESLint エラーを報告
@@ -24,7 +24,7 @@ import { computeLevenshteinSimilarity } from './common.js';
  * @returns {boolean} 行コメントなら true
  */
 function isLineComment(line) {
-  // 「意図」: 先頭空白の後ろに // がある行をコメントとみなす（JSDoc/ブロックは対象外）
+  // 先頭空白の後ろに // がある行をコメントとみなす（JSDoc/ブロックは対象外）
   return /^\s*\/\/(.*)$/.test(line);
 }
 
@@ -34,7 +34,7 @@ function isLineComment(line) {
  * @returns {string} コメント本文
  */
 function extractCommentText(line) {
-  // 「意図」: 類似度の比較対象はコメント本文のみとし、前置記号は除去
+  // 類似度の比較対象はコメント本文のみとし、前置記号は除去する
   return String(line || '').replace(/^\s*\/\/\s?/, '');
 }
 
@@ -46,7 +46,7 @@ function extractCommentText(line) {
 function listConsecutiveCommentPairs(lines) {
   // 連続コメントペアの抽出結果を格納する作業配列
   const out = [];
-  // 「意図」: 1 回の前から後ろへの走査で O(n) でペア抽出
+  // 1 回の前から後ろへの走査で O(n) でペア抽出する
   for (let i = 0; i < lines.length - 1; i += 1) {
     const a = lines[i];
     const b = lines[i + 1];
@@ -97,16 +97,16 @@ export const ruleConsecutiveLineCommentsSimilarity = {
         ? Math.min(1, Math.max(0.25, options.similarityThreshold))
         : 0.75;
 
-    // 「意図」: ファイル全体を1度だけ走査して連続コメントペアを抽出
+    // ファイル全体を 1 度だけ走査して連続コメントペアを抽出する
     const pairs = listConsecutiveCommentPairs(Array.isArray(src.lines) ? src.lines : []);
 
-    // 「意図」: 類似度がしきい値以上（似すぎ）なら、下側の行（b 行）位置で報告
+    // 類似度がしきい値以上であれば、下側の行（b 行）位置で報告する
     for (const p of pairs) {
       // 直近ペアの本文を正規化して類似度を計算
       const s = computeLevenshteinSimilarity(p.aText, p.bText);
       // 類似度がしきい値以上のときのみ報告する
       if (s >= threshold) {
-        // 「意図」: b 行の開始位置に紐づけてわかりやすく通知する
+        // b 行の開始位置に紐づけて通知する
         const line = Math.max(0, p.bIdx);
         const loc = {
           start: { line: line + 1, column: 1 },

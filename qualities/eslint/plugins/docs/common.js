@@ -39,11 +39,11 @@ export function computeLevenshteinSimilarity(a, b) {
   const dp = Array(n + 1)
     .fill(0)
     .map((_, j) => j);
-  // 外側ループの意図: 先頭 i 文字までの編集距離を段階的に更新するため
+  // 外側ループは先頭 i 文字までの編集距離を段階的に更新する
   for (let i = 1; i <= m; i += 1) {
     let prev = dp[0];
     dp[0] = i;
-    // 内側ループの意図: 置換/挿入/削除の最小コストを選択するため
+    // 内側ループは置換・挿入・削除の最小コストを選択する
     for (let j = 1; j <= n; j += 1) {
       const tmp = dp[j];
       const cost = sa[i - 1] === sb[j - 1] ? 0 : 1;

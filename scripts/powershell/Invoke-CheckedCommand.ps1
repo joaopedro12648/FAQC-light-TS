@@ -1,10 +1,9 @@
 <#
-  PowerShell コマンドラッパ
-  - 任意コマンドと引数を受け取り、そのまま実行する
-  - stdout/stderr を統合して逐次出力する（追加整形は行わない）
-  - 最後に EXIT_CODE:<n> 形式で終了コードを1行出力する
-  - ラッパ内部の異常は WRAPPER_ERROR: プレフィックス付きで出力し、非0終了とする
-  - ラッパの入出力（stdout/stderr/EXIT_CODE 行）は UTF-8 (BOM 無し) に固定する
+  PowerShell command wrapper (ASCII-only; UTF-8 without BOM).
+  - Executes the given command and arguments as-is.
+  - Streams stdout/stderr without extra formatting.
+  - Prints a single line "EXIT_CODE:<n>" at the end.
+  - On wrapper failure, prints "WRAPPER_ERROR: <message>" and exits non-zero.
 #>
 param(
     [Parameter(Mandatory = $true, ValueFromRemainingArguments = $true)]
@@ -20,7 +19,7 @@ $ErrorActionPreference = 'Stop'
 $exitCode = 0
 
 if (-not $RawArgs -or $RawArgs.Length -lt 1) {
-    Write-Output "WRAPPER_ERROR: コマンドが指定されていません。"
+    Write-Output "WRAPPER_ERROR: Command not specified."
     Write-Output "EXIT_CODE:1"
     exit 1
 }
@@ -34,7 +33,7 @@ if ($RawArgs.Length -gt 1) {
 try {
     & $Command @CommandArgs 2>&1 | ForEach-Object {
         if ($_ -is [System.Management.Automation.ErrorRecord]) {
-            # PowerShell のエラーも文字列としてそのまま出力する
+            # Print PowerShell errors as strings
             Write-Output $_.ToString()
         }
         else {

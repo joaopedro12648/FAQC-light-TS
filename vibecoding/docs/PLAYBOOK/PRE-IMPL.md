@@ -1,6 +1,6 @@
 # PRE-IMPL チェックリスト
 
-本チェックリストは、実装フェーズ開始前に必ず完了する「必須手順」です。完了結果は実装対象の SPEC-and-DESIGN の front matter に `quality_refresh_hash_before_impl: "<StartAt> <hash>"` を記録してください。値は `npm run -s check:pre-common` の標準出力1行をそのまま貼り付けます（手計算や独自スクリプトによる生成は禁止）。
+本チェックリストは、実装フェーズ開始前に必ず完了する「必須手順」です。完了結果は実装対象の SPEC-and-DESIGN の front matter に `quality_refresh_hash_before_impl: "<StartAt> <hash>"` を記録してください。値は `npm run -s check:pre-impl` の標準出力1行をそのまま貼り付けます（手計算や独自スクリプトによる生成は禁止）。
 
 > 本チェックリストは [vibecoding/docs/PLAYBOOK/PRE-COMMON.md] の共通手順を内包して実施する。差分がある場合は PRE-COMMON を優先し、ここに反映すること。
 
@@ -18,12 +18,12 @@
 - 実装自体も後続モデルにとって広義の「品質コンテキスト」になるため、後続モデルの高精度な挙動を保つために、高品質な実装を行うこと
 
 ### 禁止事項（ハッシュ取得）
-- `check:pre-common` の出力以外からのハッシュ取得（手計算・独自スクリプト）を禁止
-- ハッシュの SoT は `check:pre-common` の標準出力1行のみ
+- `check:pre-impl` の出力以外からのハッシュ取得（手計算・独自スクリプト）を禁止
+- ハッシュの SoT は `check:pre-impl` の標準出力1行のみ
 
 ## Required
-1. PRE-COMMON の実施
-   - [docs/PLAYBOOK/PRE-COMMON.md] の 1)〜5) を完了する（Baseline/StartAt・policy前提・ユニット確定・context生成/更新・検証）。
+1. PRE-IMPL 実行
+   - `npm run -s check:pre-impl` を実行し、`exit=0` を得る（内部で PRE-COMMON と同一内容を実施する現行仕様）。
 2. SPEC への記録
    - 実装対象 SPEC の front matter に `quality_refresh_hash_before_impl` を記録（`exit=0` の標準出力1行 `"<StartAt> <hash>"` をそのまま貼り付け）。
 3. 次工程へ
@@ -36,9 +36,9 @@
 ---
 
 ## エージェント指示（必須・自動実行）
-- 実装開始前に、PRE-COMMON を再実行する。
-- 実行内容は PRE-COMMON の「エージェント指示（必須・自動実行）」に従う（本書では列挙しない）。
-- PRE-COMMON が完了したら（exit=0）、標準出力される1行（`"<StartAt> <hash>"`）を、対象 SPEC の front matter に `quality_refresh_hash_before_impl` として記録する。
+- 実装開始前に、`npm run -s check:pre-impl` を実行する。
+- 実行内容は現行では PRE-COMMON と同一（将来分岐予定）。
+- `exit=0` 時の標準出力（`"<StartAt> <hash>"`）を、対象 SPEC の front matter に `quality_refresh_hash_before_impl` として記録する。
 - 自動コミットは行わない（ユーザーから明示的な許可がある場合を除く）。
 
 ## 記録例（SPEC front matter）
@@ -46,9 +46,9 @@
 quality_refresh_hash_before_impl: "2025-10-30T09:08:11.750Z 8e8c...<sha256>"
 ```
 
-> ヒント（PowerShell）: `$out = npm run -s check:pre-common; if ($LASTEXITCODE -eq 0) { $out } else { Write-Error 'update contexts and rerun' }`
+> ヒント（PowerShell）: `$out = npm run -s check:pre-impl; if ($LASTEXITCODE -eq 0) { $out } else { Write-Error 'update contexts and rerun' }`
 >
-> ヒント（bash）: `out="$(npm run -s check:pre-common)"; ec=$?; [ "$ec" -eq 0 ] && echo "$out" || echo 'update contexts and rerun' 1>&2`
+> ヒント（bash）: `out="$(npm run -s check:pre-impl)"; ec=$?; [ "$ec" -eq 0 ] && echo "$out" || echo 'update contexts and rerun' 1>&2`
 
 > Qualities の要約・スキップ条件・スキーマは重複を避けるため省略し、[docs/PLAYBOOK/PRE-COMMON.md] を参照してください。
 

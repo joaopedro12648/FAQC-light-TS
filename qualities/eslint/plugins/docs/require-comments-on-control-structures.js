@@ -492,7 +492,7 @@ function shouldProcessNode(kw, targets, node, ignoreElseIf) {
  * @returns {void}
  */
 function runSimilarityByKind(src, context, node, kw, prevText, threshold) {
-  // 分岐の意図: 種別ごとに適切な節を比較対象として選ぶ
+  // 種別ごとに適切な節を比較対象として選ぶ
   switch (kw) {
     case 'if':
       handleIfSimilarity(src, context, node, prevText, threshold);

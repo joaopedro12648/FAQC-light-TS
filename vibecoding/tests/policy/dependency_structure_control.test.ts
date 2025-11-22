@@ -24,6 +24,7 @@ describe('policy: dependency_structure_control', () => {
     const tmp = createTmpDir();
     // 一時ディレクトリ上で最小構成を用意し、成功・失敗の両ケースを検証する
     try {
+      // 依存制御ポリシーの NG/OK 両ケースを構築して検証する
       // rules.json をコピーして DSL 設定を再現する
       const srcRules = path.join(
         process.cwd(),
@@ -71,6 +72,7 @@ describe('policy: dependency_structure_control', () => {
         'export const ok = 1;',
       );
 
+      // ポリシーを実行し、期待どおり検査が完了することを確認する
       const ok = await runNode(
         'node',
         [path.join(process.cwd(), 'qualities', 'policy', 'dependency_structure_control', 'core', 'run.mjs')],
@@ -79,7 +81,7 @@ describe('policy: dependency_structure_control', () => {
       expect(ok.code).toBe(0);
       expect(ok.stdout).toMatch(/dependency_structure_control/);
     } finally {
-      // 一時ディレクトリ配下の資材を確実に削除し、他テストへのリークを防止する
+      // テスト用の一時資材を消去し、環境汚染とリークを回避する
       cleanupDir(tmp);
     }
   });

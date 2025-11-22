@@ -5,3 +5,4 @@ scripts/tmp/
 node_modules/
 dist/
 coverage/
+vibecoding/var/localstate/
