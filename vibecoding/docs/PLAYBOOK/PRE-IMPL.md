@@ -13,6 +13,7 @@
 - ゲート実行の SoT: `qualities/**`（実行は `npm run check`）
 - コード生成時の SoT: `vibecoding/var/contexts/qualities/**`
  - 開発時の短縮実行: `npm run preflight`（policy/typecheck/lint のみ。build/test は除外）
+- ユーザーにゲート通過を報告する場合は常に `num run check` を基準とすること。
 
 ### 品質原則
 - 実装自体も後続モデルにとって広義の「品質コンテキスト」になるため、後続モデルの高精度な挙動を保つために、高品質な実装を行うこと

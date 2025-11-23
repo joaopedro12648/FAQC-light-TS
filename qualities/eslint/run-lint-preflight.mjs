@@ -69,22 +69,11 @@ async function runPreflightLint() {
     'eslint',
     '.',
     '--config',
-    'qualities/eslint/eslint.config.mjs',
+    'qualities/eslint/eslint.preflight.config.mjs',
     '--max-warnings=0',
     '--cache',
     '--cache-location',
     'node_modules/.cache/eslint',
-    // preflight では docs プラグインの中でも特にノイズ源となりやすいルール群を無効化する
-    '--rule',
-    'blockfmt/block-comment-formatting:off',
-    '--rule',
-    'control/require-comments-on-control-structures:off',
-    // 実質1行のブロックコメントを複数行にする禁止は preflight では無効化（本番ゲートで検査）
-    '--rule',
-    'blockfmt/prefer-single-line-block-comment:off',
-    // ブロックコメント内部の空行禁止も preflight では無効化し、本番ゲートのみで検査する
-    '--rule',
-    'blockfmt/no-blank-lines-in-block-comment:off',
   ];
 
   await runCommand('npx', args);

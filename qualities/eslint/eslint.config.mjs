@@ -32,6 +32,16 @@ export default [
   ...documentation,
   ...complexityAndMagic,
   ...environmentExceptions,
+
+  // ESLint 設定ファイル群は Flat Config の仕様上、default export を要求する。
+  // 設定ファイルの保守性を優先し、該当ファイルに限って禁止ルールを緩和する。
+  {
+    files: ['qualities/eslint/**/*.mjs'],
+    rules: {
+      'import/no-default-export': 'off',
+      'jsdoc/require-jsdoc': 'off'
+    }
+  },
   // tests 用の最小緩和（関数長のみ）
   ...testsOverrides
 ];
