@@ -26,11 +26,18 @@ const preflightOverlay = [
       'control/require-comments-on-control-structures': 'off',
       'blockfmt/prefer-single-line-block-comment': 'off',
       'blockfmt/no-blank-lines-in-block-comment': 'off',
+      // 本件: インラインコメントのラベル風メタ記述検査は preflight では無効化
+      'inlineLbl/no-label-style-inline-comment': 'off',
       // import 整列系は preflight では検出せず、check 側でのみ適用する
       'import/no-duplicates': 'off',
       'import/newline-after-import': 'off',
       'simple-import-sort/imports': 'off',
       'simple-import-sort/exports': 'off',
+      // 連続空行は preflight ではノイズになりやすいためチェックを外す（check で自動修正）
+      'no-multiple-empty-lines': 'off',
+      // JSDoc 必須系は preflight では無効化（check で整備フェーズとして実施）
+      'jsdoc/require-jsdoc': 'off',
+      'jsdoc/require-file-overview': 'off',
     },
   },
 ];

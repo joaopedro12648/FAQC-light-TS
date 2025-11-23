@@ -78,7 +78,6 @@ export const ruleBlockCommentFormatting = {
 export const rulePreferSingleLineBlockComment = {
   meta: {
     type: 'suggestion',
-    fixable: 'code',
     docs: {
       description:
         '内容が 1 文で済む複数行ブロックコメントを検出し、単一行ブロックコメントまたは行コメントへの統一を促します。',
@@ -144,7 +143,7 @@ export const rulePreferSingleLineBlockComment = {
       Program() {
         // ソースコード全体のコメントを走査し、実質 1 行で済む複数行ブロックコメントのみを検査する
         for (const comment of sourceCode.getAllComments()) {
-          // 意図: 実質 1 行の複数行ブロックのみを対象とする
+          // 実質 1 行の複数行ブロックのみを対象とする
           if (!isEffectivelySingleLine(comment)) continue;
 
           // fixer 候補を抽出（JSDoc タグが含まれるなど安全に直せない場合は unfixable とする）
@@ -157,7 +156,7 @@ export const rulePreferSingleLineBlockComment = {
 
           // 自動修正可能性で経路分岐し、適用対象と保留対象を明確に分離する
           if (isFixable) {
-            // then節: 単一行変換を作成し配列へ追加する
+            // 単一行変換を作成し配列へ追加する
             fixableViolations.push({ loc: comment.loc, range: comment.range });
             const content = trimmedLines[0].replace(/\s+/g, ' ').trim();
             // 元コメントが JSDoc（/** ... */）なら単一行JSDocとして維持し、通常ブロック（/* ... */）はそのままにする
@@ -167,22 +166,21 @@ export const rulePreferSingleLineBlockComment = {
             const replacement = `${open} ${content} */`;
             fixCandidates.push({ range: comment.range, text: replacement });
           } else {
-            // else節: タグ等で変換不可の事例を別配列へ退避する
+            // タグ等で変換不可の事例を別配列へ退避する
             unfixableViolations.push({ loc: comment.loc, range: comment.range });
           }
         }
       },
       'Program:exit'() {
-        // 自動修正可能な箇所があれば、1ファイルにつき1件だけ報告して一括fixを返す
-        if (fixableViolations.length > 0) {
+        // 自動修正可能な箇所数に応じて報告方針を切り替える
+        if (fixableViolations.length === 1) {
+          // 単一件の違反は個別報告として明確に提示する
+          const v = fixableViolations[0];
+          const c = fixCandidates[0];
+          context.report({ loc: v.loc, messageId: 'preferSingleLine' });
+        } else if (fixableViolations.length > 1) {
           const first = fixableViolations[0];
-          context.report({
-            loc: first.loc,
-            messageId: 'preferSingleLineAggregated',
-            fix(fixer) {
-              return fixCandidates.map((c) => fixer.replaceTextRange(c.range, c.text));
-            },
-          });
+          context.report({ loc: first.loc, messageId: 'preferSingleLineAggregated' });
         }
 
         // 自動修正対象外は個別行で報告する
@@ -278,11 +276,11 @@ export const ruleNoBlankLinesInBlockComment = {
 
       let firstContentIndex = -1;
       let lastContentIndex = -1;
-      // 理由: 最初と最後の本文行を特定し、装飾上の空行（外縁）は検査対象から除外する
+      // 最初と最後の本文行を特定し、装飾上の空行（外縁）は検査対象から除外する
       for (let i = 0; i < trimmed.length; i++) {
-        // 理由: 本文と見なせる行のみを最初/最後インデックス計算に使用する
+        // 本文と見なせる行のみを最初/最後インデックス計算に使用する
         if (trimmed[i].length > 0) {
-          // 理由: 最初に見つかった本文行のインデックスを確定する（1回のみ）
+          // 最初に見つかった本文行のインデックスを確定する（1回のみ）
           if (firstContentIndex === -1) {
             firstContentIndex = i;
           }
@@ -291,15 +289,15 @@ export const ruleNoBlankLinesInBlockComment = {
         }
       }
 
-      // 理由: 本文行が存在しない（全て空行）場合は違反ではないため早期終了する
+      // 本文行が存在しない（全て空行）場合は違反ではないため早期終了する
       // 先頭/末尾以外にも本文が無いケースを除外して誤検出を防ぐ
       if (firstContentIndex === -1 || lastContentIndex === -1) {
         return false;
       }
 
-      // 理由: 本文領域の内側に空文字行（空行）が存在すれば違反とみなす
+      // 本文領域の内側に空文字行（空行）が存在すれば違反とみなす
       for (let i = firstContentIndex + 1; i < lastContentIndex; i++) {
-        // 理由: 本文の連続性を壊す空行を検出する
+        // 本文の連続性を壊す空行を検出する
         if (trimmed[i].length === 0) {
           return true;
         }
@@ -312,10 +310,10 @@ export const ruleNoBlankLinesInBlockComment = {
       Program() {
         // ソースコード全体のコメントを走査し、ブロックコメント内部の空行を検査する
         for (const comment of sourceCode.getAllComments()) {
-          // 理由: 対象外のコメント種別（Line）は検査コスト削減のため除外する
+        // 対象外のコメント種別（Line）は検査コスト削減のため除外する
           if (comment.type !== 'Block') continue;
 
-          // 理由: 本文内に空行が無いコメントは違反ではないため報告しない
+          // 本文内に空行が無いコメントは違反ではないため報告しない
           if (!hasBlankLines(comment)) continue;
 
           context.report({

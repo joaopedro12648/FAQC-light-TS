@@ -201,7 +201,7 @@ function listFilesRecursive(dir: string): string[] {
   return files;
 }
 
-// NOTE: mtime ベースの鮮度判定は unitDigest ベースへ移行済みのため、過去実装の getMaxMtimeMs は削除した。
+// mtime ベースの鮮度判定は unitDigest ベースへ移行済みのため、過去実装の getMaxMtimeMs は削除した。
 
 /**
  * ユニットごとの src ラベルと context.md パスを生成する。

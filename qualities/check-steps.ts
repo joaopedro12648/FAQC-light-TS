@@ -69,7 +69,7 @@ export const stepDefs: ReadonlyArray<StepDef> = [
   { id: 'policy:comment_locale', command: 'node', args: ['qualities/policy/comment_locale/docs/run.mjs'], configRelDir: 'policy/comment_locale', runMode: 'both', runScope: 'both' },
   { id: 'policy:dependency_structure_control', command: 'node', args: ['qualities/policy/dependency_structure_control/core/run.mjs'], configRelDir: 'policy/dependency_structure_control', runMode: 'both', runScope: 'both' },
   { id: 'policy:no_empty_catch', command: 'node', args: ['qualities/policy/no_empty_catch/core/run.mjs'], configRelDir: 'policy/no_empty_catch', runMode: 'both', runScope: 'both' },
-  { id: 'typecheck',     command: 'npm',  args: ['run', 'typecheck', '--silent'],        configRelDir: 'tsconfig', runMode: 'both', runScope: 'both' },
+  { id: 'typecheck',     command: 'npm',  args: ['run', 'typecheck', '--silent'],        configRelDir: 'infra/tsconfig', runMode: 'both', runScope: 'both' },
   // preflight 用の lint（docs プラグインの厳しいルールを一時的に切り離す専用エントリ）
   { id: 'lint:preflight', command: 'node', args: ['qualities/eslint/run-lint-preflight.mjs'], configRelDir: 'eslint/03-documentation', runMode: 'gate', runScope: 'preflight' },
   // 実ゲート用の lint（1回: ci/check のみで実行する）

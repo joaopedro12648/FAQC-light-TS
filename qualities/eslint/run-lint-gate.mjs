@@ -34,6 +34,8 @@ const COMMENT_RULE_IDS = new Set([
   'blockfmt/prefer-single-line-block-comment',
   'blockfmt/no-blank-lines-in-block-comment',
   'blockfmt/require-describe-comment',
+  // インラインコメントのラベル風メタ記述抑止
+  'inlineLbl/no-label-style-inline-comment',
   // 連続行コメントの類似抑止（内容の更新を要求）
   'cmtSim/consecutive-line-comments-similarity',
   // 制御構造コメント必須（説明コメントの追記を要求）
@@ -373,7 +375,13 @@ function exitWithResults(results) {
 
 main().catch((e) => {
   const msg = e && typeof e.message === 'string' ? e.message : String(e);
+  const stack = e && typeof e.stack === 'string' ? e.stack : '';
   process.stderr.write(`[lint-gate] failed: ${msg}\n`);
+  // 例外原因を追跡しやすくするために、スタックが存在するときだけ追加出力する
+  if (stack) {
+    process.stderr.write(`${stack}\n`);
+  }
+
   process.exit(1);
 });
 

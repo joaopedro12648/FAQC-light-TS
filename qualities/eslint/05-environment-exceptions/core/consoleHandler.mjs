@@ -33,7 +33,7 @@ function hasConsoleHandlerTag(context) {
   const firstBlock = source
     .getAllComments()
     .find((c) => c.type === 'Block' && typeof c.value === 'string' && c.value.trimStart().startsWith('*'));
-  // 理由: ファイルレベル JSDoc が無い場合はタグも存在し得ないため早期終了
+  // ファイルレベル JSDoc が無い場合はタグも存在し得ないため早期に終了する
   if (!firstBlock) return false;
   const raw = `/*${firstBlock.value}*/`;
   return /@consoleHandler\b/.test(raw);
@@ -45,10 +45,10 @@ function hasConsoleHandlerTag(context) {
  * @returns {'warn'|'error'|null} warn/error のいずれか、該当なしは null
  */
 function getConsoleWarnOrError(node) {
-  // 理由: 複雑度を抑えるため、console.* 呼び出しの判定を段階分割する
+  // 複雑度を抑えるため console.* 呼び出しの判定を段階分割する
   if (!isConsoleMemberCall(node)) return null;
   const prop = node.callee.property;
-  // 理由: 識別子プロパティ以外（計算済み/文字列等）は対象外
+  // 識別子プロパティ以外（計算済み/文字列等）は対象外
   if (!prop || prop.type !== 'Identifier') return null;
   const name = prop.name;
   return name === 'warn' || name === 'error' ? name : null;
@@ -60,12 +60,12 @@ function getConsoleWarnOrError(node) {
  * @returns {boolean} console.* 呼び出しであれば true
  */
 function isConsoleMemberCall(node) {
-  // 理由: CallExpression 以外は対象外
+  // CallExpression 以外は対象外
   if (!node || node.type !== 'CallExpression') return false;
-  // 理由: メンバー呼び出し（console.*）以外は対象外
+  // メンバー呼び出し（console.*）以外は対象外
   if (!node.callee || node.callee.type !== 'MemberExpression') return false;
   const obj = node.callee.object;
-  // 理由: console オブジェクト以外は対象外
+  // console オブジェクト以外は対象外
   return !!obj && obj.type === 'Identifier' && obj.name === 'console';
 }
 
@@ -109,10 +109,10 @@ export const ruleConsoleHandler = {
 
     return {
       Program() {
-        // 理由: タグがあるファイルを一意性チェックの対象として登録する
+        // タグがあるファイルを一意性チェックの対象として登録する
         if (tagged) {
           filesWithConsoleHandlerTag.add(filename);
-          // 理由: 2件目以降の登録時点で一意性違反とみなして報告する
+          // 2件目以降の登録時点で一意性違反とみなして報告する
           if (filesWithConsoleHandlerTag.size > 1) {
             const files = Array.from(filesWithConsoleHandlerTag);
             context.report({
@@ -125,9 +125,9 @@ export const ruleConsoleHandler = {
       },
       CallExpression(node) {
         const method = getConsoleWarnOrError(node);
-        // 理由: warn/error 以外（log/info 等）は本ルールの対象外
+        // warn/error 以外（log/info 等）は本ルールの対象外
         if (!method || !allowed.includes(method)) return;
-        // 理由: タグの無いファイルでの warn/error 使用は禁止（ディレクティブ付与を促す）
+        // タグの無いファイルでの warn/error 使用は禁止（ディレクティブ付与を促す）
         if (!tagged) {
           context.report({
             node,

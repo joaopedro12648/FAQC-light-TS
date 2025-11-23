@@ -64,6 +64,8 @@ async function runPreflight(): Promise<void> {
     const marker = path.join(dir, 'preflight_passed');
     mkdirSync(dir, { recursive: true });
     writeFileSync(marker, `${new Date().toISOString()}\n`, 'utf8');
+    // PRE-IMPL.md に従い、次の進め方の確認を促す最小案内を出力する
+    process.stdout.write('PRE-IMPL.md 記載のルールに従いユーザーに今後の進め方の確認をしてください。\n');
   } catch (e) {
     // マーカーの書き込み失敗は実行結果に影響させず、ログのみで注意喚起する
     const msg = e instanceof Error ? e.message : String(e);

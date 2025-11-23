@@ -32,6 +32,8 @@ import { computeLevenshteinSimilarity } from './common.js';
  * @property {boolean|'fullOnly'} [requireSectionComments] then/else/catch/finally 節に節コメントを必須化するか（既定: false）
  * @property {ReadonlyArray<'before-if'|'block-head'|'trailing'>} [sectionCommentLocations]
  * 節コメントとして認める位置（既定: ['before-if','block-head','trailing']）
+ * @property {boolean} [allowSectionAsPrevious] 直前コメントが無い場合に、節コメント（block-head/trailing）を代替として許可する（既定: false）
+ * @property {boolean} [allowPrepStmts] 直前コメントから if/loop までの間に「準備用の単純文（宣言/代入）のみ」が挟まる場合に許可する（既定: false）
  */
 
 /** ノードタイプとキーワードの対応（固定） */
@@ -382,31 +384,217 @@ function isIgnoredElseIfBranchGlobal(node, kw, enabled) {
  * @returns {(node:any, kw:string)=>string|null} preview 文字列 or null
  */
 function makeRunCommentAndPatternChecks(src, context, allowBlank, re, options) {
-  return (node, kw) => {
-    // 規約に従った説明コメントの存在とタグ基準適合を保証する
+  /**
+   * 許容フラグとプレビューを算出する小ユーティリティ
+   * @param {any} node 対象ノード
+   * @param {string} kw 対象キーワード（'if' 等）
+   * @returns {{ok:boolean, allowBySection:boolean, allowByPrep:boolean, preview:string, last:any}} 計算結果
+   */
+  function computeAllowFlags(node, kw) {
     const { ok, last } = hasRequiredPreviousComment(src, node, allowBlank);
     const preview = node && node.loc && node.loc.start ? getLinePreview(src, node.loc.start.line) : '';
+    const allowBySection =
+      options.allowSectionAsPrevious && hasAcceptableSectionAsFallback(node, kw);
+    const allowByPrep =
+      options.allowPrepStmts && areOnlyPrepStatementsBetweenGlobal(src, node, last);
+    return { ok, allowBySection, allowByPrep, preview, last };
+  }
 
-    // 説明コメントが無い場合は、その行の意図が不明確となるため即報告する
-    if (!ok) {
+  /**
+   * 節コメントの本文をキーワードに応じて抽出する
+   * @param {string} kw 対象キーワード
+   * @param {any} node 対象ノード
+   * @returns {string} 本文（無ければ空文字）
+   */
+  function extractSectionTextForKw(kw, node) {
+    // 節種別ごとに本文抽出先を切り替えて検査対象を一意に決定する
+    switch (kw) {
+      case 'if':
+        return getSectionTextGlobal(src, node && node.consequent);
+      case 'for':
+      case 'while':
+      case 'do':
+        return getSectionTextGlobal(src, node && node.body);
+      default:
+        return '';
+    }
+  }
+
+  /**
+   * 検証対象のテキストを選択する
+   * @param {boolean} ok 直前コメントが適合しているか
+   * @param {any} last 直前の意味あるコメント
+   * @param {boolean} allowBySection 節コメント代替が許可されたか
+   * @param {string} kw 対象キーワード
+   * @param {any} node 対象ノード
+   * @returns {string|null} 検証テキスト（無ければ null）
+   */
+  function selectValidationText(ok, last, allowBySection, kw, node) {
+    // 直前コメントがある場合はそれを採用する
+    if (ok && last && typeof last.value === 'string') return last.value;
+    // 節コメント代替が許可された場合は節から本文を抽出する
+    if (allowBySection) return extractSectionTextForKw(kw, node);
+    return null;
+  }
+
+  /**
+   * タグ基準検証を必要時のみ行う
+   * @param {boolean} shouldValidateText 検証要否
+   * @param {string|null} validationText 検証対象本文
+   * @param {any} node 対象ノード
+   * @param {string} kw 対象キーワード
+   */
+  function validateTagIfNeeded(shouldValidateText, validationText, node, kw) {
+    // ロケール/タグ基準から外れる説明は指摘対象とする
+    if (shouldValidateText && !matchesPattern(validationText, re)) {
+      context.report({
+        node,
+        messageId: 'tagMismatch',
+        data: { kw, pat: options.requireTagPattern || '', preview: getLinePreview(src, node.loc.start.line) },
+      });
+    }
+  }
+
+  /**
+   * then/else/loop body に節コメントが存在し、タグ基準に適合するかを簡易検査する。
+   * - if: then 側（consequent）のみを対象（else は before-if と独立運用）
+   * - ループ: 本体（body）がブロックなら先頭、単文なら同行末尾を検査
+   * @param {any} node 対象ノード
+   * @param {string} kw 種別
+   * @returns {boolean} 許容できる節コメントがあれば true
+   */
+  function hasAcceptableSectionAsFallback(node, kw) {
+    const considerBlockHead = true;
+    const considerTrailing = true;
+
+    /**
+     * 節コメント本文を取得する。
+     * @param {any} branchOrBody 説明コメントを抽出する対象の節/本体
+     * @returns {string} コメント本文（見つからなければ空文字）
+     */
+    function getCommentTextForBranchOrBody(branchOrBody) {
+      // 対象が無い場合は空を返す（節コメントは存在しない）
+      if (!branchOrBody) return '';
+      // ブロック本体なら先頭の説明コメントを取得する
+      if (branchOrBody.type === 'BlockStatement') {
+        return getBlockHeadCommentText(src, branchOrBody);
+      }
+
+      // 単文の trailing コメント本文
+      return getTrailingSameLineCommentText(src, branchOrBody);
+    }
+
+    // if では then 側の節コメントで代替を許容する
+    if (kw === 'if') {
+      const br = node && node.consequent;
+      // then 節が無ければ代替不可
+      if (!br) return false;
+      // 位置の許容は block-head / trailing の双方を認める（本文が空なら不可）
+      const text = getCommentTextForBranchOrBody(br);
+      return text && matchesPattern(text, re);
+    }
+
+    // 反復構造では本体の節コメントで代替を許容する
+    if (kw === 'for' || kw === 'while' || kw === 'do') {
+      const body = node && node.body;
+      const text = getCommentTextForBranchOrBody(body);
+      return text && matchesPattern(text, re);
+    }
+
+    return false;
+  }
+
+  return (node, kw) => {
+    // 規約に従った説明コメントの存在と許容フラグを算出する
+    const { ok, allowBySection, allowByPrep, preview, last } = computeAllowFlags(node, kw);
+
+    // いずれの緩和にも該当しなければ違反
+    // 説明不足な分岐の混入を防ぐため報告して終了する
+    if (!ok && !allowBySection && !allowByPrep) {
       context.report({ node, messageId: 'missingComment', data: { kw, preview } });
       return null;
     }
 
     // ロケールやタグ基準への適合性を確認し、逸脱時は指摘する
-    const text = typeof last.value === 'string' ? last.value : null;
+    const validationText = selectValidationText(ok, last, allowBySection, kw, node);
 
-    // コメント本文が requireTagPattern に適合しない場合は tagMismatch を報告する
-    if (!matchesPattern(text, re)) {
-      context.report({
-        node,
-        messageId: 'tagMismatch',
-        data: { kw, pat: options.requireTagPattern || '', preview },
-      });
-    }
+    // タグ基準の検査は「直前コメントがある」場合、または「節コメント代替で許容した」場合にのみ行う
+    const shouldValidateText = ok || allowBySection;
+    // ロケール基準に合わない説明は早期に検出して修正を促す
+    validateTagIfNeeded(shouldValidateText, validationText, node, kw);
 
     return preview;
   };
+}
+
+/**
+ * コメントと対象ノードの間が「準備用の単純文（宣言/代入）」のみかどうかを検査する（グローバルヘルパ）。
+ * - VariableDeclaration は許可
+ * - ExpressionStatement は AssignmentExpression/UpdateExpression のみ許可（関数呼び出し等は不可）
+ * - 空行は不許可（間を詰める運用）
+ * @param {import('eslint').SourceCode} src ソース
+ * @param {any} node 対象ノード
+ * @param {any} last 最後の意味のあるコメントノード
+ * @returns {boolean} 条件を満たす場合 true
+ */
+function areOnlyPrepStatementsBetweenGlobal(src, node, last) {
+  // 位置情報が取得できない場合は判定不能のため不許可とする
+  if (!node?.loc) return false;
+
+  /**
+   * 直近の「意味のある行コメント」の行番号を上方探索で見つける（最大10行）
+   * @returns {number|0} 見つかれば行番号、無ければ 0
+   */
+  function findNearestMeaningfulLineCommentLine() {
+    const lines = Array.isArray(src.lines) ? src.lines : [];
+    const nodeLine = node.loc.start.line;
+    // 上方へ走査し、ツール系を除く行コメントを探索する
+    // 直近の説明コメントを起点にして区間検査を行うため
+    for (let ln = nodeLine - 1; ln >= Math.max(1, nodeLine - 10); ln -= 1) {
+      const t = (lines[ln - 1] || '').trim();
+      // ツール系ではない説明的な行コメントを検出する
+      if (/^\/\/(?!\s*(?:eslint|istanbul|ts-(?:check|nocheck))\b)/i.test(t)) {
+        return ln;
+      }
+    }
+
+    return 0;
+  }
+
+  /**
+   * コメント終端行と対象ノード行の間が「宣言/単純代入のみ」か検査する
+   * @param {number} startLine 開始行（コメント行）
+   * @param {number} endLine 終了行（ノード開始行）
+   * @returns {boolean} 許容できる場合 true
+   */
+  function isOnlyPrepStatementsBetween(startLine, endLine) {
+    const lines = Array.isArray(src.lines) ? src.lines : [];
+    // 区間内の各行を検査し、空行や複雑な文があれば不許可とする
+    for (let ln = startLine + 1; ln <= endLine - 1; ln += 1) {
+      const raw = lines[ln - 1] || '';
+      const t = raw.trim();
+      // 空行が挟まる場合は不適合
+      if (t.length === 0) return false;
+      // 準備用の単純文として許容するパターン（宣言 or 単純代入）
+      const isDecl = /^\s*(?:const|let|var)\s+/.test(t);
+      const isAssign = /^\s*[A-Za-z_$][\w.$\[\]]*\s*=\s*.+;?$/.test(t);
+      // 許容対象外の文が含まれる場合は不適合とする
+      if (!isDecl && !isAssign) return false;
+    }
+
+    return true;
+  }
+
+  // コメント終端行を決定する（直前コメントノードが無ければテキストから近傍探索）
+  const startLine =
+    last?.loc && last.loc.end && typeof last.loc.end.line === 'number'
+      ? last.loc.end.line
+      : findNearestMeaningfulLineCommentLine();
+  // 説明コメントの起点が見当たらない場合は代替を許容しない
+  if (!startLine) return false;
+
+  const endLine = node.loc.start.line;
+  return isOnlyPrepStatementsBetween(startLine, endLine);
 }
 
 /**
@@ -742,6 +930,8 @@ export const ruleRequireCommentsOnControlStructures = {
             type: 'array',
             items: { enum: ['before-if', 'block-head', 'trailing'] },
           },
+          allowSectionAsPrevious: { type: 'boolean' },
+          allowPrepStmts: { type: 'boolean' },
         },
         additionalProperties: false,
       },

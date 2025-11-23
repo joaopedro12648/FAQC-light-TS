@@ -21,7 +21,7 @@ const AGGREGATED_MESSAGE =
  * @returns {string} 整形済み1行
  */
 function formatLine(filePath, msg) {
-  // 意図: 出力形式を統一して CI ログの可読性を高める
+  // 出力形式を統一して CI ログの可読性を高める
   const sev = msg.severity === 2 ? 'error' : 'warn';
   const loc = `${filePath}:${msg.line ?? 1}:${msg.column ?? 1}`;
   const rule = msg.ruleId ? msg.ruleId : '';
@@ -41,14 +41,14 @@ export default function formatter(results) {
   const lines = [];
   let hasAggregated = false;
 
-  // 意図: ファイルごとに走査して行単位の出力を作成する
+  // ファイルごとに走査して行単位の出力を作成する
   for (const res of results) {
-    // 意図: 各ファイル内のメッセージを順に処理する
+    // 各ファイル内のメッセージを順に処理する
     for (const msg of res.messages) {
       const isTarget = msg.ruleId === TARGET_RULE_ID;
       const isAggregated = isTarget && msg.message === AGGREGATED_MESSAGE;
 
-      // 意図: 既に集約済みの要約は抑制して重複表示を避ける
+      // 既に集約済みの要約は抑制して重複表示を避ける
       if (isAggregated) {
         hasAggregated = true;
         continue;
@@ -58,7 +58,7 @@ export default function formatter(results) {
     }
   }
 
-  // 意図: 集約メッセージが存在する場合は先頭に 1 行だけ追加する
+  // 集約メッセージが存在する場合は先頭に 1 行だけ追加する
   if (hasAggregated) {
     lines.unshift(`${TARGET_RULE_ID}: ${AGGREGATED_MESSAGE}`);
   }

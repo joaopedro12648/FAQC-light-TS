@@ -20,6 +20,7 @@ import { FILES_ALL_CODE, FILES_JS } from '../../_shared/core/globs.mjs';
 import { blockCommentFormattingPlugin } from '../../plugins/docs/block-comment-formatting.js';
 import { consecutiveLineCommentsPlugin } from '../../plugins/docs/consecutive-line-comments-similarity.js';
 import { headerPlugin } from '../../plugins/docs/header-bullets-min.js';
+import { inlineCommentLabelsPlugin } from '../../plugins/docs/inline-comment-labels.js';
 import { controlStructuresPlugin } from '../../plugins/docs/require-comments-on-control-structures.js';
 import { singleFileHeaderPlugin } from '../../plugins/docs/single-file-header.js';
 import { typedefPlugin } from '../../plugins/types/require-options-typedef.js';
@@ -73,6 +74,7 @@ export const documentation = [
     },
     settings: { jsdoc: { mode: 'typescript' } }
   },
+
   // 連続行コメントの類似度検査（リポジトリ全体へ適用）
   {
     files: FILES_ALL_CODE,
@@ -107,12 +109,37 @@ export const documentation = [
   // ブロックコメントの先頭行に本文を置かない（複数行JSDoc対象）
   {
     files: FILES_ALL_CODE,
-    plugins: { blockfmt: blockCommentFormattingPlugin },
+    plugins: { blockfmt: blockCommentFormattingPlugin, inlineLbl: inlineCommentLabelsPlugin },
     rules: {
       'blockfmt/block-comment-formatting': 'error',
       'blockfmt/no-empty-comment': 'error',
       'blockfmt/prefer-single-line-block-comment': 'error',
-      'blockfmt/no-blank-lines-in-block-comment': 'error'
+      'blockfmt/no-blank-lines-in-block-comment': 'error',
+      // インラインコメントのラベル風メタ記述を禁止（check 時のみ有効、preflight では無効化）
+      'inlineLbl/no-label-style-inline-comment': [
+        'error',
+        {
+          // 既定キーワード（必要に応じて config 側で拡張可能）
+          keywords: [
+            '意図',
+            '目的',
+            '理由',
+            '説明',
+            '背景',
+            '前提',
+            '方針',
+            '条件',
+            '注意',
+            '補足',
+            '狙い',
+            'why',
+            'what',
+            'how',
+            'note',
+            'then'
+          ]
+        }
+      ]
     }
   },
   // 制御構造でのコメントを検査する（ja 系では非ASCIIを要求する）
@@ -138,6 +165,10 @@ export const documentation = [
           similarityThreshold: 0.25,
           // ja 系なら少なくとも1文字の非ASCIIを要求。それ以外は未設定（無効化）が望ましいが、ここでは動的に切替。
           enforceMeta: false,
+          // 互換: 直前コメントが無い場合でも、then/ループ本体が「ブロック先頭」または「同行末尾」の節コメントを満たせば許容する
+          allowSectionAsPrevious: true,
+          // 互換: 「コメント + 単純文（宣言/代入のみ）の連続」の後に if/loop が来るパターンを許容する
+          allowPrepStmts: true,
           requireTagPattern: (() => {
             const envLocale = (process.env.CHECK_LOCALE || '').trim();
             const lang = (envLocale || Intl.DateTimeFormat().resolvedOptions().locale || '').split(/[-_]/)[0] || '';
