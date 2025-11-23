@@ -9,6 +9,7 @@ tags: [<tag1>, <tag2>]
 locale: <ja-JP|en-US|...>
 quality_refresh_hash_at_created: "<StartAt> <hash>" # PRE-COMMON (`npm run -s check:pre-common`) が出力する1行をそのまま記録する
 quality_refresh_hash_before_impl: "<StartAt> <hash>" # PRE-IMPL 直前に再実行した PRE-COMMON の出力を記録する
+work_kind: "<feature|maintenance>" # 新規開発・機能追加なら feature、バグ修正や品質改修等は maintenance（未記載は maintenance 扱い）
 context:
   Role: "Architect / Implementer / Reviewer"
   inputFiles: [<関連SPECや既存コード>]

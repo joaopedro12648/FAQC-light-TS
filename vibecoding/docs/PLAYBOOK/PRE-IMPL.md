@@ -207,6 +207,13 @@ rg -n '^\s*(//|/\*|\*)\s*[A-Za-z]{4,}' src
 - 単一コマンドのフル実行で「一発緑」を確認する: `npm run -s check`（静的解析は全体対象）
   - これが成功するまで「完了」扱いにしない（途中でどれかが赤→修正した場合も、最後にもう一度 `npm run -s check` を実行）
 
+#### preflight 成功時の出力ポリシー（作業種別ベース）
+- 判定キー: 対象 SnD の front matter `work_kind: "feature" | "maintenance"`（未記載は maintenance とみなす）。
+- 表示ルール:
+  - work_kind=feature のときのみ、以下の標準文面を案内として出力（可能なら動作確認手順も併記）。
+  - work_kind≠feature、または SnD 不在のときはサイレント（出力なし）。
+- 実装規約（スクリプト側）: `scripts/qualities/preflight.ts` は既定サイレントとし、環境変数 `SND_PATH` が指す SnD を読み `work_kind` が feature の場合に限り標準文面を出力する。`SND_PATH` 未指定や読込失敗時はサイレント。
+
 #### preflight 成功時のガイダンス（エージェント用標準文）
 動作確認ができる状況になりました。早めの動作確認・調整や本実装案の採否の判断を行ってください。続けてドキュメント整備フェーズ（`npm run check` グリーン化）へ進める場合は「ドキュメント整備して」とコメントしてください。
 

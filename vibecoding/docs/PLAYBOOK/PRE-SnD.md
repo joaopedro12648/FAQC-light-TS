@@ -4,6 +4,14 @@
 
 参照: 共通手順は [vibecoding/docs/PLAYBOOK/PRE-COMMON.md] を用いる。
 
+## 実施フロー概略（忘れ物防止）
+- 1) PRE-COMMON 実行: `npm run -s check:pre-common` 成功（exit=0）→ 標準出力 `"<StartAt> <hash>"` を SnD front matter `quality_refresh_hash_at_created` に記録
+- 2) SnD 作成/更新: 「未確定事項」を埋めきる（空にする）。`work_kind: "feature" | "maintenance"` を front matter に記載（未記載は maintenance 扱い）
+- 3) Ready 遷移: 未確定事項=空 かつ ハッシュ記録済みなら、Status を Ready 化（即時）
+- 4) IMPL 承認フレーズ提示（必須・1回だけ）: Ready 遷移直後に、IMPL 開始用 4 行ブロック（要旨/別チャット可/ガイダンス/承認フレーズ）を必ず1回提示（別チャットでも可）
+  - 例: `PHASE=IMPL 承認: SnD=<path>` または `PHASE=IMPL APPROVE: SnD=<path>`
+- 5) PRE-IMPL 実施: 実装移行時は [docs/PLAYBOOK/PRE-IMPL.md] に従い、`quality_refresh_hash_before_impl` を記録
+
 ### 品質原則
 - 作成した SnD 自体も後続モデルにとって広義の「品質コンテキスト」になるため、後続モデルの高精度な挙動を保つために、高品質な SnD を作成すること
 
@@ -35,6 +43,7 @@ SPEC-and-DESIGN ファイル作成にあたっては、次の SoT を明確に�
 
 3. SnD 内の明記ポイント
    - 改変許可範囲（Allowed Change Scope）: 今回の設計/実装で手を入れる範囲を限定
+   - 作業種別（work_kind）: "feature" | "maintenance" を front matter に記載（未記載は maintenance とみなす）
    - ステータス運用/受け入れ条件: Ready 判定・受け入れ基準を具体的に列挙し、受け入れ条件を次の4カテゴリ（UI・UX可/不可、UI・UX以外の可/不可）で書き分けること：
      - 受け入れ条件（UI・UX）: 見た目・操作感・体験に関する「こうであれば受け入れる」条件
      - 受け入れ不可条件（UI・UX）: 体験として NG な状態（常時エラー表示、初期から成功メッセージが出ている等）
