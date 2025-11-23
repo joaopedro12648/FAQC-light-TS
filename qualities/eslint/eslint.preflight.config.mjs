@@ -26,6 +26,11 @@ const preflightOverlay = [
       'control/require-comments-on-control-structures': 'off',
       'blockfmt/prefer-single-line-block-comment': 'off',
       'blockfmt/no-blank-lines-in-block-comment': 'off',
+      // import 整列系は preflight では検出せず、check 側でのみ適用する
+      'import/no-duplicates': 'off',
+      'import/newline-after-import': 'off',
+      'simple-import-sort/imports': 'off',
+      'simple-import-sort/exports': 'off',
     },
   },
 ];
