@@ -78,6 +78,7 @@ export const ruleBlockCommentFormatting = {
 export const rulePreferSingleLineBlockComment = {
   meta: {
     type: 'suggestion',
+    fixable: 'code',
     docs: {
       description:
         '内容が 1 文で済む複数行ブロックコメントを検出し、単一行ブロックコメントまたは行コメントへの統一を促します。',
@@ -86,10 +87,31 @@ export const rulePreferSingleLineBlockComment = {
     messages: {
       preferSingleLine:
         '単一行で表現できるブロックコメントです。単一行ブロックコメント（/* ... */）または行コメント（// ...）へ統一してください。',
+      preferSingleLineAggregated:
+        'コメントフォーマット違反が検出されました。npm run fix:comments:singleline を実行してください。',
+      preferSingleLineUnfixable:
+        '単一行で表現できるブロックコメントですが自動修正対象外です（JSDoc タグ等を含むため）。',
     },
   },
   create(context) {
     const sourceCode = context.getSourceCode();
+
+    /**
+     * 違反（自動修正可能）の収集配列
+     * @type {Array<{loc: import('estree').SourceLocation, range: [number, number]}>}
+     */
+    const fixableViolations = [];
+    /**
+     * 違反（自動修正不可）の収集配列
+     * @type {Array<{loc: import('estree').SourceLocation, range: [number, number]}>}
+     */
+    const unfixableViolations = [];
+    /**
+     * 置換テキスト候補（非重複）
+     * @type {Array<{range: [number, number], text: string}>}
+     */
+    const fixCandidates = [];
+
     /**
      * コメント本文行（空行除外済み）の行数を数える。
      * @param {import('eslint').AST.Token | import('estree').Comment} comment 対象コメント
@@ -122,13 +144,53 @@ export const rulePreferSingleLineBlockComment = {
       Program() {
         // ソースコード全体のコメントを走査し、実質 1 行で済む複数行ブロックコメントのみを検査する
         for (const comment of sourceCode.getAllComments()) {
-          // 判定ロジックに合致したコメントに対してのみ単一行コメント化を推奨する
-          if (isEffectivelySingleLine(comment)) {
-            context.report({
-              loc: comment.loc,
-              messageId: 'preferSingleLine',
-            });
+          // 意図: 実質 1 行の複数行ブロックのみを対象とする
+          if (!isEffectivelySingleLine(comment)) continue;
+
+          // fixer 候補を抽出（JSDoc タグが含まれるなど安全に直せない場合は unfixable とする）
+          const rawLines = String(comment.value).split(/\r?\n/);
+          const trimmedLines = rawLines
+            .map((line) => line.replace(/^\s*\*?\s?/, '').trim())
+            .filter((line) => line.length > 0);
+
+          const isFixable = trimmedLines.length === 1 && !trimmedLines.some((l) => /^@/.test(l));
+
+          // 自動修正可能性で経路分岐し、適用対象と保留対象を明確に分離する
+          if (isFixable) {
+            // then節: 単一行変換を作成し配列へ追加する
+            fixableViolations.push({ loc: comment.loc, range: comment.range });
+            const content = trimmedLines[0].replace(/\s+/g, ' ').trim();
+            // 元コメントが JSDoc（/** ... */）なら単一行JSDocとして維持し、通常ブロック（/* ... */）はそのままにする
+            const originalText = sourceCode.getText(comment);
+            const isJsdoc = /^\s*\/\*\*/.test(originalText);
+            const open = isJsdoc ? '/**' : '/*';
+            const replacement = `${open} ${content} */`;
+            fixCandidates.push({ range: comment.range, text: replacement });
+          } else {
+            // else節: タグ等で変換不可の事例を別配列へ退避する
+            unfixableViolations.push({ loc: comment.loc, range: comment.range });
           }
+        }
+      },
+      'Program:exit'() {
+        // 自動修正可能な箇所があれば、1ファイルにつき1件だけ報告して一括fixを返す
+        if (fixableViolations.length > 0) {
+          const first = fixableViolations[0];
+          context.report({
+            loc: first.loc,
+            messageId: 'preferSingleLineAggregated',
+            fix(fixer) {
+              return fixCandidates.map((c) => fixer.replaceTextRange(c.range, c.text));
+            },
+          });
+        }
+
+        // 自動修正対象外は個別行で報告する
+        for (const v of unfixableViolations) {
+          context.report({
+            loc: v.loc,
+            messageId: 'preferSingleLineUnfixable',
+          });
         }
       },
     };

@@ -274,7 +274,8 @@ function createESLint() {
   return new ESLint({
     // Flat config file
     overrideConfigFile: path.join('qualities', 'eslint', 'eslint.config.mjs'),
-    fix: true,
+    // jsdoc/require-jsdoc の空JSDocスタブ自動付与だけを抑止し、それ以外のfixは許可する
+    fix: (problem) => problem.ruleId !== 'jsdoc/require-jsdoc',
     cache: true,
     cacheLocation: path.join('node_modules', '.cache', 'eslint'),
     cwd: process.cwd(),

@@ -17,7 +17,9 @@
     "verify:policy": "node qualities/policy/anti_mvp/core/run.mjs && node qualities/policy/no_relaxation/core/run.mjs",
     "context:manifest": "tsx vibecoding/scripts/qualities/context-hash-manifest.ts",
     "context:rubric": "tsx vibecoding/scripts/qualities/context-md-rubric.ts",
-    "depcruise": "npx --no-install depcruise . --config tmp/dependency_structure_control.depcruise.config.json --output-type json"
+    "depcruise": "npx --no-install depcruise . --config tmp/dependency_structure_control.depcruise.config.json --output-type json",
+    "fix:comments:singleline": "eslint . --config qualities/eslint/fix-only-prefer-single-line.config.mjs --fix --fix-type suggestion",
+    "lint:comments:singleline": "eslint . --config qualities/eslint/fix-only-prefer-single-line.config.mjs -f qualities/eslint/formatters/blockfmt-aggregate.js"
   },
   "author": "cozyupk",
   "license": "MIT",

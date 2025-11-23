@@ -22,6 +22,15 @@ import { complexityAndMagic } from './04-complexity-and-magic/core/config.mjs';
 import { environmentExceptions } from './05-environment-exceptions/core/config.mjs';
 import { testsOverrides } from './tests-overrides/tests/config.mjs';
 
+// Default export 必須の内部ユーティリティ（formatters 等）は default-export を免除
+// - 対象: qualities/eslint/formatters/*.js
+export const allowDefaultExportForInternalFormatters = [
+  {
+    files: ['qualities/eslint/formatters/*.js'],
+    rules: { 'import/no-default-export': 'off' }
+  }
+];
+
 export default [
   // Ignores（グローバル）
   { ignores: IGNORES },
@@ -43,6 +52,8 @@ export default [
     }
   },
   // tests 用の最小緩和（関数長のみ）
-  ...testsOverrides
+  ...testsOverrides,
+  // 内部フォーマッタ（default export 必須）の例外を追加
+  ...allowDefaultExportForInternalFormatters
 ];
 
