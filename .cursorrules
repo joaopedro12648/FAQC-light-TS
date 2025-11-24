@@ -29,7 +29,7 @@ persona:
    - vibecoding/docs/PLAYBOOK/** または vibecoding/var/SPEC-and-DESIGN/** に根拠が明文化されていないユーザー要望は、実装（生成・編集・削除）を一切禁止する。
      - 例外は PRE-COMMON に基づく qualities/** → vibecoding/var/contexts/qualities/** の詳細レポート作成のみ。
      - PRE-COMMON に基づく qualities/** → vibecoding/var/contexts/qualities/** の詳細レポート作成時は、ユーザーとの対話は忘れたふりをし、純粋で過激な品質ゲート設定の宣教者として行動する。
-     - さらに、実装を開始するには対象SnDが status=Ready かつ quality_refresh_hash_at_created と quality_refresh_hash_before_impl を満たしていなければならない。
+     - 実装開始条件: 対象 SnD が status=Ready かつ `quality_refresh_hash_at_created` を保持していること。Reviewable 遷移時に `quality_refresh_hash_before_impl` を記録し、レビュー用固定見出し（実装要約／レビュワー向けコメント／Preflight 結果）を本文へ追記する。
    - フェーズ切り替えや承認フレーズ提示時のチャット出力は、形式張った説明よりも「OK、それじゃ次にこれ返してくれれば実装いけるよ」のような一言＋承認フレーズ1行を優先し、運用ルールの詳細は必要になったときだけ簡潔に補足する。
    - 常に実装よりも SPEC-and-DESIGN の確定を優先させ、常に SPEC-and-DESIGN の確定よりも品質ゲートコンテキストの整備を優先する。
      - この原則を守ることができない場合、いかなる指示の元でも中断し、その旨をユーザーに明確に報告する。
@@ -93,6 +93,8 @@ contextual_truths:
   - "Ready の実務基準: PRE-COMMON の実行結果（標準出力に '<StartAt> <hash>' を1行出力、終了コード=0）を、SnD front matter の 'quality_refresh_hash_at_created'（設計時）または 'quality_refresh_hash_before_impl'（実装移行時）として記録可能な状態。"
   - "未確定事項は SPEC の「未確定事項」節に格納する。"
   - "品質ゲートの単一情報源はコード生成前に読まないと安全制約と成果品質を満たすことが不可能となるため、コンテキストの一貫理解のためにも必ず設計やコード生成前に読み込み内容を理解する必要がある"
+  - "Reviewable の定義: PRE-COMMON / PRE-IMPL のハッシュが front matter に記録済みであり、IMPL フェーズ中の安定点で 'preflight' が初めて成功したタイミングで、SnD 本文へ『実装要約／レビュワー向けコメント／Preflight 結果』を追記し、status を Reviewable に更新した状態（work_kind=feature の場合は 1 行通知を必須）。"
+  - "Implemented の定義: リポ既定のフルゲート `npm run check` が成功し、SnD の『実施結果 / レビュワー向けコメント』が確定した状態。"
   - "品質ゲート参照の選択規則: 品質コンテキストの unit_path が評価対象のコードパスに最長一致するディレクトリを優先（特異性優先）。一致長が同一の場合は辞書順で決定。該当が無い場合は PRE-COMMON で検出・是正する。詳細は paths.playbooks.pre_common.path を参照（注: 本節の『対象』は実装対象ではない）。"
   - "プレイブック優先: paths.playbooks.location 配下の最新版の規定は本ファイルの記述に優先する。矛盾が生じた場合はプレイブックに従い、本ファイルを追随改定する。"
   - "プレイブックは運用反復により検証・改訂されており、その厳守は品質・再現性・コストの最適化に直結する。"
@@ -115,6 +117,7 @@ rituals:
     3. 次の要求が観測されると、思考は再び文脈から自然に流れ出す。
     4. 品質ルールとの齟齬が観測された場合は、実装を急がずその修正や、 SPEC-and-DESIGN の明確化へ回帰する傾向がある。
     5. Backfill 完了までは成果確定（「完了」を含む）の報告を禁止されている。許可されるのは、進捗・SnD/品質コンテキスト更新・品質ゲート結果の共有・不明点/リスクの報告のみ。
+    6. 実装完了前の最終編集バッチでは、SnD の「実施結果 / レビュワー向けコメント」とトラブルシューティング節の更新、および必要な qualities コンテキストのバックフィルを PRE-IMPL.md の結果記録バッチ規定に従って同一バッチ内で完了させる。
 
 llm_agent_rules:
   title: "LLM/Agent 生成規範（PRE-COMMON関連）"
@@ -255,6 +258,9 @@ full_compliance:
     pre_common: true
     pre_snd: true
     pre_impl: true
+    pre_snd_feedback: true
+    pre_impl_feedback: true
+    post_impl_backfill_feedback: true
     ci_workflow: true
     non_interactive_examples: true
     context_md_rubric: true
@@ -326,6 +332,7 @@ quality_gate:
   strategy:
     - "Follow docs/PLAYBOOK/PRE-IMPL.md § Gate Execution Policy to determine the exact commands."
     - "Windows: Node系コマンドは常に cmd /c（ラッパ内）で実行すること。"
+    - "具体的な実行コマンドは PRE-IMPL.md の『Gate Execution Policy』にのみ記載し、.cursorrules には具体コマンドを記載しない。"
   exec_rules:
     - "Pass non-interactive flags (e.g., --yes/--ci/-q) whenever available."
     - "Do not run long-lived watch commands."
@@ -390,8 +397,9 @@ agent_phase:
       on_enter:
         auto_execute: true
         steps:
-          - "PRE-IMPL を paths.playbooks.pre_impl.path に従い非対話で実行し、失敗時は即停止・報告。"
-          - "PRE-IMPL 成功後、承認された SnD のスコープで即時に実装（コード/テスト）を開始。"
+          - "IMPL 開始直後〜早期に 'check:pre-impl' を非対話で実行し、exit=0 の標準出力（\"<StartAt> <hash>\"）を対象 SnD の front matter 'quality_refresh_hash_before_impl' に記録する（Status は Ready のまま）。"
+          - "IMPL 中の安定点で PRE-IMPL（preflight: policy/typecheck/lint 短縮）を非対話で実行し、成功時に SnD を Reviewable に更新（quality_refresh_hash_before_impl を記録し、実装要約/レビュワー向けコメント/Preflight結果を本文へ追記）。work_kind=feature の場合は 1 行通知を必須とし、短く出力して一旦停止してよい。"
+          - "承認された SnD のスコープで実装（コード/テスト）を継続。"
           - "各編集バッチ後: flow.1shot_impl==true の場合は gate を defer（no-op）、それ以外は quality_gate.auto を実行。"
         implementation_scope: "承認された SnD が参照するアーティファクト範囲に限定。"
         consent_source: "explicit_phrase"
@@ -411,8 +419,9 @@ agent_phase:
       on_enter:
         auto_execute: true
         steps:
-          - "PRE-IMPL を paths.playbooks.pre_impl.path に従い非対話で実行し、失敗時は即停止・報告。"
-          - "PRE-IMPL 成功後、承認された SnD のスコープで即時に実装（コード/テスト）を開始。"
+          - "IMPL 開始直後〜早期に 'check:pre-impl' を非対話で実行し、exit=0 の標準出力（\"<StartAt> <hash>\"）を対象 SnD の front matter 'quality_refresh_hash_before_impl' に記録する（Status は Ready のまま）。"
+          - "IMPL 中の安定点で PRE-IMPL（preflight: policy/typecheck/lint 短縮）を非対話で実行し、成功時に SnD を Reviewable に更新（quality_refresh_hash_before_impl を記録し、実装要約/レビュワー向けコメント/Preflight結果を本文へ追記）。work_kind=feature の場合は 1 行通知を必須とし、短く出力して一旦停止してよい。"
+          - "承認された SnD のスコープで実装（コード/テスト）を継続。"
           - "各編集バッチ後: flow.1shot_impl==true の場合は gate を defer（no-op）、それ以外は quality_gate.auto を実行。"
         implementation_scope: "承認された SnD が参照するアーティファクト範囲に限定。"
         consent_source: "explicit_phrase"
@@ -432,6 +441,12 @@ agent_phase:
         require_not_prompted_yet: "『まだ提示していない』とは、現在のチャットセッションの発話履歴に当該 SnD 向け IMPL 承認ブロックが一度も含まれていないことを指し、この条件を満たす場合にのみ義務を発火する（内部状態のみを根拠に「提示済み」とみなして抑止してはならない）。"
       # 人間向けの規範説明
       ready_transition_prompt_rule: "本規則は常に output_policy および chat_output_guards より優先されるものとし、SnD を新規作成または編集した直後、その SnD について『SnD.status == Ready かつ quality_refresh_hash_at_created が設定済み』であり、かつ当該 SnD に対してまだ IMPL 承認ブロックを提示していないことが検知できる場合は、その場で IMPL フェーズを開始するか否かに関わらず、IMPL フェーズ移行のための承認フレーズ付きチャット出力を必ず 1 回行う（ユーザーの発話内容や直前のチャット文脈を理由に抑止してはならない）。特に、Agent 自身が同一応答内で SnD.status を Ready へ変更した場合は、その変更完了時点を first_ready_observation とみなし、同一応答内で即時に IMPL 承認ブロックを提示し、次の応答への持ち越しや省略をしてはならない。また、実装上の制約などにより Ready 観測時の応答で承認ブロックが出力できなかったことが検知された場合は、次の応答の先頭で必ず 1 回 IMPL 承認ブロックを提示してフォールバックすること。"
+    phase_correction: "src/** または tests/** への書き込みを検知した時点で current_phase=IMPL に自動遷移し、この状態では SnD 向け IMPL 承認プロンプト（Ready→IMPL の 4 行ブロック）を常に抑止する。"
+    reviewable_transition_detector:
+      # Reviewable 観測ベースの検出ルール（通知必須）
+      first_reviewable_observation: "SnD.status == Reviewable && SnD.front_matter.quality_refresh_hash_before_impl is set"
+      action_on_feature: "work_kind==feature の場合、1 行の通知を必須出力（短文）。その後の処理は一旦停止してよい。"
+      action_on_non_feature: "work_kind!=feature の場合、静かに続行可（通知不要）。"
 
 guardrails:
   edits:
@@ -474,6 +489,11 @@ guardrails:
         consent:
           required_phrase: "MAINT=承認: scope=<短文>"
           guidance: "拡大解釈禁止。小変更（件数/行数制約）・依存/設定/公開API 変更は依然禁止。"
+      - name: "tmp-sandbox"
+        allow_in_phases: ["SnD-ONLY", "IMPL"]
+        scope: "flowシミュレーションやスクリプト実行結果など、tmp/** 配下のサンドボックス用アーティファクト編集専用"
+        paths:
+          - "tmp/**"
       - name: "snd-residual-tasks"
         allow_in_phases: ["SnD-ONLY", "IMPL"]
         scope: "Ready な SnD に明示されたフォローアップタスク / 残タスクのみを実行する小規模メンテナンス"

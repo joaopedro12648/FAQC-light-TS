@@ -31,9 +31,11 @@ context:
 ---
 
 ## ステータス運用
-- 状態: Draft → Review → Ready → Implemented
+- 状態: Draft → Ready → Reviewable → Implemented
   - Draft: PRE-COMMON の `<StartAt> <hash>` を SnD の front matter にまだ記録していない設計中の状態（IMPL フェーズへの承認フレーズはここでは出さない）。
   - Ready: PRE-COMMON 成功ハッシュを `quality_refresh_hash_at_created` に記録済みで、「未確定事項」が空の状態。Ready へ遷移した直後に、IMPL フェーズ移行用の承認フレーズ `PHASE=IMPL 承認: SnD=<path>`（または `PHASE=IMPL APPROVE: SnD=<path>`）をチャットやレビューコメントで必ず1回提示する。
+  - Reviewable: IMPL 中の安定点で `npm run -s preflight` が成功した時点のレビュー合図。`npm run -s check:pre-impl` の標準出力1行を `quality_refresh_hash_before_impl` に記録し、本文に次の固定見出しを追記する（必須）: 「実装要約」「レビュワー向けコメント」「Preflight 結果」。
+  - Implemented: `npm run check` を成功させ、SnD の「実施結果 / レビュワー向けコメント」を確定した状態。
 - Ready 判定: 次を全て満たすこと
   - 「未確定事項」が空である
   - 必須セクション（背景/目的/非目標/設計構想/用語・境界/公開インタフェース/型設計/例外方針/受け入れ条件）が充足
@@ -151,6 +153,28 @@ context:
 
 ## 実装時設計ログ（逐次追記）
 実装中に確定した設計や判断を短く逐次で残す。後続の「実施結果」に集約する際の一次記録として用いる。
+
+### Reviewable 更新（preflight 成功時の記録）
+（IMPL 中の安定点で `npm run -s preflight` が成功したら、次を追記する）
+- 実施時刻: <YYYY-MM-DDThh:mm:ssZ>
+- quality_refresh_hash_before_impl: "<StartAt> <hash>"  # `npm run -s check:pre-impl` の出力をそのまま貼付
+
+#### 実装要約（2-4行）
+- 変更対象と要点:
+- 影響範囲（パス/モジュール）:
+- リスク/注意点（あれば）:
+
+#### レビュワー向けコメント（観点の箇条書き）
+- 型安全/複雑度/依存の見直しポイント:
+- 例外・制御構造コメントの確認観点:
+- テスト/確認観点（あれば）:
+
+#### Preflight 結果サマリ（環境・観測）
+- コマンド: npm run -s preflight
+- 結果: 成功/失敗→修正→成功（要約）
+- 補足: 代表的な修正（1-2件）
+
+> 必須（Reviewable 遷移時）: 上記3項目（実装要約／レビュワー向けコメント／Preflight 結果）と `quality_refresh_hash_before_impl` の記録を欠かさないこと。
 
 ### テンプレート（コピーして使用）
 - 記録時刻: <YYYY-MM-DDThh:mm:ssZ>
