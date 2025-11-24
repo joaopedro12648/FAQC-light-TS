@@ -325,6 +325,7 @@ quality_gate:
   scope: all  # run the full gate over the repository; do not restrict to changed files
   strategy:
     - "Follow docs/PLAYBOOK/PRE-IMPL.md § Gate Execution Policy to determine the exact commands."
+    - "Windows: Node系コマンドは常に cmd /c（ラッパ内）で実行すること。"
   exec_rules:
     - "Pass non-interactive flags (e.g., --yes/--ci/-q) whenever available."
     - "Do not run long-lived watch commands."
@@ -670,6 +671,12 @@ commands:
         - Invoke-CheckedCommand.ps1 cmd /c "<your-script-command> --flag value"
       AI Agent は原則として上記パターンに従い、foreach など複雑な PowerShell 構文を直接渡すのではなく、一時スクリプトファイルを作成して本ラッパ経由で実行すること。
       一時スクリプトは同一セッション内での再利用予定がない場合、実行完了後に削除してクリーンアップすること。
+      # --- Windows npm shim (MUST) ---
+      # Windows 環境では npm/npx を ProcessStartInfo から直接起動できない場合がある。
+      # 本ラッパで Node/npm 系コマンドを実行する際は、必ず「cmd /c」を介して呼び出すこと。
+      # FileName=npm の直接起動は禁止（"file not found" 回避）。
+      # OK 例: Invoke-CheckedCommand.ps1 cmd /c "npm run --silent check:pre-common"
+      # NG 例: Invoke-CheckedCommand.ps1 npm run --silent check:pre-common
   delegation_policy:
     description: "品質チェックやビルド・テスト・スクリプト実行は、原則として Agent 自身が scripts/powershell/Invoke-CheckedCommand.ps1 経由で非対話実行することとし、インタラクティブ前提や権限上実行不能な操作だけをユーザーへの手動依頼の対象とする。"
 

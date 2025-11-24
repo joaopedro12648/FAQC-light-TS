@@ -277,7 +277,7 @@ function main() {
     if (rows.length > 0) outLines.push(...rows);
   }
 
-  // 出力条件: 直前ループ終了後、検出件数に応じて空行出力を避けつつ1行以上ある時のみ標準出力へ書き出す
+  // 検出件数が 1 行以上のときだけ標準出力へ書き出す（空行を避ける）
   if (outLines.length > 0) {
     // 出力末尾に改行を付与して次の処理系で読みやすくする
     process.stdout.write(`${outLines.join('\n')}\n`);
@@ -287,11 +287,11 @@ function main() {
   process.exit(0);
 }
 
-// 終了方針: 実行例外があってもコマンド用途を阻害しない運用を保証する
+// 実行例外があってもコマンド用途を阻害しない運用を保証する
 try {
   main();
 } catch (e) {
-  // 例外時は検出処理を中断しつつ、発生した例外要約を標準エラーに出力した上で静かに 0 終了し、呼び出し側のフローを維持する
+  // 例外時は要約を標準エラーに出力した上で静かに 0 終了し、呼び出し側のフローを維持する
   const msg = e instanceof Error ? e.message : String(e);
   process.stderr.write(`[find_consecutive_line_comments] warn: unexpected error; exit 0 to preserve caller flow :: ${msg}\n`);
   process.exit(0);

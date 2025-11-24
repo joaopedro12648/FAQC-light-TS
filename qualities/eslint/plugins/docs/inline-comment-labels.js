@@ -59,7 +59,8 @@ function prevLineIsCommentLine(prevLine) {
 
 /**
  * 「キーワード + 区切り（: または ：）」のラベル風表現を検出する。
- * - 行頭/括弧/空白直後に現れるキーワード + 可変空白 + [:：]
+ * - 文中の任意位置で「キーワード + 可変空白 + [:：]」に一致すれば検出する
+ * - 英単語系キーワード（why/what/how/note/then）は単語途中一致を避けるため前後を英数/アンダースコアでないことを要求
  * @param {string} text コメント本文
  * @param {readonly string[]} keywords キーワード配列
  * @returns {boolean} ラベル風パターンに一致する場合 true
@@ -70,7 +71,8 @@ function hasLabelLikePattern(text, keywords) {
   const union = keywords.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
   // キーワードが空であれば検査不要
   if (!union) return false;
-  const re = new RegExp(String.raw`(?:^|\s|[（(])(?:${union})\s*[：:]`, 'i');
+  // 文中でも一致させる。英単語の途中一致を防ぐため英数/アンダースコアの前後を否定
+  const re = new RegExp(String.raw`(?<![A-Za-z0-9_])(?:${union})(?![A-Za-z0-9_])\s*[：:]`, 'i');
   return re.test(text);
 }
 
@@ -122,6 +124,7 @@ export const ruleNoLabelStyleInlineComment = {
           '注意',
           '補足',
           '狙い',
+          'コメント',
           // 英語
           'why',
           'what',

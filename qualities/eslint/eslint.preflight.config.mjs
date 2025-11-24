@@ -26,6 +26,8 @@ const preflightOverlay = [
       'control/require-comments-on-control-structures': 'off',
       'blockfmt/prefer-single-line-block-comment': 'off',
       'blockfmt/no-blank-lines-in-block-comment': 'off',
+      // 新規: 同行先頭JSDoc→同一行でコード続きの禁止は preflight では無効化（check 時に検査）
+      'inlineJSDoc/no-inline-leading-jsdoc': 'off',
       // 本件: インラインコメントのラベル風メタ記述検査は preflight では無効化
       'inlineLbl/no-label-style-inline-comment': 'off',
       // import 整列系は preflight では検出せず、check 側でのみ適用する

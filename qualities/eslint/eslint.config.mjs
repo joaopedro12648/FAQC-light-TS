@@ -42,6 +42,13 @@ export default [
   ...complexityAndMagic,
   ...environmentExceptions,
 
+  // グローバル: ファイル総行数の上限を設定（コメント/空行は除外）
+  {
+    rules: {
+      'max-lines': ['error', { max: 300, skipComments: true, skipBlankLines: true }]
+    }
+  },
+
   // ESLint 設定ファイル群は Flat Config の仕様上、default export を要求する。
   // 設定ファイルの保守性を優先し、該当ファイルに限って禁止ルールを緩和する。
   {

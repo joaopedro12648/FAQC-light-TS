@@ -1,904 +1,48 @@
 /**
- * @file 制御構造でのコメントチェック（if/for/while/switch/try などを対象・docs ユニット実体）
- * 備考: PRE-IMPL と docs コンテキストに従い、分岐や例外処理の意図を日本語コメントで明示することを強制する
- * - 対象: if/for/while/do/switch/try/三項演算子などの制御構造
- * - 目的: 直前行に目的・前提・例外方針を 1 文で説明するコメントを要求し、分岐理由を常に可視化する
- * - 要件: コメントは品質コンテキストのロケール（本リポジトリでは日本語）で記述し ASCII のみを禁止する
- * - オプション: ja 系ロケールでは ASCII のみを禁止する `requireTagPattern` を利用可能
- * - 対象外: ESLint ディレクティブやツール系コメントは説明コメントとしてカウントしない
- * - 運用: else-if 連鎖や catch/finally をオプションで免除しつつ、基準値以上の説明密度を維持する
- * - 文脈: vibecoding/var/contexts/qualities/docs/context.md による制御構造コメントポリシー
- * - SnD: SnD-20251113-eslint-if-branch-similarity / SnD-20251116-qualities-structure-and-context-granularity を @snd/@see から参照する
- * - 受入: 本ルール実装が control/コメント系ルールに自己適合し `npm run check` を一発緑で通過していること
- * @see vibecoding/var/contexts/qualities/docs/context.md
- * @see vibecoding/docs/PLAYBOOK/PRE-IMPL.md
- * @snd vibecoding/var/SPEC-and-DESIGN/202511/20251113/SnD-20251113-eslint-if-branch-similarity.md
+ * @file 制御構造の直前コメント/節コメント検査（短縮版エントリ）
+ * - 目的: 分岐・反復・例外処理の「意図」をコメントで明示させる
+ * - 対象: if/for/while/do/switch/try/三項
+ * - ロケール: 日本語コメント（ASCIIのみ禁止を指定可能）
+ * - 実装: ヘルパは分割モジュール（internals/similarity/sections）へ移動
+ * - 非目標: ルール緩和や抑止の導入
+ * - 完了条件: `npm run check` 緑、既存出力互換
+ * - 参照: docs コンテキスト, PRE-IMPL
+ * - テスト: 代表ケースのエラーメッセージ互換を維持
  */
 
 import { computeLevenshteinSimilarity } from './common.js';
+import {
+  buildListeners,
+  getLastMeaningfulComment,
+  getLinePreview,
+  makeRunCommentAndPatternChecks,
+  shouldProcessNode,
+} from './require-comments-on-control-structures.internals.js';
+import { runSectionChecksByKind } from './require-comments-sections.js';
+import { runSimilarityByKind } from './require-comments-similarity.js';
 
 /**
- * 制御構造コメントルールの挙動を制御するオプション型定義。
+ * 分岐コメントオプションの型定義
  * @typedef {Object} BranchCommentOptions
- * @property {Array<'if'|'for'|'while'|'do'|'switch'|'try'|'ternary'>} [targets] 対象種別（省略時は全種）
- * @property {string} [requireTagPattern] 本文パターン（例: 非ASCIIを要求）
- * @property {boolean} [allowBlankLine] 空行許容（既定: false）
- * @property {boolean} [ignoreElseIf] else if 免除（既定: true）
- * @property {boolean} [ignoreCatch] catch 免除（既定: true）
- * @property {boolean} [fixMode] 不要コメントの報告を有効にする（既定: false／報告のみ）
- * @property {'non-dangling'|'dangling'} [treatChainHeadAs] else-if 連鎖先頭（head）をどう扱うか（既定: 'non-dangling'）
- * @property {number} [similarityThreshold] 類似度のしきい値（既定: 0.75、範囲: 0.6〜1.0）
- * @property {boolean} [enforceMeta] メタ表現検出の有効化（既定: false／無効）
- * @property {boolean|'fullOnly'} [requireSectionComments] then/else/catch/finally 節に節コメントを必須化するか（既定: false）
+ * @property {Array<'if'|'for'|'while'|'do'|'switch'|'try'|'ternary'>} [targets]
+ * @property {string} [requireTagPattern]
+ * @property {boolean} [allowBlankLine]
+ * @property {boolean} [ignoreElseIf]
+ * @property {boolean} [ignoreCatch]
+ * @property {boolean} [fixMode]
+ * @property {'non-dangling'|'dangling'} [treatChainHeadAs]
+ * @property {number} [similarityThreshold]
+ * @property {boolean} [enforceMeta]
+ * @property {boolean|'fullOnly'} [requireSectionComments]
  * @property {ReadonlyArray<'before-if'|'block-head'|'trailing'>} [sectionCommentLocations]
- * 節コメントとして認める位置（既定: ['before-if','block-head','trailing']）
- * @property {boolean} [allowSectionAsPrevious] 直前コメントが無い場合に、節コメント（block-head/trailing）を代替として許可する（既定: false）
- * @property {boolean} [allowPrepStmts] 直前コメントから if/loop までの間に「準備用の単純文（宣言/代入）のみ」が挟まる場合に許可する（既定: false）
+ * @property {boolean} [allowSectionAsPrevious]
+ * @property {boolean} [allowPrepStmts]
+ * @property {'always'|'falls-through-only'|boolean} [requireCaseComments]
  */
 
-/** ノードタイプとキーワードの対応（固定） */
 /**
- * 制御構造ノード種別とキーワード文字列のペア一覧。
- * @type {Array<[keyof import('eslint').Rule.RuleListener, string]>}
- */
-const ENTRY_PAIRS = [
-  ['IfStatement', 'if'],
-  ['ForStatement', 'for'],
-  ['ForOfStatement', 'for'],
-  ['ForInStatement', 'for'],
-  ['WhileStatement', 'while'],
-  ['DoWhileStatement', 'do'],
-  ['SwitchStatement', 'switch'],
-  ['TryStatement', 'try'],
-  ['ConditionalExpression', 'ternary'],
-];
-
-/**
- * ルールリスナー集合を構築する（分岐数を抑えて複雑度を低減）。
- * @param {Set<string>} targets 対象キーワード集合
- * @param {boolean} ignoreCatch catch/finally を免除するか（try のみ検査）
- * @param {(node:any,kw:string)=>void} checkFn 検査関数
- * @returns {import('eslint').Rule.RuleListener} リスナー辞書
- */
-function buildListeners(targets, ignoreCatch, checkFn) {
-  /**
-   * 制御構造ごとのリスナーを格納する辞書。
-   * @type {import('eslint').Rule.RuleListener}
-   */
-  const listeners = {};
-  // 登録対象のノード種別を走査し、各キーワードに対応するリスナーを生成する
-  // 対象ノードを網羅して検査入口の複雑度を分散させる
-  for (const [nodeType, kw] of ENTRY_PAIRS) {
-    listeners[nodeType] = (n) => {
-      // 設定で対象外のキーワードは早期リターンして無駄な検査を避ける
-      if (!targets.has(kw)) return;
-      // ignoreCatch=true の場合は対象を try のみに絞り、catch/finally の検査コストを避ける
-      if (kw === 'try' && ignoreCatch) {
-        // この分岐では具体処理は行わず、下流のノード処理へ委譲する（catch/finally は自然に対象外）
-      }
-
-      checkFn(n, kw);
-    };
-  }
-
-  return listeners;
-}
-
-/**
- * 直前コメントとしてカウントしない（ESLint ディレクティブ等）かを判定。
- * @param {import('estree').Comment|import('eslint').AST.Token} c コメント（対象候補）
- * @returns {boolean} ディレクティブなら true
- */
-function isDirectiveComment(c) {
-  // 直前コメントが ESLint/ツール系ディレクティブかを判別し除外対象とする
-  // 文字列化の安全確保のため、三項で既定値（空文字）を明示する
-  // 三項演算子の採否を明示し、ディレクティブ検出の前処理を短文化する（空文字で安全側へ）
-  // 文字列でなければ空文字として処理し誤検出を避ける
-  const v = typeof c?.value === 'string' ? c.value.trim() : ''; // 三項: ディレクティブ判定の前処理として原文を安全に抽出する
-  // eslint, istanbul, ts-nocheck 等の抑止・ツール系を除外
-  return /^eslint[-\s]/i.test(v) || /^istanbul\b/i.test(v) || /^ts-(?:check|nocheck)\b/i.test(v);
-}
-
-/**
- * 直前の（非ディレクティブ）コメントを取得。
- * @param {import('eslint').SourceCode} src ソースコード（ESLint 提供）
- * @param {any} node 対象ノード（IfStatement など）
- * @returns {any|null} コメント or null
- */
-function getLastMeaningfulComment(src, node) {
-  /* 直前側のコメント列を取得し（API 非搭載時は空配列）、最後の意味あるコメントを返す */
-  const arr = typeof src.getCommentsBefore === 'function' ? src.getCommentsBefore(node) : []; // 三項: API存在を確認し直前コメント配列を安全に取得する
-  for (let i = arr.length - 1; i >= 0; i -= 1) {
-    const c = arr[i];
-    // ディレクティブ以外の説明的コメントのみ採用
-    if (!isDirectiveComment(c)) return c;
-  }
-
-  return null;
-}
-
-/**
- * 直前コメント要件の判定。
- * @param {import('eslint').SourceCode} src ソースコード（ESLint 提供）
- * @param {any} node 対象ノード（IfStatement/ForStatement 等）
- * @param {boolean} allowBlank 空行を許容するか（隙間コードは不可）
- * @returns {{ok:boolean,last:any|null}} 判定
- */
-function hasRequiredPreviousComment(src, node, allowBlank) {
-  const last = getLastMeaningfulComment(src, node);
-  // 直前コメントが存在しない場合は即不適合とする
-  if (!last) return { ok: false, last: null };
-
-  const nodeLine = node.loc.start.line;
-  const lastEndLine = last.loc.end.line;
-
-  // 空行を不許可とする既定では直前行のみを許す
-  if (!allowBlank) {
-    // 直前行のみ許可する設定のためコメントと if の行隣接を厳密に確認する
-    return { ok: lastEndLine === nodeLine - 1, last };
-  }
-
-  // 空行許容だが、コメントとノードの間にコードトークンは不可
-  const tokensBetween = src.getTokensBetween(last, node, { includeComments: false });
-  // コメントと対象ノードの間に実コードが存在する場合は不適合とする
-  const hasCodeBetween = tokensBetween.some(
-    (t) => t.loc.start.line > lastEndLine && t.loc.end.line < nodeLine,
-  );
-  return { ok: !hasCodeBetween && lastEndLine < nodeLine, last };
-}
-
-/**
- * 文字列が指定パターンに適合するか（null は常に true）。
- * @param {string|null} text コメント本文
- * @param {RegExp|null} re 検査パターン（未設定は常に true）
- * @returns {boolean} 適合なら true
- */
-function matchesPattern(text, re) {
-  // パターン未指定時は常に適合とみなし、指定時のみ厳密に検査する
-  if (!re) return true;
-  const s = (text || '').trim();
-  return re.test(s);
-}
-
-/**
- * 対象行のプレビュー文字列を生成する（エラーメッセージ用）。
- * @param {import('eslint').SourceCode} src ソースコード
- * @param {number} line 1 始まりの行番号
- * @returns {string} プレビュー文字列
- */
-function getLinePreview(src, line) {
-  const lines = Array.isArray(src.lines) ? src.lines : [];
-  const idx = Math.max(0, line - 1);
-  const raw = lines[idx] || '';
-  const trimmed = raw.trim();
-  // 行が十分に短い場合はそのまま返し、長い場合は末尾を省略してプレビューとして整形する
-  if (trimmed.length <= 120) return trimmed;
-  return `${trimmed.slice(0, 117)}...`;
-}
-
-/**
- * IfStatement を full/non-full/dangling で分類する。
- * @param {any} node 対象ノード
- * @returns {'non-full-non-dangling-if'|'full-non-dangling-if'|'dangling-if'|null} 分類結果
- */
-function classifyIfStructure(node) {
-  // IfStatement 以外や null のノードは分類対象外とし、節コメント検査の対象から外す
-  if (!node || node.type !== 'IfStatement') return null;
-  const hasAlternate = node.alternate != null;
-  const isDangling = node.alternate && node.alternate.type === 'IfStatement';
-  // else 節を持たない if は「非フルかつ非ぶら下がり if」として扱う
-  if (!hasAlternate) {
-    return 'non-full-non-dangling-if';
-  }
-
-  // else 節が IfStatement の場合はぶら下がり if として分類する
-  if (isDangling) {
-    return 'dangling-if';
-  }
-
-  return 'full-non-dangling-if';
-}
-
-/**
- * if に対して節コメント検査を行うべきかどうかを判定する。
- * @param {'non-full-non-dangling-if'|'full-non-dangling-if'|'dangling-if'|null} classification 分類
- * @param {boolean|'fullOnly'|undefined} flag requireSectionComments オプション値
- * @returns {boolean} 検査が必要なら true
- */
-function shouldCheckSectionCommentsForIf(classification, flag) {
-  // 設定と分類の両方が揃っていない場合は節コメント検査を無効化する
-  if (!flag || !classification) return false;
-  // fullOnly の場合は「非フル if」を除外し、それ以外（フル/dangling）のみ節コメントを対象とする
-  if (flag === 'fullOnly') {
-    return classification !== 'non-full-non-dangling-if';
-  }
-
-  // boolean true の場合はすべての if を節コメント対象とする
-  return true;
-}
-
-/**
- * ブロック先頭に節コメントが存在するかどうかを判定する。
- * @param {import('eslint').SourceCode} src ソースコード
- * @param {any} block BlockStatement ノード
- * @returns {{ ok: boolean, previewLine: number }} 判定結果とプレビュー用行番号
- */
-function hasBlockHeadSectionComment(src, block) {
-  /**
-   * 先頭ステートメント直前に意味のあるコメントがあるか（ディレクティブ除外）
-   * @param {any} stmt 先頭ステートメント
-   * @returns {boolean} 直前コメントがあれば true
-   */
-  function hasMeaningfulCommentBeforeFirstStatement(stmt) {
-    const last = getLastMeaningfulComment(src, stmt);
-    return Boolean(last);
-  }
-
-  /**
-   * ブロック内の最初の（ディレクティブ以外の）コメントトークンを返す
-   * @param {any} blk BlockStatement
-   * @returns {any|null} コメントトークン or null
-   */
-  function findFirstMeaningfulCommentInBlock(blk) {
-    const inside = typeof src.getCommentsInside === 'function' ? src.getCommentsInside(blk) : [];
-    const foundInside = (inside || []).find((c) => !isDirectiveComment(c)) || null;
-    const tokens = src.getTokens(blk, { includeComments: true }) || [];
-    return foundInside || tokens.find((t) => (t.type === 'Block' || t.type === 'Line') && !isDirectiveComment(t)) || null;
-  }
-
-  /**
-   * ノードの開始行（loc.start.line）を安全に取得する
-   * @param {any} n 対象ノード
-   * @param {number|null} fb フォールバック
-   * @returns {number|null} 行番号（無ければ fb）
-   */
-  function getStartLineSafe(n, fb) {
-    return n && n.loc && n.loc.start && typeof n.loc.start.line === 'number' ? n.loc.start.line : fb;
-  }
-
-  const body = Array.isArray(block && block.body) ? block.body : [];
-  const firstStmt = body[0];
-  const fallbackLine = getStartLineSafe(block, 1);
-
-  // then/else の節コメント要件を判定するため、先頭文の有無を確認（空ブロック分岐の根拠）
-  const firstLine = getStartLineSafe(firstStmt, null);
-  // 先頭文が存在する場合のみ then/else の直前コメント適合で可否を判断する
-  if (firstLine != null) {
-    // 直前コメントが無ければ節コメント不適合
-    if (!hasMeaningfulCommentBeforeFirstStatement(firstStmt)) {
-      return { ok: false, previewLine: firstLine };
-    }
-
-    return { ok: true, previewLine: firstLine };
-  }
-
-  // 空ブロック: ブロック内の最初の（ディレクティブ以外の）コメントを節コメントとして許容
-  const selected = findFirstMeaningfulCommentInBlock(block);
-  const preview = getStartLineSafe(selected, fallbackLine);
-  return selected ? { ok: true, previewLine: preview } : { ok: false, previewLine: fallbackLine };
-}
-
-/**
- * 単一ステートメントの末尾に節コメントが存在するかどうかを判定する。
- * @param {import('eslint').SourceCode} src ソースコード
- * @param {any} statement 対象ステートメント
- * @returns {{ ok: boolean, previewLine: number }} 判定結果とプレビュー用行番号
- */
-function hasTrailingSectionComment(src, statement) {
-  // 位置情報が無いステートメントは trailing コメント検査の対象外とする
-  if (!statement.loc || !statement.loc.end) {
-    return { ok: false, previewLine: 1 };
-  }
-
-  const endLine = statement.loc.end.line;
-  const commentsAfter = src.getCommentsAfter(statement) || [];
-  // ステートメント直後に続くコメント列を走査し、同行の trailing 節コメント候補を探す
-  for (const c of commentsAfter) {
-    // 位置情報を持たないコメントは検査対象外とし、安全側にスキップする
-    if (!c.loc || !c.loc.start) continue;
-    // ステートメントと同一行を越えた時点で trailing コメント候補の探索を終了する
-    if (c.loc.start.line !== endLine) {
-      /* 行が変われば探索終了 */
-      break;
-    }
-
-    // ツール系ディレクティブ以外のコメントが同行に存在すれば trailing 節コメントとして採用する
-    if (!isDirectiveComment(c)) {
-      return { ok: true, previewLine: endLine };
-    }
-  }
-
-  return { ok: false, previewLine: endLine };
-}
-
-/**
- * ブロック節先頭の説明コメント本文を抽出する。
- * @param {import('eslint').SourceCode} src ソースコード
- * @param {any} block BlockStatement ノード
- * @returns {string} コメント本文（見つからなければ空文字）
- */
-function getBlockHeadCommentText(src, block) {
-  const first = (Array.isArray(block?.body) && block.body[0]) || null;
-  const c = first ? getLastMeaningfulComment(src, first) : null;
-  return typeof c?.value === 'string' ? c.value : '';
-}
-
-/**
- * 単一ステートメント同行の trailing 説明コメント本文を抽出する。
- * @param {import('eslint').SourceCode} src ソースコード
- * @param {any} statement 対象ステートメント
- * @returns {string} コメント本文（見つからなければ空文字）
- */
-function getTrailingSameLineCommentText(src, statement) {
-  const endLine = statement?.loc?.end?.line;
-  const after = src.getCommentsAfter(statement) || [];
-  const found = after.find(
-    (c) => c.loc && c.loc.start && c.loc.start.line === endLine && !isDirectiveComment(c),
-  );
-  return typeof found?.value === 'string' ? found.value : '';
-}
-
-/**
- * then/else/catch/finally 節のコメント本文を抽出する（共通ユーティリティ）。
- * - ブロック節: 先頭文の直前コメント
- * - 単文節: 同一行の trailing コメント
- * @param {import('eslint').SourceCode} src ソースコード
- * @param {any} branch 対象ブランチノード
- * @returns {string} コメント本文（見つからなければ空文字）
- */
-function getSectionTextGlobal(src, branch) {
-  // 節が存在しない場合は比較対象が無いため空を返す
-  if (!branch) return '';
-  // ブロック節: 先頭ステートメント直前の説明コメントを採用する
-  if (branch.type === 'BlockStatement') {
-    return getBlockHeadCommentText(src, branch);
-  }
-  // 単文節: 同一行の trailing コメントを採用する（ディレクティブ除外）
-
-  return getTrailingSameLineCommentText(src, branch);
-}
-
-/**
- * else-if 連鎖の else 側ブランチを無視するかどうかを判定する（共通ユーティリティ）。
- * @param {any} node 対象ノード
- * @param {string} kw 対象キーワード種別
- * @param {boolean} enabled else-if 免除オプションが有効かどうか
- * @returns {boolean} 無視すべきブランチであれば true
- */
-function isIgnoredElseIfBranchGlobal(node, kw, enabled) {
-  // 免除方針の理由: else-if 連鎖の可読性確保と冗長な重複説明の回避を優先する
-  if (kw !== 'if' || !enabled) return false;
-  // 親情報が無い場合は誤判定リスクを避けるため免除しない
-  if (!node || !node.parent) return false;
-  // 親が IfStatement かつ自身が alternate であれば else-if 連鎖の一部
-  return node.parent.type === 'IfStatement' && node.parent.alternate === node;
-}
-
-/**
- * 直前コメントの存在とパターン適合を検査する関数を生成する（ファクトリ）。
- * @param {import('eslint').SourceCode} src ソースコード
- * @param {import('eslint').Rule.RuleContext} context ルールコンテキスト
- * @param {boolean} allowBlank 空行許容
- * @param {RegExp|null} re パターン
- * @param {{requireTagPattern?:string}} options オプション（タグパターンなど）
- * @returns {(node:any, kw:string)=>string|null} preview 文字列 or null
- */
-function makeRunCommentAndPatternChecks(src, context, allowBlank, re, options) {
-  /**
-   * 許容フラグとプレビューを算出する小ユーティリティ
-   * @param {any} node 対象ノード
-   * @param {string} kw 対象キーワード（'if' 等）
-   * @returns {{ok:boolean, allowBySection:boolean, allowByPrep:boolean, preview:string, last:any}} 計算結果
-   */
-  function computeAllowFlags(node, kw) {
-    const { ok, last } = hasRequiredPreviousComment(src, node, allowBlank);
-    const preview = node && node.loc && node.loc.start ? getLinePreview(src, node.loc.start.line) : '';
-    const allowBySection =
-      options.allowSectionAsPrevious && hasAcceptableSectionAsFallback(node, kw);
-    const allowByPrep =
-      options.allowPrepStmts && areOnlyPrepStatementsBetweenGlobal(src, node, last);
-    return { ok, allowBySection, allowByPrep, preview, last };
-  }
-
-  /**
-   * 節コメントの本文をキーワードに応じて抽出する
-   * @param {string} kw 対象キーワード
-   * @param {any} node 対象ノード
-   * @returns {string} 本文（無ければ空文字）
-   */
-  function extractSectionTextForKw(kw, node) {
-    // 節種別ごとに本文抽出先を切り替えて検査対象を一意に決定する
-    switch (kw) {
-      case 'if':
-        return getSectionTextGlobal(src, node && node.consequent);
-      case 'for':
-      case 'while':
-      case 'do':
-        return getSectionTextGlobal(src, node && node.body);
-      default:
-        return '';
-    }
-  }
-
-  /**
-   * 検証対象のテキストを選択する
-   * @param {boolean} ok 直前コメントが適合しているか
-   * @param {any} last 直前の意味あるコメント
-   * @param {boolean} allowBySection 節コメント代替が許可されたか
-   * @param {string} kw 対象キーワード
-   * @param {any} node 対象ノード
-   * @returns {string|null} 検証テキスト（無ければ null）
-   */
-  function selectValidationText(ok, last, allowBySection, kw, node) {
-    // 直前コメントがある場合はそれを採用する
-    if (ok && last && typeof last.value === 'string') return last.value;
-    // 節コメント代替が許可された場合は節から本文を抽出する
-    if (allowBySection) return extractSectionTextForKw(kw, node);
-    return null;
-  }
-
-  /**
-   * タグ基準検証を必要時のみ行う
-   * @param {boolean} shouldValidateText 検証要否
-   * @param {string|null} validationText 検証対象本文
-   * @param {any} node 対象ノード
-   * @param {string} kw 対象キーワード
-   */
-  function validateTagIfNeeded(shouldValidateText, validationText, node, kw) {
-    // ロケール/タグ基準から外れる説明は指摘対象とする
-    if (shouldValidateText && !matchesPattern(validationText, re)) {
-      context.report({
-        node,
-        messageId: 'tagMismatch',
-        data: { kw, pat: options.requireTagPattern || '', preview: getLinePreview(src, node.loc.start.line) },
-      });
-    }
-  }
-
-  /**
-   * then/else/loop body に節コメントが存在し、タグ基準に適合するかを簡易検査する。
-   * - if: then 側（consequent）のみを対象（else は before-if と独立運用）
-   * - ループ: 本体（body）がブロックなら先頭、単文なら同行末尾を検査
-   * @param {any} node 対象ノード
-   * @param {string} kw 種別
-   * @returns {boolean} 許容できる節コメントがあれば true
-   */
-  function hasAcceptableSectionAsFallback(node, kw) {
-    const considerBlockHead = true;
-    const considerTrailing = true;
-
-    /**
-     * 節コメント本文を取得する。
-     * @param {any} branchOrBody 説明コメントを抽出する対象の節/本体
-     * @returns {string} コメント本文（見つからなければ空文字）
-     */
-    function getCommentTextForBranchOrBody(branchOrBody) {
-      // 対象が無い場合は空を返す（節コメントは存在しない）
-      if (!branchOrBody) return '';
-      // ブロック本体なら先頭の説明コメントを取得する
-      if (branchOrBody.type === 'BlockStatement') {
-        return getBlockHeadCommentText(src, branchOrBody);
-      }
-
-      // 単文の trailing コメント本文
-      return getTrailingSameLineCommentText(src, branchOrBody);
-    }
-
-    // if では then 側の節コメントで代替を許容する
-    if (kw === 'if') {
-      const br = node && node.consequent;
-      // then 節が無ければ代替不可
-      if (!br) return false;
-      // 位置の許容は block-head / trailing の双方を認める（本文が空なら不可）
-      const text = getCommentTextForBranchOrBody(br);
-      return text && matchesPattern(text, re);
-    }
-
-    // 反復構造では本体の節コメントで代替を許容する
-    if (kw === 'for' || kw === 'while' || kw === 'do') {
-      const body = node && node.body;
-      const text = getCommentTextForBranchOrBody(body);
-      return text && matchesPattern(text, re);
-    }
-
-    return false;
-  }
-
-  return (node, kw) => {
-    // 規約に従った説明コメントの存在と許容フラグを算出する
-    const { ok, allowBySection, allowByPrep, preview, last } = computeAllowFlags(node, kw);
-
-    // いずれの緩和にも該当しなければ違反
-    // 説明不足な分岐の混入を防ぐため報告して終了する
-    if (!ok && !allowBySection && !allowByPrep) {
-      context.report({ node, messageId: 'missingComment', data: { kw, preview } });
-      return null;
-    }
-
-    // ロケールやタグ基準への適合性を確認し、逸脱時は指摘する
-    const validationText = selectValidationText(ok, last, allowBySection, kw, node);
-
-    // タグ基準の検査は「直前コメントがある」場合、または「節コメント代替で許容した」場合にのみ行う
-    const shouldValidateText = ok || allowBySection;
-    // ロケール基準に合わない説明は早期に検出して修正を促す
-    validateTagIfNeeded(shouldValidateText, validationText, node, kw);
-
-    return preview;
-  };
-}
-
-/**
- * コメントと対象ノードの間が「準備用の単純文（宣言/代入）」のみかどうかを検査する（グローバルヘルパ）。
- * - VariableDeclaration は許可
- * - ExpressionStatement は AssignmentExpression/UpdateExpression のみ許可（関数呼び出し等は不可）
- * - 空行は不許可（間を詰める運用）
- * @param {import('eslint').SourceCode} src ソース
- * @param {any} node 対象ノード
- * @param {any} last 最後の意味のあるコメントノード
- * @returns {boolean} 条件を満たす場合 true
- */
-function areOnlyPrepStatementsBetweenGlobal(src, node, last) {
-  // 位置情報が取得できない場合は判定不能のため不許可とする
-  if (!node?.loc) return false;
-
-  /**
-   * 直近の「意味のある行コメント」の行番号を上方探索で見つける（最大10行）
-   * @returns {number|0} 見つかれば行番号、無ければ 0
-   */
-  function findNearestMeaningfulLineCommentLine() {
-    const lines = Array.isArray(src.lines) ? src.lines : [];
-    const nodeLine = node.loc.start.line;
-    // 上方へ走査し、ツール系を除く行コメントを探索する
-    // 直近の説明コメントを起点にして区間検査を行うため
-    for (let ln = nodeLine - 1; ln >= Math.max(1, nodeLine - 10); ln -= 1) {
-      const t = (lines[ln - 1] || '').trim();
-      // ツール系ではない説明的な行コメントを検出する
-      if (/^\/\/(?!\s*(?:eslint|istanbul|ts-(?:check|nocheck))\b)/i.test(t)) {
-        return ln;
-      }
-    }
-
-    return 0;
-  }
-
-  /**
-   * コメント終端行と対象ノード行の間が「宣言/単純代入のみ」か検査する
-   * @param {number} startLine 開始行（コメント行）
-   * @param {number} endLine 終了行（ノード開始行）
-   * @returns {boolean} 許容できる場合 true
-   */
-  function isOnlyPrepStatementsBetween(startLine, endLine) {
-    const lines = Array.isArray(src.lines) ? src.lines : [];
-    // 区間内の各行を検査し、空行や複雑な文があれば不許可とする
-    for (let ln = startLine + 1; ln <= endLine - 1; ln += 1) {
-      const raw = lines[ln - 1] || '';
-      const t = raw.trim();
-      // 空行が挟まる場合は不適合
-      if (t.length === 0) return false;
-      // 準備用の単純文として許容するパターン（宣言 or 単純代入）
-      const isDecl = /^\s*(?:const|let|var)\s+/.test(t);
-      const isAssign = /^\s*[A-Za-z_$][\w.$\[\]]*\s*=\s*.+;?$/.test(t);
-      // 許容対象外の文が含まれる場合は不適合とする
-      if (!isDecl && !isAssign) return false;
-    }
-
-    return true;
-  }
-
-  // コメント終端行を決定する（直前コメントノードが無ければテキストから近傍探索）
-  const startLine =
-    last?.loc && last.loc.end && typeof last.loc.end.line === 'number'
-      ? last.loc.end.line
-      : findNearestMeaningfulLineCommentLine();
-  // 説明コメントの起点が見当たらない場合は代替を許容しない
-  if (!startLine) return false;
-
-  const endLine = node.loc.start.line;
-  return isOnlyPrepStatementsBetween(startLine, endLine);
-}
-
-/**
- * if の then/else の類似度検査を行い、違反時に報告する。
- * @param {import('eslint').SourceCode} src ソースコード
- * @param {import('eslint').Rule.RuleContext} context ルールコンテキスト
- * @param {any} node IfStatement ノード
- * @param {string} prevText if 直前コメント本文
- * @param {number} threshold 類似度しきい値
- * @returns {void}
- */
-function handleIfSimilarity(src, context, node, prevText, threshold) {
-  // then/else の説明が if 直前の説明と過度に類似していないかを検査する
-  const thenText = getSectionTextGlobal(src, node.consequent);
-  // 類似度がしきい値以上なら then の説明が冗長であるため指摘する
-  if (thenText && computeLevenshteinSimilarity(prevText, thenText) >= threshold) {
-    context.report({ node: node.consequent || node, messageId: 'similar_if_then' });
-  }
-
-  // else-if 連鎖の else は別 if として扱われるため通常の else のみ対象とする
-  if (node.alternate && node.alternate.type !== 'IfStatement') {
-    const elseText = getSectionTextGlobal(src, node.alternate);
-    // 類似度がしきい値以上なら else の説明が冗長であるため指摘する
-    if (elseText && computeLevenshteinSimilarity(prevText, elseText) >= threshold) {
-      context.report({ node: node.alternate, messageId: 'similar_if_else' });
-    }
-  }
-}
-
-/**
- * try の catch/finally の類似度検査を行い、違反時に報告する。
- * @param {import('eslint').SourceCode} src ソースコード
- * @param {import('eslint').Rule.RuleContext} context ルールコンテキスト
- * @param {any} node TryStatement ノード
- * @param {string} prevText try 直前コメント本文
- * @param {number} threshold 類似度しきい値
- * @returns {void}
- */
-function handleTrySimilarity(src, context, node, prevText, threshold) {
-  // 例外処理の節コメントが try 直前説明に過度に類似していないかを検査する
-  if (node.handler && node.handler.body) {
-    const ct = getSectionTextGlobal(src, node.handler.body);
-    // 類似度がしきい値以上なら catch の説明が冗長であるため指摘する
-    if (ct && computeLevenshteinSimilarity(prevText, ct) >= threshold) {
-      context.report({ node: node.handler, messageId: 'similar_try_catch' });
-    }
-  }
-
-  // finally 節が存在する場合は類似度検査を行い、冗長な説明を検知する
-  if (node.finalizer) {
-    const ft = getSectionTextGlobal(src, node.finalizer);
-    // 類似度がしきい値以上なら finally の説明が冗長であるため指摘する
-    if (ft && computeLevenshteinSimilarity(prevText, ft) >= threshold) {
-      context.report({ node: node.finalizer, messageId: 'similar_try_finally' });
-    }
-  }
-}
-
-/**
- * ノード種別・対象・else-if免除に基づく処理可否を判定する。
- * @param {string} kw キーワード種別
- * @param {Set<string>} targets 対象キーワード集合
- * @param {any} node 対象ノード
- * @param {boolean} ignoreElseIf else-if 免除フラグ
- * @returns {boolean} 処理継続なら true
- */
-function shouldProcessNode(kw, targets, node, ignoreElseIf) {
-  // 対象外の制御構造は検査不要（誤検出の抑止）
-  if (!targets.has(kw)) return false;
-  // else-if 連鎖の else 側は意図的に免除（冗長報告の抑止）
-  if (isIgnoredElseIfBranchGlobal(node, kw, ignoreElseIf)) return false;
-  return true;
-}
-
-/**
- * 類似度検査をノード種別ごとに実行する。
- * @param {import('eslint').SourceCode} src ソースコード
- * @param {import('eslint').Rule.RuleContext} context ルールコンテキスト
- * @param {any} node 対象ノード
- * @param {string} kw キーワード種別（'if' | 'try' 等）
- * @param {string} prevText 直前コメント本文
- * @param {number} threshold 類似度しきい値
- * @returns {void}
- */
-function runSimilarityByKind(src, context, node, kw, prevText, threshold) {
-  // 種別ごとに適切な節を比較対象として選ぶ
-  switch (kw) {
-    case 'if':
-      handleIfSimilarity(src, context, node, prevText, threshold);
-      break;
-    case 'try':
-      handleTrySimilarity(src, context, node, prevText, threshold);
-      break;
-    default:
-      // 他の制御構造は類似度検査の対象外
-      break;
-  }
-}
-
-/**
- * 節コメント検査をノード種別ごとに実行する。
- * @param {import('eslint').SourceCode} src ソースコード
- * @param {import('eslint').Rule.RuleContext} context ルールコンテキスト
- * @param {any} node 対象ノード
- * @param {string} kw キーワード種別
- * @param {boolean|'fullOnly'|undefined} sectionFlag 節コメント検査の有効化設定
- * @param {Set<string>} sectionLocations 節コメントの許容位置
- * @returns {void}
- */
-function runSectionChecksByKind(src, context, node, kw, sectionFlag, sectionLocations) {
-  // if に対しては then/else の節コメント要件を検査する
-  if (kw === 'if') {
-    checkIfSectionComments(src, context, node, sectionFlag, sectionLocations);
-    return;
-  }
-
-  // try に対しては catch/finally の節コメント要件を検査する（オプション有効時）
-  if (kw === 'try' && sectionFlag) {
-    checkTrySectionComments(src, context, node, sectionLocations);
-  }
-}
-
-/**
- * 単一ノード検査関数を生成する（ファクトリ）。
- * - 類似度検査と節コメント検査の双方を統合する
- * @param {object} deps 依存オブジェクト
- * @param {import('eslint').SourceCode} deps.src ソースコード
- * @param {import('eslint').Rule.RuleContext} deps.context ルールコンテキスト
- * @param {Set<string>} deps.targets 対象キーワード集合
- * @param {boolean} deps.ignoreElseIf else-if 連鎖の else 側を免除するか
- * @param {boolean|'fullOnly'|undefined} deps.sectionFlag 節コメント検査の有効化設定
- * @param {Set<string>} deps.sectionLocations 節コメントとして認める位置
- * @param {number} deps.threshold 類似度しきい値
- * @param {(node:any, kw:string)=>string|null} deps.runCommentAndPatternChecks 直前コメント/タグ検査関数
- * @returns {(node:any, kw:string)=>void} 検査関数
- */
-function makeCheckNode({
-  src,
-  context,
-  targets,
-  ignoreElseIf,
-  sectionFlag,
-  sectionLocations,
-  threshold,
-  runCommentAndPatternChecks,
-}) {
-  return (node, kw) => {
-    // 対象外や免除対象は早期リターン（不要な検査を避ける）
-    if (!shouldProcessNode(kw, targets, node, ignoreElseIf)) return;
-
-    const preview = runCommentAndPatternChecks(node, kw);
-    // 直前コメントが存在せず missingComment を報告した場合は、節コメント検査を行わずに早期リターンする
-    if (preview === null) return;
-
-    // 類似度検査（Levenshtein, similarity >= threshold で違反）
-    const prevCommentNode = getLastMeaningfulComment(src, node);
-    const prevText = typeof prevCommentNode?.value === 'string' ? prevCommentNode.value : '';
-
-    // 類似度検査の実施: if/try のみ対象
-    if (prevText) {
-      runSimilarityByKind(src, context, node, kw, prevText, threshold);
-    }
-
-    // 節コメントオプションが有効な場合は if/try の節コメントも検査する
-    runSectionChecksByKind(src, context, node, kw, sectionFlag, sectionLocations);
-  };
-}
-
-/**
- * if 文の then/else 節に対する節コメント要件を検査する。
- * @param {import('eslint').SourceCode} src ソースコード
- * @param {import('eslint').Rule.RuleContext} context ルールコンテキスト
- * @param {any} node IfStatement ノード
- * @param {boolean|'fullOnly'|undefined} requireSectionComments 節コメントオプション
- * @param {Set<string>} locations 節コメントとして認める位置の集合
- * @returns {void}
- */
-function checkIfSectionComments(src, context, node, requireSectionComments, locations) {
-  const classification = classifyIfStructure(node);
-  // 設定と分類に基づき、この if 文が節コメント検査の対象かどうかを早期に判定する
-  if (!shouldCheckSectionCommentsForIf(classification, requireSectionComments)) {
-    return;
-  }
-
-  const considerBlockHead = locations.has('block-head');
-  const considerTrailing = locations.has('trailing');
-
-  /**
-   * ブロック節に対する節コメント違反を報告する。
-   * @param {'then'|'else'} kind 節種別
-   * @param {any} branch 対象ブロックノード
-   */
-  function reportBlockBranchIssue(kind, branch) {
-    // 節コメントの対象がブロックでない、またはブロック先頭検査が無効な場合は何もしない
-    if (!branch || !considerBlockHead) return;
-    const { ok, previewLine } = hasBlockHeadSectionComment(src, branch);
-    // ブロック先頭に節コメントが無い場合は then/else に応じたメッセージで報告する
-    if (!ok) {
-      context.report({
-        node: branch,
-        messageId: kind === 'then' ? 'need_then_block_head' : 'need_else_block_head',
-        data: { preview: getLinePreview(src, previewLine) },
-      });
-    }
-  }
-
-  /**
-   * 単一ステートメント節に対する節コメント違反を報告する。
-   * @param {'then'|'else'} kind 節種別
-   * @param {any} branch 対象ステートメントノード
-   */
-  function reportNonBlockBranchIssue(kind, branch) {
-    // 節コメントの対象がステートメントでない、または末尾コメント検査が無効な場合は何もしない
-    if (!branch || !considerTrailing) return;
-    const { ok, previewLine } = hasTrailingSectionComment(src, branch);
-    // 同一行末尾に節コメントが無い場合は then/else に応じた trailing コメント不足として報告する
-    if (!ok) {
-      context.report({
-        node: branch,
-        messageId: kind === 'then' ? 'need_then_trailing' : 'need_else_trailing',
-        data: { preview: getLinePreview(src, previewLine) },
-      });
-    }
-  }
-
-  /**
-   * 個々の節に対して節コメントを検査する。
-   * @param {'then'|'else'} kind 節種別
-   * @param {any} branch 対象ブランチノード
-   */
-  function checkBranch(kind, branch) {
-    // 節が存在しない場合は検査対象外とする
-    if (!branch) return;
-    // ブロック節は先頭コメント、単文節は行末コメントとして検査する
-    if (branch.type === 'BlockStatement') {
-      reportBlockBranchIssue(kind, branch);
-      return;
-    }
-
-    reportNonBlockBranchIssue(kind, branch);
-  }
-
-  // non-full-non-dangling-if: then 節のみ対象（fullOnly の場合はここには来ない）
-  if (classification === 'non-full-non-dangling-if') {
-    checkBranch('then', node.consequent);
-    return;
-  }
-
-  // full-non-dangling-if: then/else の両方を対象とする
-  if (classification === 'full-non-dangling-if') {
-    checkBranch('then', node.consequent);
-    checkBranch('else', node.alternate);
-    return;
-  }
-
-  // dangling-if: 外側 if の then 節のみ対象とし、else-if 側は別の IfStatement として個別に検査する
-  if (classification === 'dangling-if') {
-    checkBranch('then', node.consequent);
-  }
-}
-
-/**
- * try/catch/finally の節コメント要件を検査する。
- * @param {import('eslint').SourceCode} src ソースコード
- * @param {import('eslint').Rule.RuleContext} context ルールコンテキスト
- * @param {any} node TryStatement ノード
- * @param {Set<string>} locations 節コメントとして認める位置の集合
- * @returns {void}
- */
-function checkTrySectionComments(src, context, node, locations) {
-  const considerBlockHead = locations.has('block-head');
-  // ブロック先頭コメントを節コメントとして扱わない場合は try/catch/finally の節コメント検査をスキップする
-  if (!considerBlockHead) return;
-
-  // catch 節が存在する場合はブロック先頭に節コメントがあるかを検査する
-  if (node.handler && node.handler.body) {
-    const { ok, previewLine } = hasBlockHeadSectionComment(src, node.handler.body);
-    // catch ブロック先頭にコメントが無い場合は節コメント不足として報告する
-    if (!ok) {
-      context.report({
-        node: node.handler,
-        messageId: 'need_catch_block_head',
-        data: { preview: getLinePreview(src, previewLine) },
-      });
-    }
-  }
-
-  // finally 節が存在する場合も同様にブロック先頭コメントを検査する
-  if (node.finalizer) {
-    const { ok, previewLine } = hasBlockHeadSectionComment(src, node.finalizer);
-    // finally ブロック先頭にコメントが無い場合も節コメント不足として報告する
-    if (!ok) {
-      context.report({
-        node: node.finalizer,
-        messageId: 'need_finally_block_head',
-        data: { preview: getLinePreview(src, previewLine) },
-      });
-    }
-  }
-}
-
-/**
- * ルール実体
- * @type {import('eslint').Rule.RuleModule} ルールモジュール定義
+ * 制御構造直前コメントを要求するルール定義
+ * - 直前コメントの存在・パターン・節コメント・類似度を総合検査
  */
 export const ruleRequireCommentsOnControlStructures = {
   meta: {
@@ -932,6 +76,9 @@ export const ruleRequireCommentsOnControlStructures = {
           },
           allowSectionAsPrevious: { type: 'boolean' },
           allowPrepStmts: { type: 'boolean' },
+          requireCaseComments: {
+            anyOf: [{ type: 'boolean' }, { enum: ['always', 'falls-through-only'] }],
+          },
         },
         additionalProperties: false,
       },
@@ -972,57 +119,32 @@ export const ruleRequireCommentsOnControlStructures = {
         '三項演算子の直前行または同行末に、式の意図を説明するコメントが必要です。',
     },
   },
+  /**
+   * ルール本体のリスナーを生成する（設定オプションに従い検査を行う）
+   * @param {import('eslint').Rule.RuleContext} context ルール実行コンテキスト
+   * @returns {{[k:string]: Function}} AST リスナー
+   */
   create: (context) => {
     const src = context.getSourceCode();
-    /**
-     * 直前コメント検査ルールのオプション集合。
-     * @type {Readonly<BranchCommentOptions>}
-     */
-    const options = (context.options && context.options[0]) || {};
-    const targets =
-      options.targets && options.targets.length > 0
-        ? new Set(options.targets)
-        : new Set(['if', 'for', 'while', 'do', 'switch', 'try', 'ternary']);
-    const allowBlank = Boolean(options.allowBlankLine);
-    const ignoreElseIf = options.ignoreElseIf !== false; // 既定: else if を免除
-    const ignoreCatch = options.ignoreCatch !== false; // 既定: catch を免除（本 SnD では catch/finally の節コメント免除には利用しない）
-    const re =
-      typeof options.requireTagPattern === 'string' && options.requireTagPattern.length > 0
-        ? new RegExp(options.requireTagPattern)
-        : null;
-    const sectionFlag = options.requireSectionComments;
-    const sectionLocationsRaw =
-      Array.isArray(options.sectionCommentLocations) && options.sectionCommentLocations.length > 0
-        ? options.sectionCommentLocations
-        : ['before-if', 'block-head', 'trailing'];
-    const sectionLocations = new Set(sectionLocationsRaw);
-    const threshold =
-      typeof options.similarityThreshold === 'number'
-        ? Math.min(1, Math.max(0.25, options.similarityThreshold))
-        : 0.75;
+    const rawOptions = (context.options && context.options[0]) || {};
+    const norm = normalizeBranchCommentOptions(rawOptions);
+
     const runCommentAndPatternChecks = makeRunCommentAndPatternChecks(
       src,
       context,
-      allowBlank,
-      re,
-      options,
+      norm.allowBlank,
+      norm.re,
+      rawOptions,
     );
 
-    const checkNode = makeCheckNode({
+    const checkNode = makeCheckNode(
       src,
       context,
-      targets,
-      ignoreElseIf,
-      sectionFlag,
-      sectionLocations,
-      threshold,
       runCommentAndPatternChecks,
-    });
+      norm,
+    );
 
-    // 既存のユーティリティを用いて対象ノード種別ごとのリスナーを構築する
-    return buildListeners(targets, ignoreCatch, (node, kw) => {
-      checkNode(node, kw);
-    });
+    return buildListeners(norm.targets, norm.ignoreCatch, checkNode);
   },
 };
 
@@ -1032,3 +154,241 @@ export const controlStructuresPlugin = {
     'require-comments-on-control-structures': ruleRequireCommentsOnControlStructures,
   },
 };
+
+/**
+ * 分岐コメントオプションを正規化して扱いやすい形へ変換する（日本語ロケール準拠）
+ * @param {import('./require-comments-on-control-structures.js').BranchCommentOptions} options オプション入力（未設定可）
+ * @returns {{
+ * targets: ReadonlySet<'if'|'for'|'while'|'do'|'switch'|'try'|'ternary'>, 対象キーワード集合
+ * allowBlank: boolean, 空行許容フラグ
+ * ignoreElseIf: boolean, else if を無視するか
+ * ignoreCatch: boolean, catch を無視するか
+ * re: RegExp|null, パターン要求の正規表現（未指定なら null）
+ * sectionFlag: boolean|'fullOnly'|undefined, 節コメント要求のモード
+ * sectionLocations: ReadonlySet<'before-if'|'block-head'|'trailing'>, 節コメントの許容位置
+ * threshold: number, 類似度の閾値
+ * requireCase: 'off'|'always'|'falls-through-only' case/default のコメント要求モード
+ * }} 戻り値オブジェクトの項目説明
+ */
+function normalizeBranchCommentOptions(options) {
+  const targets =
+    options.targets && options.targets.length > 0
+      ? new Set(options.targets)
+      : new Set(['if', 'for', 'while', 'do', 'switch', 'try', 'ternary']);
+
+  const allowBlank = Boolean(options.allowBlankLine);
+  const ignoreElseIf = options.ignoreElseIf !== false;
+  const ignoreCatch = options.ignoreCatch !== false;
+
+  let re = null;
+  // タグパターンが指定されていれば正規表現を構築する
+  if (typeof options.requireTagPattern === 'string' && options.requireTagPattern.length > 0) {
+    re = new RegExp(options.requireTagPattern);
+  }
+
+  const sectionFlag = options.requireSectionComments;
+  const sectionLocationsRaw =
+    Array.isArray(options.sectionCommentLocations) && options.sectionCommentLocations.length > 0
+      ? options.sectionCommentLocations
+      : ['before-if', 'block-head', 'trailing'];
+  const sectionLocations = new Set(sectionLocationsRaw);
+
+  const threshold =
+    typeof options.similarityThreshold === 'number'
+      ? Math.min(1, Math.max(0.25, options.similarityThreshold))
+      : 0.75;
+
+  const requireCase = normalizeRequireCase(options.requireCaseComments);
+
+  return {
+    targets,
+    allowBlank,
+    ignoreElseIf,
+    ignoreCatch,
+    re,
+    sectionFlag,
+    sectionLocations,
+    threshold,
+    requireCase,
+  };
+}
+
+/**
+ * case コメント要求モードの正規化（日本語ロケール準拠）
+ * @param {boolean|'always'|'falls-through-only'|undefined} val 入力値
+ * @returns {'off'|'always'|'falls-through-only'} 正規化結果
+ */
+function normalizeRequireCase(val) {
+  // 許容される文字列の場合はそのまま返す
+  if (val === 'always' || val === 'falls-through-only') return val;
+  // 真の場合は 'always' と解釈する
+  if (val === true) return 'always';
+  return 'off';
+}
+
+/**
+ * Switch の case/default 先頭にコメントが必要か判定し、必要なら報告する（日本語ロケール準拠）
+ * @param {import('eslint').SourceCode} src 解析中ソースコード
+ * @param {import('eslint').Rule.RuleContext} context ルール実行コンテキスト
+ * @param {any} switchNode SwitchStatement ノード
+ * @param {'off'|'always'|'falls-through-only'} requireCase case コメント要求モード
+ * @param {boolean} allowBlank 空行を許容するか
+ * @param {RegExp|null} re パターン要求の正規表現
+ */
+function checkCaseHeadCommentsIfNeeded(src, context, switchNode, requireCase, allowBlank, re) {
+  // case 検査対象がなければ直ちに終了する
+  if (requireCase === 'off' || !Array.isArray(switchNode?.cases)) return;
+
+  // 各 case を順に検査する
+  for (const c of switchNode.cases) {
+    // falls-through-only の条件に合致する case は除外する
+    if (shouldSkipCaseByFallsThrough(requireCase, c)) continue;
+
+    const prev = getLastMeaningfulComment(src, c);
+    const hasPrev = hasPreviousCommentOnAllowedLine(prev, c, allowBlank);
+
+    const after = src.getCommentsAfter(c) || [];
+    const hasTrailingSameLine = hasTrailingCommentSameLine(after, c);
+
+    const patternOk = isCommentPatternSatisfied(re, hasPrev, prev, hasTrailingSameLine, after, c);
+
+    // 直前/同行コメントが無いかパターン不一致なら指摘する
+    if (!(hasPrev || hasTrailingSameLine) || !patternOk) {
+      reportMissingCaseHead(src, context, c, switchNode);
+    }
+  }
+}
+
+/**
+ * falls-through-only 設定時に当該 case をスキップすべきか判定する（日本語ロケール準拠）
+ * @param {'off'|'always'|'falls-through-only'} requireCase モード
+ * @param {any} c SwitchCase ノード
+ * @returns {boolean} スキップすべきなら true
+ */
+function shouldSkipCaseByFallsThrough(requireCase, c) {
+  return (
+    requireCase === 'falls-through-only' && Array.isArray(c.consequent) && c.consequent.length > 0
+  );
+}
+
+/**
+ * 直前コメントが許容位置（直上行／空行許容時は前方行）にあるか判定する（日本語ロケール準拠）
+ * @param {any} prev 直前コメントノード
+ * @param {any} c SwitchCase ノード
+ * @param {boolean} allowBlank 空行許容フラグ
+ * @returns {boolean} 許容位置にコメントがあるなら true
+ */
+function hasPreviousCommentOnAllowedLine(prev, c, allowBlank) {
+  return (
+    prev != null &&
+    (allowBlank
+      ? (prev.loc && prev.loc.end && c.loc && prev.loc.end.line <= c.loc.start.line - 1)
+      : (prev.loc && prev.loc.end && c.loc && prev.loc.end.line === c.loc.start.line - 1))
+  );
+}
+
+/**
+ * 同一行のトレーリングコメントが存在するかを判定する（日本語ロケール準拠）
+ * @param {readonly any[]} after 当該ノード以降のコメント配列
+ * @param {any} c SwitchCase ノード
+ * @returns {boolean} 同一行にコメントがあれば true
+ */
+function hasTrailingCommentSameLine(after, c) {
+  return after.some((cm) => cm.loc && cm.loc.start && c.loc && cm.loc.start.line === c.loc.start.line);
+}
+
+/**
+ * 最終的にパターン適合を判定する（日本語ロケール準拠）
+ * @param {RegExp|null} re コメント内容に要求する正規表現
+ * @param {boolean} hasPrev 直前コメントの有無
+ * @param {any} prev 直前コメントノード
+ * @param {boolean} hasTrailingSameLine 同行コメントの有無
+ * @param {readonly any[]} after 当該ノード以降のコメント配列
+ * @param {any} c SwitchCase ノード
+ * @returns {boolean} パターンに適合するなら true
+ */
+function isCommentPatternSatisfied(re, hasPrev, prev, hasTrailingSameLine, after, c) {
+  // パターン未指定なら適合扱いとする
+  if (!re) return true;
+  // 直前/同行コメントがどちらも無ければ適合扱いとする
+  if (!(hasPrev || hasTrailingSameLine)) return true;
+  const trailing = getTrailingCommentSameLine(after, c);
+  const text = extractEffectiveCommentText(prev, hasPrev, trailing, hasTrailingSameLine);
+  return re.test((text || '').trim());
+}
+
+/**
+ * 同行のトレーリングコメントを取得する（日本語ロケール準拠）
+ * @param {readonly any[]} after 当該ノード以降のコメント配列
+ * @param {any} c SwitchCase ノード
+ * @returns {any|undefined} 見つかればコメントノード
+ */
+function getTrailingCommentSameLine(after, c) {
+  return after.find((cm) => cm.loc && cm.loc.start && c.loc && cm.loc.start.line === c.loc.start.line);
+}
+
+/**
+ * 有効なコメント本文を抽出する（日本語ロケール準拠）
+ * @param {any} prev 直前コメントノード
+ * @param {boolean} hasPrev 直前コメントの有無
+ * @param {any|undefined} trailing 同一行のコメントノード
+ * @param {boolean} hasTrailingSameLine 同一行コメントの有無
+ * @returns {string} コメント本文（なければ空）
+ */
+function extractEffectiveCommentText(prev, hasPrev, trailing, hasTrailingSameLine) {
+  // 直前コメントがあればそれを採用する
+  if (hasPrev && typeof prev?.value === 'string') return prev.value;
+  // 同行コメントがあればそれを採用する
+  if (hasTrailingSameLine && trailing && typeof trailing.value === 'string') return trailing.value;
+  return '';
+}
+
+/**
+ * 欠落した case 先頭コメントを報告する（日本語ロケール準拠）
+ * @param {import('eslint').SourceCode} src 解析中ソースコード
+ * @param {import('eslint').Rule.RuleContext} context ルール実行コンテキスト
+ * @param {any} c SwitchCase ノード
+ * @param {any} switchNode SwitchStatement ノード
+ * @returns {void} なし
+ */
+function reportMissingCaseHead(src, context, c, switchNode) {
+  const line = c?.loc?.start?.line || switchNode.loc.start.line;
+  context.report({
+    node: c,
+    messageId: 'need_case_head',
+    data: { preview: getLinePreview(src, line) },
+  });
+}
+
+/**
+ * ノード検査関数を生成する（日本語ロケール準拠）
+ * @param {import('eslint').SourceCode} src 解析中ソースコード
+ * @param {import('eslint').Rule.RuleContext} context ルール実行コンテキスト
+ * @param {(node:any, kw:any)=>string|null} runCommentAndPatternChecks 直前コメント/パターン検査
+ * @param {ReturnType<typeof normalizeBranchCommentOptions>} norm 正規化済みオプション
+ * @returns {(node:any, kw:any)=>void} リスナー用の検査関数
+ */
+function makeCheckNode(src, context, runCommentAndPatternChecks, norm) {
+  return (node, kw) => {
+    // 対象外ノードは早期に終了する
+    if (!shouldProcessNode(kw, norm.targets, node, norm.ignoreElseIf)) return;
+
+    const preview = runCommentAndPatternChecks(node, kw);
+    // 直前コメント/節コメントが未充足なら以降をスキップする
+    if (preview === null) return;
+
+    const prevCommentNode = getLastMeaningfulComment(src, node);
+    const prevText = typeof prevCommentNode?.value === 'string' ? prevCommentNode.value : '';
+    // 直前コメントがある場合のみ類似度検査を行う
+    if (prevText) {
+      runSimilarityByKind(src, context, node, kw, prevText, norm.threshold, computeLevenshteinSimilarity);
+    }
+
+    runSectionChecksByKind(src, context, node, kw, norm.sectionFlag, norm.sectionLocations);
+
+    // switch の場合は case 先頭コメントも検査する
+    if (kw === 'switch') {
+      checkCaseHeadCommentsIfNeeded(src, context, node, norm.requireCase, norm.allowBlank, norm.re);
+    }
+  };
+}

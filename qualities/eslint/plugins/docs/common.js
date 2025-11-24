@@ -27,7 +27,7 @@
  * @returns {number} 類似度（[0,1]）
  */
 export function computeLevenshteinSimilarity(a, b) {
-  // 正規化前処理の理由: ノイズ的な空白差で類似度が不当に下がることを避ける
+  // 正規化前処理によりノイズ的な空白差で類似度が不当に下がることを避ける
   const sa = (a || '').trim().replace(/\s+/g, ' ');
   const sb = (b || '').trim().replace(/\s+/g, ' ');
   // どちらかが空なら類似であると判断できないため 0 を返す
@@ -35,7 +35,7 @@ export function computeLevenshteinSimilarity(a, b) {
   const m = sa.length;
   const n = sb.length;
   // 1D DP (space-optimized Levenshtein)
-  // DP 初期化: コスト配列を第二軸（b）で確保し、各列の編集距離を表現する
+  // DP 初期化ではコスト配列を第二軸（b）で確保し、各列の編集距離を表現する
   const dp = Array(n + 1)
     .fill(0)
     .map((_, j) => j);

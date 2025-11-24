@@ -15,53 +15,9 @@
  * @snd vibecoding/var/SPEC-and-DESIGN/202511/20251115/SnD-20251115-preflight-scope.md
  */
 import { spawn } from 'node:child_process';
-import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { stepDefs } from '../../qualities/check-steps.ts';
-
-const YAML_FM_DELIM = '---';
-
-function getSnDWorkKindFromEnv(): 'feature' | 'maintenance' | null {
-  const sndPath = process.env.SND_PATH;
-  if (!sndPath || !existsSync(sndPath)) return null;
-  try {
-    const text = readFileSync(sndPath, 'utf8');
-    const fmBlock = text.startsWith(YAML_FM_DELIM)
-      ? text.slice(YAML_FM_DELIM.length).split(YAML_FM_DELIM, 1)[0] ?? ''
-      : '';
-    const kindMatch = fmBlock.match(/^\s*work_kind\s*:\s*["']?([a-zA-Z_-]+)["']?/m);
-    const workKind = (kindMatch?.[1] ?? 'maintenance').toLowerCase();
-    return workKind === 'feature' ? 'feature' : 'maintenance';
-  } catch {
-    return null;
-  }
-}
-
-function hasDevScript(): boolean {
-  try {
-    const pkgRaw = readFileSync(path.join(process.cwd(), 'package.json'), 'utf8');
-    const pkg = JSON.parse(pkgRaw) as unknown;
-    return (
-      typeof pkg === 'object' &&
-      pkg !== null &&
-      'scripts' in pkg &&
-      typeof (pkg as { scripts?: unknown }).scripts === 'object' &&
-      (pkg as { scripts?: Record<string, unknown> }).scripts !== null &&
-      typeof (pkg as { scripts: Record<string, unknown> }).scripts.dev === 'string'
-    );
-  } catch {
-    return false;
-  }
-}
-
-function printFeatureGuidanceIfNeeded(): void {
-  const kind = getSnDWorkKindFromEnv();
-  if (kind !== 'feature') return;
-  process.stdout.write('動作確認ができる状況になりました。早めの動作確認・調整や本実装案の採否の判断を行ってください。続けてドキュメント整備フェーズ（`npm run check` グリーン化）へ進める場合は「ドキュメント整備して」とコメントしてください。\n');
-  if (hasDevScript()) {
-    process.stdout.write('開発サーバ例: `npm run -s dev`\n');
-  }
-}
 
 /**
  * 子プロセスでコマンドを同期的に実行し、非0/シグナル終了はエラーとして扱う。
@@ -103,12 +59,12 @@ async function runPreflight(): Promise<void> {
   }
   
   // すべて成功した場合にローカル状態へ通過マーカーを書き出す
+  // 成功時の補助情報（通過マーカー・案内）を書き込むが、失敗しても結果には影響させない
   try {
     const dir = path.join(process.cwd(), 'vibecoding', 'var', 'localstate');
     const marker = path.join(dir, 'preflight_passed');
     mkdirSync(dir, { recursive: true });
     writeFileSync(marker, `${new Date().toISOString()}\n`, 'utf8');
-    printFeatureGuidanceIfNeeded();
   } catch (e) {
     // マーカーの書き込み失敗は実行結果に影響させず、ログのみで注意喚起する
     const msg = e instanceof Error ? e.message : String(e);

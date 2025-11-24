@@ -21,6 +21,7 @@ import { blockCommentFormattingPlugin } from '../../plugins/docs/block-comment-f
 import { consecutiveLineCommentsPlugin } from '../../plugins/docs/consecutive-line-comments-similarity.js';
 import { headerPlugin } from '../../plugins/docs/header-bullets-min.js';
 import { inlineCommentLabelsPlugin } from '../../plugins/docs/inline-comment-labels.js';
+import { inlineJsdocPlugin } from '../../plugins/docs/no-inline-leading-jsdoc.js';
 import { controlStructuresPlugin } from '../../plugins/docs/require-comments-on-control-structures.js';
 import { singleFileHeaderPlugin } from '../../plugins/docs/single-file-header.js';
 import { typedefPlugin } from '../../plugins/types/require-options-typedef.js';
@@ -109,12 +110,14 @@ export const documentation = [
   // ブロックコメントの先頭行に本文を置かない（複数行JSDoc対象）
   {
     files: FILES_ALL_CODE,
-    plugins: { blockfmt: blockCommentFormattingPlugin, inlineLbl: inlineCommentLabelsPlugin },
+    plugins: { blockfmt: blockCommentFormattingPlugin, inlineLbl: inlineCommentLabelsPlugin, inlineJSDoc: inlineJsdocPlugin },
     rules: {
       'blockfmt/block-comment-formatting': 'error',
       'blockfmt/no-empty-comment': 'error',
       'blockfmt/prefer-single-line-block-comment': 'error',
       'blockfmt/no-blank-lines-in-block-comment': 'error',
+      // 新規: JSDoc を同行先頭で書き、同じ行にコードを続ける形を禁止（fixer で改行 + 同一インデントへ）
+      'inlineJSDoc/no-inline-leading-jsdoc': 'error',
       // インラインコメントのラベル風メタ記述を禁止（check 時のみ有効、preflight では無効化）
       'inlineLbl/no-label-style-inline-comment': [
         'error',
@@ -132,6 +135,7 @@ export const documentation = [
             '注意',
             '補足',
             '狙い',
+            'コメント',
             'why',
             'what',
             'how',
@@ -162,6 +166,8 @@ export const documentation = [
           // SnD-20251118 で導入した節コメントオプションは段階的ロールアウトのため既定では無効化する
           requireSectionComments: false,
           sectionCommentLocations: ['block-head', 'trailing'],
+          // 新規: switch の case/default 節コメントを check 時に必須化
+          requireCaseComments: 'always',
           similarityThreshold: 0.25,
           // ja 系なら少なくとも1文字の非ASCIIを要求。それ以外は未設定（無効化）が望ましいが、ここでは動的に切替。
           enforceMeta: false,
