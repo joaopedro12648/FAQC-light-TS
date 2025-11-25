@@ -183,6 +183,7 @@ function listFilesRecursive(dir: string): string[] {
         // ディレクトリの場合は後で中身を列挙するためにスタックへ積む
         stack.push(full);
       } else if (e.isFile()) {
+        // ファイルなら結果リストへ追加
         files.push(full);
       }
     }

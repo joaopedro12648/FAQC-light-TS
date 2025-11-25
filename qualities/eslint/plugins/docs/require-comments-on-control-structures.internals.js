@@ -357,13 +357,15 @@ export function makeRunCommentAndPatternChecks(src, context, allowBlank, re, opt
   function extractSectionTextForKw(kw, node) {
     // 種別に応じて抽出対象のブランチ（コメント）を選択する
     switch (kw) {
-      case 'if':
+      case 'if': // if 文の処理
         return getSectionTextGlobal(src, node && node.consequent);
-      case 'for':
-      case 'while':
-      case 'do':
+      case 'for': // for 文の処理（フォールスルー）
+        // for文の場合は本体ブロックの先頭コメントを取得
+      case 'while': // while 文の処理（フォールスルー）
+        // while文の場合は本体ブロックの先頭コメントを取得
+      case 'do': // do-while 文の処理
         return getSectionTextGlobal(src, node && node.body);
-      default:
+      default: // その他の場合
         return '';
     }
   }

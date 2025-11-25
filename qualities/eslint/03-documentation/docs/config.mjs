@@ -147,6 +147,7 @@ export const documentation = [
     }
   },
   // 制御構造でのコメントを検査する（ja 系では非ASCIIを要求する）
+  // SnD-20251125-enforce-full-control-comments: リポジトリ全体で fullOnly かつ ignoreElseIf:false を適用
   {
     // リポジトリ全体へ適用（IGNORES は eslint.config の IGNORES に準拠）
     files: FILES_ALL_CODE,
@@ -159,12 +160,11 @@ export const documentation = [
           // 三項は対象外（広範な既存コードに影響するため）
           targets: ['if', 'for', 'while', 'do', 'switch', 'try'],
           allowBlankLine: false,
-          ignoreElseIf: true,
+          ignoreElseIf: false, // SnD-20251125: else if も個別に検査する（連鎖を無視しない）
           ignoreCatch: false,
           treatChainHeadAs: 'non-dangling',
           fixMode: false,
-          // SnD-20251118 で導入した節コメントオプションは段階的ロールアウトのため既定では無効化する
-          requireSectionComments: false,
+          requireSectionComments: 'fullOnly', // SnD-20251125: 直前だけでなく節コメント（block-head/trailing）も必須化
           sectionCommentLocations: ['block-head', 'trailing'],
           // 新規: switch の case/default 節コメントを check 時に必須化
           requireCaseComments: 'always',
@@ -179,96 +179,6 @@ export const documentation = [
             const envLocale = (process.env.CHECK_LOCALE || '').trim();
             const lang = (envLocale || Intl.DateTimeFormat().resolvedOptions().locale || '').split(/[-_]/)[0] || '';
             return lang.toLowerCase() === 'ja' ? '[^\\x00-\\x7F]' : ''; // 日本語ロケールでは非ASCIIを必須とし、その他はタグ検証を無効化する意図
-          })()
-        }
-      ]
-    }
-  },
-  // SnD-20251118 フェーズ1: 対象ユニットに節コメント（fullOnly + block-head）を段階適用
-  {
-    files: [
-      'qualities/policy/**',
-      'qualities/eslint/plugins/docs/**'
-    ],
-    plugins: { control: controlStructuresPlugin },
-    rules: {
-      'control/require-comments-on-control-structures': [
-        'error',
-        {
-          targets: ['if', 'for', 'while', 'do', 'switch', 'try'],
-          allowBlankLine: false,
-          ignoreElseIf: true,
-          ignoreCatch: false,
-          treatChainHeadAs: 'non-dangling',
-          fixMode: false,
-          // フェーズ1適用: fullOnly + block-head
-          requireSectionComments: 'fullOnly',
-          sectionCommentLocations: ['block-head'],
-          similarityThreshold: 0.25,
-          enforceMeta: false,
-          requireTagPattern: (() => {
-            const envLocale = (process.env.CHECK_LOCALE || '').trim();
-            const lang = (envLocale || Intl.DateTimeFormat().resolvedOptions().locale || '').split(/[-_]/)[0] || '';
-            return lang.toLowerCase() === 'ja' ? '[^\\x00-\\x7F]' : '';
-          })()
-        }
-      ]
-    }
-  },
-  // SnD-20251118 フェーズ2-A: scripts/qualities/** と vibecoding/scripts/qualities/** に適用（fullOnly + block-head）
-  {
-    files: [
-      'scripts/qualities/**',
-      'vibecoding/scripts/qualities/**'
-    ],
-    plugins: { control: controlStructuresPlugin },
-    rules: {
-      'control/require-comments-on-control-structures': [
-        'error',
-        {
-          targets: ['if', 'for', 'while', 'do', 'switch', 'try'],
-          allowBlankLine: false,
-          ignoreElseIf: true,
-          ignoreCatch: false,
-          treatChainHeadAs: 'non-dangling',
-          fixMode: false,
-          requireSectionComments: 'fullOnly',
-          sectionCommentLocations: ['block-head'],
-          similarityThreshold: 0.25,
-          enforceMeta: false,
-          requireTagPattern: (() => {
-            const envLocale = (process.env.CHECK_LOCALE || '').trim();
-            const lang = (envLocale || Intl.DateTimeFormat().resolvedOptions().locale || '').split(/[-_]/)[0] || '';
-            return lang.toLowerCase() === 'ja' ? '[^\\x00-\\x7F]' : '';
-          })()
-        }
-      ]
-    }
-  },
-  // SnD-20251118 フェーズ2-B: vibecoding/tests/** に適用（fullOnly + block-head）
-  {
-    files: [
-      'vibecoding/tests/**'
-    ],
-    plugins: { control: controlStructuresPlugin },
-    rules: {
-      'control/require-comments-on-control-structures': [
-        'error',
-        {
-          targets: ['if', 'for', 'while', 'do', 'switch', 'try'],
-          allowBlankLine: false,
-          ignoreElseIf: true,
-          ignoreCatch: false,
-          treatChainHeadAs: 'non-dangling',
-          fixMode: true,
-          requireSectionComments: 'fullOnly',
-          sectionCommentLocations: ['block-head'],
-          similarityThreshold: 0.25,
-          enforceMeta: false,
-          requireTagPattern: (() => {
-            const envLocale = (process.env.CHECK_LOCALE || '').trim();
-            const lang = (envLocale || Intl.DateTimeFormat().resolvedOptions().locale || '').split(/[-_]/)[0] || '';
-            return lang.toLowerCase() === 'ja' ? '[^\\x00-\\x7F]' : '';
           })()
         }
       ]

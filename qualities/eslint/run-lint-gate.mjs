@@ -87,6 +87,7 @@ function readCursorrulesRaw() {
     const fp = path.join(process.cwd(), '.cursorrules');
     return fs.readFileSync(fp, 'utf8');
   } catch {
+    // エラー発生時は詳細を隠蔽し、処理を中断せずにnullを返す
     return null;
   }
 }

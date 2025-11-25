@@ -112,10 +112,14 @@ function listFilesRecursive(dir: string): string[] {
     // 取得したエントリを列挙し、次に辿るディレクトリと検査対象ファイルを振り分ける
     for (const e of entries) {
       const full = path.join(cur, e.name);
-      // ディレクトリは後で辿るために積む
-      if (e.isDirectory()) stack.push(full);
-      // ファイルは結果に追加する
-      else if (e.isFile()) files.push(full);
+      // ファイルシステムのエントリ種類に応じて処理を分岐する
+      if (e.isDirectory()) {
+        // ディレクトリならスタックへ積む
+        stack.push(full);
+      } else if (e.isFile()) {
+        // ファイルなら結果リストへ追加
+        files.push(full);
+      }
     }
   }
 

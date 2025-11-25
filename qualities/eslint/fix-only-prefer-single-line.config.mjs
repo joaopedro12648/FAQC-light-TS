@@ -9,10 +9,20 @@
  * - 受入: PRE-IMPL の Header Checklist を満たす（8項目以上）
  * - 備考: JSDoc/ヘッダの要件は本ファイルでも厳格に適用する
  */
+import tsparser from '@typescript-eslint/parser';
+import { FILES_TS } from './_shared/core/globs.mjs';
 import { blockCommentFormattingPlugin } from './plugins/docs/block-comment-formatting.js';
 
 export default [
   {
+    files: FILES_TS,
+    languageOptions: {
+      parser: tsparser,
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module'
+      },
+    },
     plugins: { blockfmt: blockCommentFormattingPlugin },
     rules: {
       'blockfmt/prefer-single-line-block-comment': 'error',

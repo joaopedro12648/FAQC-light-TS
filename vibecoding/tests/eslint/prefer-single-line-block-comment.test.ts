@@ -108,6 +108,13 @@ describe('ESLint rule (behavior): prefer-single-line-block-comment', () => {
           // 空行を除く実質 1 行だけの multi-line ブロックコメントは違反
           code: '/*\n * このコメントは短い説明です。\n */\nconst value = 3;\n',
           errors: [{ messageId: 'preferSingleLine' }],
+          output: '/* このコメントは短い説明です。 */\nconst value = 3;\n',
+        },
+        {
+          // JSDoc 形式の複数行ブロックコメントも単一行JSDocに変換される
+          code: '/**\n * ユーザー情報を取得する。\n */\nfunction getUser() {}\n',
+          errors: [{ messageId: 'preferSingleLine' }],
+          output: '/** ユーザー情報を取得する。 */\nfunction getUser() {}\n',
         },
       ],
     });

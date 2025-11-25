@@ -76,6 +76,7 @@ function listFilesRecursive(dir) {
         // ディレクトリは後続探索のためスタックへ積む
         stack.push(full);
       } else if (e.isFile()) {
+        // ファイルなら結果リストへ追加
         files.push(full);
       }
     }

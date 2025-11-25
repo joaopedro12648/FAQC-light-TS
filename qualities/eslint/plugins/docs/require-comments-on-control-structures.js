@@ -114,7 +114,7 @@ export const ruleRequireCommentsOnControlStructures = {
       need_before_switch:
         'switch 文の直前に、この分岐の目的を説明するコメントを書いてください。',
       need_case_head:
-        'case/default の直前に、この分岐条件の意味がわかるコメントを書いてください。',
+        'case/default の直後（同行末尾または次行）に、この分岐条件の意味がわかるコメントを書いてください。',
       need_ternary_comment:
         '三項演算子の直前行または同行末に、式の意図を説明するコメントが必要です。',
     },
@@ -227,6 +227,41 @@ function normalizeRequireCase(val) {
 }
 
 /**
+ * case ラベルの直後のコメントを取得する（日本語ロケール準拠）
+ * @param {import('eslint').SourceCode} src 解析中ソースコード
+ * @param {any} c SwitchCase ノード
+ * @returns {readonly any[]} case ラベルの直後のコメント配列
+ */
+function getCaseLabelCommentsAfter(src, c) {
+  const caseLine = c?.loc?.start?.line;
+  // case ラベルの行番号が取得できない場合は空配列を返す
+  if (!caseLine) return [];
+
+  // case ラベルの直後のコメントを取得（同行末尾または次行）
+  // getCommentsAfter は case ノード全体の後を取得するため、代わりに
+  // case ラベルの開始行と次の行のコメントを直接取得する
+  const allComments = src.getAllComments();
+  const caseLabelComments = allComments.filter((cm) => {
+    if (!cm.loc || !cm.loc.start) return false;
+    const commentLine = cm.loc.start.line;
+    // 同行末尾コメントまたは次行コメント
+    return commentLine === caseLine || commentLine === caseLine + 1;
+  });
+
+  // case ブロック内の最初のステートメントの位置を取得
+  const firstStmt = c.consequent && c.consequent.length > 0 ? c.consequent[0] : null;
+  const firstStmtLine = firstStmt?.loc?.start?.line;
+
+  // case ラベルの直後のコメントのみを対象とする（最初のステートメントより前）
+  return caseLabelComments.filter((cm) => {
+    // 最初のステートメントが無い場合は全てのコメントを対象とする
+    if (!firstStmtLine) return true;
+    const commentLine = cm.loc.start.line;
+    return commentLine < firstStmtLine;
+  });
+}
+
+/**
  * Switch の case/default 先頭にコメントが必要か判定し、必要なら報告する（日本語ロケール準拠）
  * @param {import('eslint').SourceCode} src 解析中ソースコード
  * @param {import('eslint').Rule.RuleContext} context ルール実行コンテキスト
@@ -244,16 +279,14 @@ function checkCaseHeadCommentsIfNeeded(src, context, switchNode, requireCase, al
     // falls-through-only の条件に合致する case は除外する
     if (shouldSkipCaseByFallsThrough(requireCase, c)) continue;
 
-    const prev = getLastMeaningfulComment(src, c);
-    const hasPrev = hasPreviousCommentOnAllowedLine(prev, c, allowBlank);
-
-    const after = src.getCommentsAfter(c) || [];
+    const after = getCaseLabelCommentsAfter(src, c);
     const hasTrailingSameLine = hasTrailingCommentSameLine(after, c);
+    const hasNextLine = hasNextLineComment(after, c);
 
-    const patternOk = isCommentPatternSatisfied(re, hasPrev, prev, hasTrailingSameLine, after, c);
+    const patternOk = isCommentPatternSatisfied(re, hasTrailingSameLine, hasNextLine, after, c);
 
-    // 直前/同行コメントが無いかパターン不一致なら指摘する
-    if (!(hasPrev || hasTrailingSameLine) || !patternOk) {
+    // 直後（同行末 or 次行）コメントが無いかパターン不一致なら指摘する
+    if (!(hasTrailingSameLine || hasNextLine) || !patternOk) {
       reportMissingCaseHead(src, context, c, switchNode);
     }
   }
@@ -273,19 +306,11 @@ function shouldSkipCaseByFallsThrough(requireCase, c) {
 
 /**
  * 直前コメントが許容位置（直上行／空行許容時は前方行）にあるか判定する（日本語ロケール準拠）
- * @param {any} prev 直前コメントノード
- * @param {any} c SwitchCase ノード
- * @param {boolean} allowBlank 空行許容フラグ
- * @returns {boolean} 許容位置にコメントがあるなら true
+ * Note: caseコメントの直後必須化に伴い、本関数は使用されなくなるが、他用途の可能性を考慮し残置するか検討。
+ * 現状のロジックでは case 以外には使われていないため、コメントアウトまたは削除が適切だが、
+ * 将来的な拡張性を考慮し、一旦は未使用関数として警告されるのを防ぐために削除する。
  */
-function hasPreviousCommentOnAllowedLine(prev, c, allowBlank) {
-  return (
-    prev != null &&
-    (allowBlank
-      ? (prev.loc && prev.loc.end && c.loc && prev.loc.end.line <= c.loc.start.line - 1)
-      : (prev.loc && prev.loc.end && c.loc && prev.loc.end.line === c.loc.start.line - 1))
-  );
-}
+/* function hasPreviousCommentOnAllowedLine(prev, c, allowBlank) { ... } */
 
 /**
  * 同一行のトレーリングコメントが存在するかを判定する（日本語ロケール準拠）
@@ -298,27 +323,42 @@ function hasTrailingCommentSameLine(after, c) {
 }
 
 /**
+ * 次の行にコメントが存在するかを判定する（日本語ロケール準拠）
+ * @param {readonly any[]} after 当該ノード以降のコメント配列
+ * @param {any} c SwitchCase ノード
+ * @returns {boolean} 次行にコメントがあれば true
+ */
+function hasNextLineComment(after, c) {
+  // 直後のトークン（ステートメント等）がある場合、それより前にあるコメントのみを対象とすべきだが、
+  // getCommentsAfter はノード直後のコメントを返してくれるため、行判定だけで概ね機能する。
+  // ただし、case ブロック内の最初の文より前にあることが望ましい。
+  // ここでは単純に「case ラベル行の次の行にコメントがあるか」を判定する。
+  return after.some((cm) => cm.loc && cm.loc.start && c.loc && cm.loc.start.line === c.loc.start.line + 1);
+}
+
+/**
  * 最終的にパターン適合を判定する（日本語ロケール準拠）
  * @param {RegExp|null} re コメント内容に要求する正規表現
- * @param {boolean} hasPrev 直前コメントの有無
- * @param {any} prev 直前コメントノード
  * @param {boolean} hasTrailingSameLine 同行コメントの有無
+ * @param {boolean} hasNextLine 次行コメントの有無
  * @param {readonly any[]} after 当該ノード以降のコメント配列
  * @param {any} c SwitchCase ノード
  * @returns {boolean} パターンに適合するなら true
  */
-function isCommentPatternSatisfied(re, hasPrev, prev, hasTrailingSameLine, after, c) {
+function isCommentPatternSatisfied(re, hasTrailingSameLine, hasNextLine, after, c) {
   // パターン未指定なら適合扱いとする
   if (!re) return true;
-  // 直前/同行コメントがどちらも無ければ適合扱いとする
-  if (!(hasPrev || hasTrailingSameLine)) return true;
+  // コメントが無ければ適合扱いとする（有無判定は呼び出し元で行う）
+  if (!(hasTrailingSameLine || hasNextLine)) return true;
+  
   const trailing = getTrailingCommentSameLine(after, c);
-  const text = extractEffectiveCommentText(prev, hasPrev, trailing, hasTrailingSameLine);
+  const nextLine = getNextLineComment(after, c);
+  const text = extractEffectiveCommentText(trailing, hasTrailingSameLine, nextLine, hasNextLine);
   return re.test((text || '').trim());
 }
 
 /**
- * 同行のトレーリングコメントを取得する（日本語ロケール準拠）
+ * 同一行のトレーリングコメントを取得する（日本語ロケール準拠）
  * @param {readonly any[]} after 当該ノード以降のコメント配列
  * @param {any} c SwitchCase ノード
  * @returns {any|undefined} 見つかればコメントノード
@@ -328,18 +368,28 @@ function getTrailingCommentSameLine(after, c) {
 }
 
 /**
+ * 次行のコメントを取得する（日本語ロケール準拠）
+ * @param {readonly any[]} after 当該ノード以降のコメント配列
+ * @param {any} c SwitchCase ノード
+ * @returns {any|undefined} 見つかればコメントノード
+ */
+function getNextLineComment(after, c) {
+  return after.find((cm) => cm.loc && cm.loc.start && c.loc && cm.loc.start.line === c.loc.start.line + 1);
+}
+
+/**
  * 有効なコメント本文を抽出する（日本語ロケール準拠）
- * @param {any} prev 直前コメントノード
- * @param {boolean} hasPrev 直前コメントの有無
  * @param {any|undefined} trailing 同一行のコメントノード
  * @param {boolean} hasTrailingSameLine 同一行コメントの有無
+ * @param {any|undefined} nextLine 次行のコメントノード
+ * @param {boolean} hasNextLine 次行コメントの有無
  * @returns {string} コメント本文（なければ空）
  */
-function extractEffectiveCommentText(prev, hasPrev, trailing, hasTrailingSameLine) {
-  // 直前コメントがあればそれを採用する
-  if (hasPrev && typeof prev?.value === 'string') return prev.value;
+function extractEffectiveCommentText(trailing, hasTrailingSameLine, nextLine, hasNextLine) {
   // 同行コメントがあればそれを採用する
   if (hasTrailingSameLine && trailing && typeof trailing.value === 'string') return trailing.value;
+  // 次行コメントがあればそれを採用する
+  if (hasNextLine && nextLine && typeof nextLine.value === 'string') return nextLine.value;
   return '';
 }
 

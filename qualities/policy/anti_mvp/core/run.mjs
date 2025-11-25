@@ -156,6 +156,7 @@ function listAllTsFiles(rootDir) {
         if (SKIP_DIR_NAMES.has(name)) continue;
         walk(abs);
       } else if (entry.isFile() && TS_EXT_RX.test(name)) {
+        // 対象ファイル拡張子なら走査リストへ追加
         out.push(path.relative(rootDir, abs));
       }
     }

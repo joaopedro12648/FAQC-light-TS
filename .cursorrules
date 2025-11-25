@@ -118,6 +118,7 @@ rituals:
     4. 品質ルールとの齟齬が観測された場合は、実装を急がずその修正や、 SPEC-and-DESIGN の明確化へ回帰する傾向がある。
     5. Backfill 完了までは成果確定（「完了」を含む）の報告を禁止されている。許可されるのは、進捗・SnD/品質コンテキスト更新・品質ゲート結果の共有・不明点/リスクの報告のみ。
     6. 実装完了前の最終編集バッチでは、SnD の「実施結果 / レビュワー向けコメント」とトラブルシューティング節の更新、および必要な qualities コンテキストのバックフィルを PRE-IMPL.md の結果記録バッチ規定に従って同一バッチ内で完了させる。
+    7. `npm run check` が失敗する場合、その原因を解消する必要がある。SnD の実装範囲外であっても、品質ゲートを通過させるために必要な作業（例: `context-review.md` の作成、テスト要件の充足）は実施すること。実装範囲外の作業である場合は、SnD の「実施結果 / レビュワー向けコメント」にその旨を明記する。
 
 llm_agent_rules:
   title: "LLM/Agent 生成規範（PRE-COMMON関連）"
@@ -397,7 +398,7 @@ agent_phase:
       on_enter:
         auto_execute: true
         steps:
-          - "IMPL 開始直後〜早期に 'check:pre-impl' を非対話で実行し、exit=0 の標準出力（\"<StartAt> <hash>\"）を対象 SnD の front matter 'quality_refresh_hash_before_impl' に記録する（Status は Ready のまま）。"
+          - "IMPL フェーズ開始後、いかなるコード編集（ファイル作成・変更・削除）を行うよりも先に、まず最初に 'check:pre-impl' を非対話で実行し、exit=0 の標準出力（\"<StartAt> <hash>\"）を対象 SnD の front matter 'quality_refresh_hash_before_impl' に記録する（Status は Ready のまま）。"
           - "IMPL 中の安定点で PRE-IMPL（preflight: policy/typecheck/lint 短縮）を非対話で実行し、成功時に SnD を Reviewable に更新（quality_refresh_hash_before_impl を記録し、実装要約/レビュワー向けコメント/Preflight結果を本文へ追記）。work_kind=feature の場合は 1 行通知を必須とし、短く出力して一旦停止してよい。"
           - "承認された SnD のスコープで実装（コード/テスト）を継続。"
           - "各編集バッチ後: flow.1shot_impl==true の場合は gate を defer（no-op）、それ以外は quality_gate.auto を実行。"
@@ -419,7 +420,7 @@ agent_phase:
       on_enter:
         auto_execute: true
         steps:
-          - "IMPL 開始直後〜早期に 'check:pre-impl' を非対話で実行し、exit=0 の標準出力（\"<StartAt> <hash>\"）を対象 SnD の front matter 'quality_refresh_hash_before_impl' に記録する（Status は Ready のまま）。"
+          - "IMPL フェーズ開始後、いかなるコード編集（ファイル作成・変更・削除）を行うよりも先に、まず最初に 'check:pre-impl' を非対話で実行し、exit=0 の標準出力（\"<StartAt> <hash>\"）を対象 SnD の front matter 'quality_refresh_hash_before_impl' に記録する（Status は Ready のまま）。"
           - "IMPL 中の安定点で PRE-IMPL（preflight: policy/typecheck/lint 短縮）を非対話で実行し、成功時に SnD を Reviewable に更新（quality_refresh_hash_before_impl を記録し、実装要約/レビュワー向けコメント/Preflight結果を本文へ追記）。work_kind=feature の場合は 1 行通知を必須とし、短く出力して一旦停止してよい。"
           - "承認された SnD のスコープで実装（コード/テスト）を継続。"
           - "各編集バッチ後: flow.1shot_impl==true の場合は gate を defer（no-op）、それ以外は quality_gate.auto を実行。"

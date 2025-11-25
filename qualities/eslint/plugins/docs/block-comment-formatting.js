@@ -78,6 +78,7 @@ export const ruleBlockCommentFormatting = {
 export const rulePreferSingleLineBlockComment = {
   meta: {
     type: 'suggestion',
+    fixable: 'code',
     docs: {
       description:
         '内容が 1 文で済む複数行ブロックコメントを検出し、単一行ブロックコメントまたは行コメントへの統一を促します。',
@@ -106,38 +107,10 @@ export const rulePreferSingleLineBlockComment = {
      */
     const unfixableViolations = [];
     /**
-     * 置換テキスト候補（非重複）
-     * @type {Array<{range: [number, number], text: string}>}
+     * 置換テキスト候補（range をキーとした Map）
+     * @type {Map<string, string>}
      */
-    const fixCandidates = [];
-
-    /**
-     * コメント本文行（空行除外済み）の行数を数える。
-     * @param {import('eslint').AST.Token | import('estree').Comment} comment 対象コメント
-     * @returns {number} 空行を除いた本文行数
-     */
-    function countContentLines(comment) {
-      const rawLines = String(comment.value).split(/\r?\n/);
-      return rawLines
-        .map((line) => line.replace(/^\s*\*?\s?/, '').trim())
-        .filter((line) => line.length > 0).length;
-    }
-
-    /**
-     * コメントが「実質 1 行コメント」かどうかを判定する。
-     * @param {import('eslint').AST.Token | import('estree').Comment} comment 対象コメント
-     * @returns {boolean} 実質 1 行コメントと見なせる場合 true
-     */
-    function isEffectivelySingleLine(comment) {
-      // 単一行コメントや 1 行ブロックは対象外とし、構造的に複数行のものだけを検査する
-      if (comment.type !== 'Block') return false;
-      // 物理的に 1 行で完結しているブロックコメントは本ルールの対象外とする
-      if (comment.loc.start.line === comment.loc.end.line) return false;
-
-      const lineCount = countContentLines(comment);
-      // 空コメントや 2 行以上のコメントは対象外とし、「実質 1 行」のみを違反とする
-      return lineCount === 1;
-    }
+    const fixCandidates = new Map();
 
     return {
       Program() {
@@ -164,7 +137,8 @@ export const rulePreferSingleLineBlockComment = {
             const isJsdoc = /^\s*\/\*\*/.test(originalText);
             const open = isJsdoc ? '/**' : '/*';
             const replacement = `${open} ${content} */`;
-            fixCandidates.push({ range: comment.range, text: replacement });
+            const rangeKey = `${comment.range[0]}-${comment.range[1]}`;
+            fixCandidates.set(rangeKey, replacement);
           } else {
             // タグ等で変換不可の事例を別配列へ退避する
             unfixableViolations.push({ loc: comment.loc, range: comment.range });
@@ -172,28 +146,107 @@ export const rulePreferSingleLineBlockComment = {
         }
       },
       'Program:exit'() {
-        // 自動修正可能な箇所数に応じて報告方針を切り替える
-        if (fixableViolations.length === 1) {
-          // 単一件の違反は個別報告として明確に提示する
-          const v = fixableViolations[0];
-          const c = fixCandidates[0];
-          context.report({ loc: v.loc, messageId: 'preferSingleLine' });
-        } else if (fixableViolations.length > 1) {
-          const first = fixableViolations[0];
-          context.report({ loc: first.loc, messageId: 'preferSingleLineAggregated' });
-        }
-
-        // 自動修正対象外は個別行で報告する
-        for (const v of unfixableViolations) {
-          context.report({
-            loc: v.loc,
-            messageId: 'preferSingleLineUnfixable',
-          });
-        }
+        reportViolations(
+          context,
+          fixableViolations,
+          unfixableViolations,
+          fixCandidates
+        );
       },
     };
   },
 };
+
+/**
+ * コメント本文行（空行除外済み）の行数を数える。
+ * @param {import('eslint').AST.Token | import('estree').Comment} comment 対象コメント
+ * @returns {number} 空行を除いた本文行数
+ */
+function countContentLines(comment) {
+  const rawLines = String(comment.value).split(/\r?\n/);
+  return rawLines
+    .map((line) => line.replace(/^\s*\*?\s?/, '').trim())
+    .filter((line) => line.length > 0).length;
+}
+
+/**
+ * コメントが「実質 1 行コメント」かどうかを判定する。
+ * @param {import('eslint').AST.Token | import('estree').Comment} comment 対象コメント
+ * @returns {boolean} 実質 1 行コメントと見なせる場合 true
+ */
+function isEffectivelySingleLine(comment) {
+  // 単一行コメントや 1 行ブロックは対象外とし、構造的に複数行のものだけを検査する
+  if (comment.type !== 'Block') return false;
+  // 物理的に 1 行で完結しているブロックコメントは本ルールの対象外とする
+  if (comment.loc.start.line === comment.loc.end.line) return false;
+
+  const lineCount = countContentLines(comment);
+  // 空コメントや 2 行以上のコメントは対象外とし、「実質 1 行」のみを違反とする
+  return lineCount === 1;
+}
+
+/**
+ * 収集した違反を報告するヘルパー関数。
+ * @param {import('eslint').Rule.RuleContext} context ESLint のルールコンテキスト
+ * @param {Array<{loc: import('estree').SourceLocation, range: [number, number]}>} fixableViolations 自動修正可能な違反のリスト
+ * @param {Array<{loc: import('estree').SourceLocation, range: [number, number]}>} unfixableViolations 自動修正不可能な違反のリスト
+ * @param {Map<string, string>} fixCandidates 修正候補のマップ（範囲キー -> 置換テキスト）
+ */
+function reportViolations(
+  context,
+  fixableViolations,
+  unfixableViolations,
+  fixCandidates
+) {
+  // 自動修正可能な箇所数に応じて報告方針を切り替える
+  if (fixableViolations.length === 1) {
+    // 単一件の違反は個別報告として明確に提示する
+    const v = fixableViolations[0];
+    const rangeKey = `${v.range[0]}-${v.range[1]}`;
+    const replacement = fixCandidates.get(rangeKey);
+    context.report({
+      loc: v.loc,
+      messageId: 'preferSingleLine',
+      fix: replacement
+        ? (fixer) => fixer.replaceTextRange(v.range, replacement)
+        : undefined,
+    });
+    // 複数件の修正可能な違反がある場合
+  } else if (fixableViolations.length > 1) {
+    const first = fixableViolations[0];
+    const rangeKey = `${first.range[0]}-${first.range[1]}`;
+    const replacement = fixCandidates.get(rangeKey);
+    // 複数件の場合は最初の1件のみ fix を適用（集約メッセージのため）
+    context.report({
+      loc: first.loc,
+      messageId: 'preferSingleLineAggregated',
+      fix: replacement
+        ? (fixer) => fixer.replaceTextRange(first.range, replacement)
+        : undefined,
+    });
+    // 残りの違反も個別に報告し、それぞれに fix を適用
+    for (let i = 1; i < fixableViolations.length; i++) {
+      const v = fixableViolations[i];
+      const vRangeKey = `${v.range[0]}-${v.range[1]}`;
+      const vReplacement = fixCandidates.get(vRangeKey);
+      context.report({
+        loc: v.loc,
+        messageId: 'preferSingleLine',
+        fix: vReplacement
+          ? (fixer) => fixer.replaceTextRange(v.range, vReplacement)
+          : undefined,
+      });
+    }
+  }
+
+  // 自動修正対象外は個別行で報告する
+  for (const v of unfixableViolations) {
+    context.report({
+      loc: v.loc,
+      messageId: 'preferSingleLineUnfixable',
+    });
+  }
+}
 
 /**
  * 空ブロックコメント禁止ルール。

@@ -90,6 +90,7 @@ function listFilesRecursive(dir) {
         if (SKIP_DIR_NAMES.has(base)) continue;
         stack.push(full);
       } else if (e.isFile()) {
+        // ファイルなら結果リストへ追加
         files.push(full);
       }
     }
@@ -331,8 +332,13 @@ function makeOffsetToLine(lineOffsets) {
     while (lo <= hi) {
       const mid = (lo + hi) >> 1;
       // 探索中の中点がオフセット以下であれば右側へ寄せ、そうでなければ左側へ寄せて行番号候補を絞り込む
-      if (lineOffsets[mid] <= off) lo = mid + 1;
-      else hi = mid - 1;
+      if (lineOffsets[mid] <= off) {
+        // 中点より右側を探索
+        lo = mid + 1;
+      } else {
+        // 中点より左側を探索
+        hi = mid - 1;
+      }
     }
 
     return hi + 1;

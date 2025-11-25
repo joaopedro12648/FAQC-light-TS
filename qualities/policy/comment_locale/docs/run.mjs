@@ -141,10 +141,14 @@ function listFilesRecursive(dir) {
       const base = path.basename(full);
       // SoT で定義された除外ディレクトリ名に一致する場合はコメント検査の対象外としてスキップする
       if (SKIP_DIR_NAMES.has(base)) continue;
-      // ディレクトリであれば再帰走査のためにスタックへ積み直し、後で中身を検査する
-      if (e.isDirectory()) stack.push(full);
-      // 通常ファイルであればコメントロケール検査の対象候補として収集する
-      else if (e.isFile()) files.push(full);
+      // ファイルシステムエントリの種類に応じて処理を分岐する
+      if (e.isDirectory()) {
+        // ディレクトリならスタックへ積む
+        stack.push(full);
+      } else if (e.isFile()) {
+        // ファイルなら結果リストへ追加
+        files.push(full);
+      }
     }
   }
 
