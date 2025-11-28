@@ -261,7 +261,12 @@ function isTriviallyOkScenario(root) {
     const extSrc = fs.readFileSync(extPath, 'utf8');
     // import を含まない external.ts は OK シナリオ
     return !/\bimport\s+/.test(extSrc);
-  } catch {
+  } catch (error) {
+    // external.ts の読み取りに失敗した場合は依存構造診断そのものは継続しつつ、早期判定を無効化した理由をログに残す
+    const msg = error instanceof Error ? error.message : String(error);
+    process.stderr.write(
+      `[policy:dependency_structure_control] warn: failed to read external.ts for trivial OK detection :: ${msg}\n`,
+    );
     // 読み取り失敗時は早期判定を行わない
     return false;
   }

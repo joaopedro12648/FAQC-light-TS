@@ -86,8 +86,10 @@ function readCursorrulesRaw() {
   try {
     const fp = path.join(process.cwd(), '.cursorrules');
     return fs.readFileSync(fp, 'utf8');
-  } catch {
-    // エラー発生時は詳細を隠蔽し、処理を中断せずにnullを返す
+  } catch (error) {
+    // .cursorrules の読み取りに失敗した場合は警告ログを出力しつつ、ゲート結果には影響させない
+    const msg = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`[lint-gate] warn: failed to read .cursorrules :: ${msg}\n`);
     return null;
   }
 }

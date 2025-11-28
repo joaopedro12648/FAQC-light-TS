@@ -15,6 +15,7 @@
  * @snd vibecoding/var/SPEC-and-DESIGN/SnD-creation.md
  */
 import { FILES_ALL_CODE } from '../../_shared/core/globs.mjs';
+import { coreCatchHandlingPlugin } from '../../plugins/core/no-empty-or-trivial-catch.js';
 import { consoleHandlerPlugin } from './consoleHandler.mjs';
 
 /**
@@ -26,11 +27,19 @@ export const environmentExceptions = [
   // デフォルト: console は禁止。ただし warn/error は例外（本ルールで @consoleHandler を要求して制御）
   {
     files: FILES_ALL_CODE,
-    plugins: { env: consoleHandlerPlugin },
+    plugins: { env: consoleHandlerPlugin, core: coreCatchHandlingPlugin },
     rules: {
       // warn/error はグローバルに許容（本プラグインがタグ未設定時の使用をエラーにする）
       'no-console': ['error', { allow: ['warn', 'error'] }],
-      'env/console-handler': 'error'
+      'env/console-handler': 'error',
+      // 例外処理ポリシー: すべての catch ブロックに最低 1 つの関数呼び出しまたは throw を要求する
+      'core/no-empty-or-trivial-catch': [
+        'error',
+        {
+          // 既定では「再throw のみを含む catch」も許容し、ログ/レポート/再throw いずれかを最低ラインとする
+          allowRethrowOnly: true,
+        },
+      ],
     }
   }
 ];

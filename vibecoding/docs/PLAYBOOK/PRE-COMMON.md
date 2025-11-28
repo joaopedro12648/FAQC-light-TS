@@ -459,6 +459,9 @@ Rubric照合は `check:pre-common` による機械的最低限のチェックに
 - unitDigest 不一致・manifest 欠落/不正を検知したユニットは、派生物である `vibecoding/var/contexts/qualities/<unit>/context.md` を即時に削除（expire）する。  
   - 同ディレクトリに `context-review.md` が存在する場合も同時に削除する。  
   - これにより「古い mirror が残り続ける」状態を排除し、再作成フローへ確実に誘導する。  
+- expire 後に新しい `context.md` を作成する際は、**旧版の本文をマージせず、空のファイルに対して Why/Where/What/How を 1 セットだけ持つ構造で再作成すること**。  
+  - H1 と Why/Where/What/How の見出しはそれぞれ 1 回だけ登場する前提であり、旧スタイルのセクションと新スタイルのセクションを同一ファイル内に共存させることは禁止する（`context-md-rubric` の構造チェックで不合格になる）。  
+  - Rubric および本プレイブックの要件を満たすために、再作成後の `context.md` が旧版より長くなっても構わない。「短く保つ」ことを理由に旧版の断片を別節として温存したり差分量を抑えようとすることは避ける。  
 - PRE-COMMON の出力先頭は次の形式となる:  
   - `PRE-COMMON: <N> unit(s) expired or require context creation.`  
 - 各対象ユニットは次の行で明示される:  

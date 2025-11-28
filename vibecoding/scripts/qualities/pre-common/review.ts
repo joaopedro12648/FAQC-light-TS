@@ -104,8 +104,10 @@ function listFilesRecursive(dir: string): string[] {
     // I/O 境界の例外はここで吸収し、走査を中断させない
     try {
       entries = fs.readdirSync(cur, { withFileTypes: true });
-    } catch {
-      // 読み取り不能は検査対象から除外して次のエントリへ進む
+    } catch (error) {
+      // 読み取り不能なディレクトリは警告ログを出しつつ検査対象から除外し、他の経路の走査を継続する
+      const msg = error instanceof Error ? error.message : String(error);
+      process.stderr.write(`[pre-common:review] warn: skip unreadable directory :: ${cur} :: ${msg}\n`);
       continue;
     }
 

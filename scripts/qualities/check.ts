@@ -408,9 +408,11 @@ async function handleTestStep(cmd: string, args: readonly string[]): Promise<boo
         process.stdout.write('[test] vibecoding/ 変更あり: 内製テストを追加実行します\n');
         // 一時的な Vitest 設定で include を vibecoding/** に限定して実行
         const tmpDir = path.join(process.cwd(), 'tmp');
-        // 内製テスト用の一時ディレクトリを準備して専用設定を配置する
-        try { mkdirSync(tmpDir, { recursive: true }); } catch {
-          // 一時ディレクトリ作成失敗は非致命。内製テストの追加はスキップして通常経路を継続する
+        // 内製テスト用の一時ディレクトリを準備して専用設定を配置し、失敗時は警告だけ出して通常経路を継続する
+        try { mkdirSync(tmpDir, { recursive: true }); } catch (error) {
+          // 一時ディレクトリ作成失敗は診断用の追加テストだけを諦め、品質ゲート本体は継続する
+          const msg = error instanceof Error ? error.message : String(error);
+          process.stderr.write(`[qualities:check] warn: failed to create tmp dir for internal vitest config :: ${msg}\n`);
         }
 
         const internalCfg = path.join('tmp', 'vitest.internal.config.mjs');
@@ -424,9 +426,11 @@ async function handleTestStep(cmd: string, args: readonly string[]): Promise<boo
           '});',
           '',
         ].join('\n');
-        // 一時設定ファイルを書き込む
-        try { writeFileSync(internalCfg, cfgContent, 'utf8'); } catch {
-          // 一時設定ファイルの書き込み失敗は非致命。既定設定で継続する
+        // 一時設定ファイルを書き込む。失敗した場合はこの回の追加テストだけを諦め、メインの build/test フローは継続する
+        try { writeFileSync(internalCfg, cfgContent, 'utf8'); } catch (error) {
+          // 書き込み失敗時は既定のテスト構成だけを使って品質ゲートを継続し、内製テストの限定実行はスキップする
+          const msg = error instanceof Error ? error.message : String(error);
+          process.stderr.write(`[qualities:check] warn: failed to write internal vitest config :: ${msg}\n`);
         }
 
         await runCommand('npx', ['vitest', 'run', '--config', internalCfg, '--silent']);

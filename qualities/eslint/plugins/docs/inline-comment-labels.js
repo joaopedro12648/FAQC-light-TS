@@ -125,12 +125,18 @@ export const ruleNoLabelStyleInlineComment = {
           '補足',
           '狙い',
           'コメント',
-          // 英語
+          // 英語（why/what/how 系）
           'why',
+          'cause',
+          'reason',
           'what',
           'how',
-          'note',
+          'approach',
+          'method',
           'then',
+          // 英語（背景・方針の代表語のみ。誤検知低減のため極小セット）
+          'background',
+          'purpose',
         ]);
 
     return {
