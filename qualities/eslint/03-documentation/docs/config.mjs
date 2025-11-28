@@ -32,6 +32,11 @@ import { typedefPlugin } from '../../plugins/types/require-options-typedef.js';
  * - トップヘッダの構造要件と describe 直前コメントを強制
  * @returns Flat Config 配列
  */
+const COMMENT_SIMILARITY_THRESHOLD =
+  String(process.env.CHECK_LOCALE || '').trim().split(/[-_]/)[0]?.toLowerCase() === 'en'
+    ? 0.35
+    : 0.25;
+
 export const documentation = [
   // TS/TSX の基本 JSDoc 要件（interface/type/enum/export const を一括でカバー）
   {
@@ -84,7 +89,7 @@ export const documentation = [
       'cmtSim/consecutive-line-comments-similarity': [
         'error',
         {
-          similarityThreshold: 0.25
+          similarityThreshold: COMMENT_SIMILARITY_THRESHOLD
         }
       ]
     }
@@ -168,7 +173,7 @@ export const documentation = [
           sectionCommentLocations: ['block-head', 'trailing'],
           // 新規: switch の case/default 節コメントを check 時に必須化
           requireCaseComments: 'always',
-          similarityThreshold: 0.25,
+          similarityThreshold: COMMENT_SIMILARITY_THRESHOLD,
           // ja 系なら少なくとも1文字の非ASCIIを要求。それ以外は未設定（無効化）が望ましいが、ここでは動的に切替。
           enforceMeta: false,
           // 互換: 直前コメントが無い場合でも、then/ループ本体が「ブロック先頭」または「同行末尾」の節コメントを満たせば許容する
