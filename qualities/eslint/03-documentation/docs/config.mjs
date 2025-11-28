@@ -19,6 +19,7 @@ import jsdoc from 'eslint-plugin-jsdoc';
 import { FILES_ALL_CODE, FILES_JS } from '../../_shared/core/globs.mjs';
 import { blockCommentFormattingPlugin } from '../../plugins/docs/block-comment-formatting.js';
 import { consecutiveLineCommentsPlugin } from '../../plugins/docs/consecutive-line-comments-similarity.js';
+import { exportJsdocPlugin } from '../../plugins/docs/export-jsdoc-required.js';
 import { headerPlugin } from '../../plugins/docs/header-bullets-min.js';
 import { inlineCommentLabelsPlugin } from '../../plugins/docs/inline-comment-labels.js';
 import { inlineJsdocPlugin } from '../../plugins/docs/no-inline-leading-jsdoc.js';
@@ -29,14 +30,43 @@ import { typedefPlugin } from '../../plugins/types/require-options-typedef.js';
 /**
  * ドキュメント/コメント規律（JSDoc・ヘッダ・ESLintディレクティブ）に関する設定断片。
  * - JS/TS 全域に JSDoc の基本要件とファイル概要を適用
+ * - リポジトリ全体の公開 export に対して JSDoc 必須ポリシーを適用（docs ユニットのルールを単一情報源として共有）
  * - トップヘッダの構造要件と describe 直前コメントを強制
  * @returns Flat Config 配列
  */
-const COMMENT_SIMILARITY_THRESHOLD =
-  String(process.env.CHECK_LOCALE || '').trim().split(/[-_]/)[0]?.toLowerCase() === 'en'
-    ? 0.35
-    : 0.25;
+const COMMENT_SIMILARITY_DEFAULT_LANG = 'ja';
 
+const COMMENT_SIMILARITY_THRESHOLDS = {
+  // 既定値: ja 以外のロケール向けのしきい値（英語など多言語はこちらを参照する）
+  default: {
+    consec: 0.35,
+    control: 0.35,
+  },
+  // ja ロケールは既存の 0.25 を維持する（従来設定の単一情報源）
+  ja: {
+    consec: 0.25,
+    control: 0.25,
+  },
+};
+
+function resolveCommentSimilarityConfig(checkLocale) {
+  const raw = String(checkLocale || '').trim();
+  const lang = raw.split(/[-_]/)[0]?.toLowerCase() || COMMENT_SIMILARITY_DEFAULT_LANG;
+  const key =
+    // データ側に定義があればそのまま使い、無ければ default を使う
+    Object.prototype.hasOwnProperty.call(COMMENT_SIMILARITY_THRESHOLDS, lang) ? lang : 'default';
+  return COMMENT_SIMILARITY_THRESHOLDS[key];
+}
+
+const COMMENT_SIMILARITY_CONFIG = resolveCommentSimilarityConfig(process.env.CHECK_LOCALE);
+
+const COMMENT_SIMILARITY_THRESHOLD_CONSEC = COMMENT_SIMILARITY_CONFIG.consec;
+const COMMENT_SIMILARITY_THRESHOLD_CONTROL = COMMENT_SIMILARITY_CONFIG.control;
+
+/**
+ * docs ユニットのドキュメント/コメント規律に関する Flat Config 群。
+ * - JSDoc / ファイルヘッダ / 制御構造コメント / ESLint ディレクティブ / Options typedef などのルールを集約して適用する
+ */
 export const documentation = [
   // TS/TSX の基本 JSDoc 要件（interface/type/enum/export const を一括でカバー）
   {
@@ -89,7 +119,7 @@ export const documentation = [
       'cmtSim/consecutive-line-comments-similarity': [
         'error',
         {
-          similarityThreshold: COMMENT_SIMILARITY_THRESHOLD
+          similarityThreshold: COMMENT_SIMILARITY_THRESHOLD_CONSEC
         }
       ]
     }
@@ -173,7 +203,7 @@ export const documentation = [
           sectionCommentLocations: ['block-head', 'trailing'],
           // 新規: switch の case/default 節コメントを check 時に必須化
           requireCaseComments: 'always',
-          similarityThreshold: COMMENT_SIMILARITY_THRESHOLD,
+          similarityThreshold: COMMENT_SIMILARITY_THRESHOLD_CONTROL,
           // ja 系なら少なくとも1文字の非ASCIIを要求。それ以外は未設定（無効化）が望ましいが、ここでは動的に切替。
           enforceMeta: false,
           // 互換: 直前コメントが無い場合でも、then/ループ本体が「ブロック先頭」または「同行末尾」の節コメントを満たせば許容する
@@ -219,6 +249,14 @@ export const documentation = [
     plugins: { typedef: typedefPlugin },
     rules: {
       'typedef/require-options-typedef': ['error', { generalJsMode: 'off' }]
+    }
+  },
+  // リポジトリ全体の公開 export に JSDoc を必須化するローカルルール
+  {
+    files: FILES_ALL_CODE,
+    plugins: { exportJsdoc: exportJsdocPlugin },
+    rules: {
+      'exportJsdoc/export-jsdoc-required': 'error'
     }
   }
 ];

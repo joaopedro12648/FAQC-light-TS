@@ -40,11 +40,14 @@ const preflightOverlay = [
       // JSDoc 必須系は preflight では無効化（check で整備フェーズとして実施）
       'jsdoc/require-jsdoc': 'off',
       'jsdoc/require-file-overview': 'off',
+      // 公開 export 向け JSDoc 必須ルールも preflight では無効化し、最終 check のみで検査する
+      'exportJsdoc/export-jsdoc-required': 'off',
     },
   },
 ];
 
 // preflight 設定の公開（実装中限定の緩和を付与）
+/** preflight 実行時に使用する ESLint 設定の公開エクスポート。 */
 export const preflightConfig = [...baseConfig, ...preflightOverlay];
 export default preflightConfig;
 

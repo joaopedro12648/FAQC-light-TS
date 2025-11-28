@@ -24,6 +24,10 @@ import { testsOverrides } from './tests-overrides/tests/config.mjs';
 
 // Default export 必須の内部ユーティリティ（formatters 等）は default-export を免除
 // - 対象: qualities/eslint/formatters/*.js
+/**
+ * ESLint 内部フォーマッタ用に default export を許可する設定断片。
+ * qualities/eslint/formatters/*.js に対してのみ import/no-default-export を緩和する。
+ */
 export const allowDefaultExportForInternalFormatters = [
   {
     files: ['qualities/eslint/formatters/*.js'],
